@@ -9,6 +9,7 @@ import Avisos from "@/componentes/Avisos";
 import AtividadesPreventiva from "@/componentes/AtividadesPreventiva";
 import CaixasRede from "@/componentes/CaixasRede";
 import Catalogo from "@/componentes/Catalogo";
+import ConsoleDespacho from "@/componentes/ConsoleDespacho";
 import Horas from "@/componentes/Horas";
 import Indicadores from "@/componentes/Indicadores";
 import Equipe from "@/componentes/Equipe";
@@ -23,11 +24,48 @@ import { Tecnico } from "@/lib/tipos";
 
 type Perfil = { nome: string; papel: string };
 
+type AbaPainel = "os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas" | "indicadores" | "despesas" | "horas" | "analise" | "console";
+
+// Abas na ordem do menu (padrão Oracle Field Service: console de despacho primeiro).
+// Cor do painel escolhida pelo supervisor (fica salva no navegador).
+const TEMAS = {
+  grafite: { rotulo: "Cinza grafite", topo: "#312D2A", destaque: "#0572CE" },
+  azul: { rotulo: "Azul", topo: "#0B3C6E", destaque: "#0572CE" },
+  vermelho: { rotulo: "Vermelho", topo: "#B5121B", destaque: "#B5121B" },
+};
+type Tema = keyof typeof TEMAS;
+const lerTema = (): Tema => {
+  try {
+    const t = localStorage.getItem("tema-painel");
+    return t && t in TEMAS ? (t as Tema) : "grafite";
+  } catch {
+    return "grafite";
+  }
+};
+
+const ABAS: [AbaPainel, string][] = [
+  ["console", "Console de despacho"],
+  ["os", "Ordens de serviço"],
+  ["indicadores", "Indicadores"],
+  ["analise", "Análise (BI)"],
+  ["campo", "Equipe em campo"],
+  ["escala", "Escala"],
+  ["equipe", "Equipe"],
+  ["caixas", "Caixas e fibras"],
+  ["rotas", "Rotas e eventos"],
+  ["catalogo", "Serviços e materiais"],
+  ["horas", "Horas"],
+  ["despesas", "Despesas"],
+  ["almoxarifado", "Almoxarifado"],
+];
+
 export default function Painel() {
   const [sessao, setSessao] = useState<Session | null | undefined>(undefined);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
-  const [aba, setAba] = useState<"os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas" | "indicadores" | "despesas" | "horas" | "analise">("os");
+  const [aba, setAba] = useState<AbaPainel>("console");
+  const [tema, setTema] = useState<Tema>(() => (typeof window === "undefined" ? "grafite" : lerTema()));
+  const cor = TEMAS[tema];
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSessao(data.session));
@@ -60,42 +98,37 @@ export default function Painel() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="flex flex-wrap items-center gap-4 border-b border-gray-200 bg-white px-4 py-3 sm:px-6">
-        <h1 className="text-lg font-semibold">Técnico Plus</h1>
-        <nav className="flex flex-wrap gap-1">
-          <button onClick={() => setAba("os")}
-            className={`rounded-md px-3 py-1.5 text-sm ${aba === "os" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Ordens de serviço</button>
-          <button onClick={() => setAba("indicadores")}
-            className={`rounded-md px-3 py-1.5 text-sm ${aba === "indicadores" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Indicadores</button>
-          <button onClick={() => setAba("analise")}
-            className={`rounded-md px-3 py-1.5 text-sm ${aba === "analise" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Análise (BI)</button>
-          <button onClick={() => setAba("campo")}
-            className={`rounded-md px-3 py-1.5 text-sm ${aba === "campo" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Equipe em campo</button>
-          <button onClick={() => setAba("escala")}
-            className={`rounded-md px-3 py-1.5 text-sm ${aba === "escala" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Escala</button>
-          <button onClick={() => setAba("equipe")}
-            className={`rounded-md px-3 py-1.5 text-sm ${aba === "equipe" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Equipe</button>
-          <button onClick={() => setAba("caixas")}
-            className={`rounded-md px-3 py-1.5 text-sm ${aba === "caixas" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Caixas e fibras</button>
-          <button onClick={() => setAba("rotas")}
-            className={`rounded-md px-3 py-1.5 text-sm ${aba === "rotas" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Rotas e eventos</button>
-          <button onClick={() => setAba("catalogo")}
-            className={`rounded-md px-3 py-1.5 text-sm ${aba === "catalogo" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Serviços e materiais</button>
-          <button onClick={() => setAba("horas")}
-            className={`rounded-md px-3 py-1.5 text-sm ${aba === "horas" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Horas</button>
-          <button onClick={() => setAba("despesas")}
-            className={`rounded-md px-3 py-1.5 text-sm ${aba === "despesas" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Despesas</button>
-          <button onClick={() => setAba("almoxarifado")}
-            className={`rounded-md px-3 py-1.5 text-sm ${aba === "almoxarifado" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Almoxarifado</button>
-        </nav>
-        <div className="ml-auto flex items-center gap-3 text-sm text-gray-600">
-          {sessao && <Avisos usuarioId={sessao.user.id} />}
-          {perfil?.nome}
-          <button className="text-blue-700 hover:underline" onClick={() => supabase.auth.signOut()}>Sair</button>
+      <header className="text-white" style={{ background: cor.topo }}>
+        <div className="flex items-center gap-4 px-4 py-2.5 sm:px-6">
+          <h1 className="text-lg font-semibold tracking-wide">Técnico Plus <span className="font-normal text-[#D5D1CD]">| Backbone</span></h1>
+          <div className="ml-auto flex items-center gap-3 text-sm text-[#D5D1CD]">
+            <div className="flex items-center gap-1" title="Cor do painel">
+              {(Object.keys(TEMAS) as Tema[]).map((t) => (
+                <button key={t} aria-label={`Cor ${TEMAS[t].rotulo}`} title={TEMAS[t].rotulo}
+                  onClick={() => { setTema(t); try { localStorage.setItem("tema-painel", t); } catch {} }}
+                  className={`h-4 w-4 rounded-full border-2 ${tema === t ? "border-white" : "border-white/30"}`} style={{ background: TEMAS[t].topo }} />
+              ))}
+            </div>
+            {sessao && <Avisos usuarioId={sessao.user.id} />}
+            <span className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white ring-2 ring-white/40" style={{ background: cor.destaque }}>
+              {(perfil?.nome ?? "S").split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase()}
+            </span>
+            <span className="hidden sm:inline">{perfil?.nome}</span>
+            <button className="text-white/80 hover:text-white hover:underline" onClick={() => supabase.auth.signOut()}>Sair</button>
+          </div>
         </div>
+        <nav className="flex flex-wrap gap-x-1 bg-white px-2 text-[#161513] shadow-sm sm:px-4">
+          {ABAS.map(([valor, rotulo]) => (
+            <button key={valor} onClick={() => setAba(valor)}
+              style={aba === valor ? { borderColor: cor.destaque, color: cor.destaque } : undefined}
+              className={`border-b-[3px] px-3 py-2.5 text-sm ${aba === valor ? "font-semibold" : "border-transparent text-gray-600 hover:text-gray-900"}`}>
+              {rotulo}
+            </button>
+          ))}
+        </nav>
       </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">
-        {aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "indicadores" ? <Indicadores /> : aba === "despesas" ? <Despesas tecnicos={tecnicos} /> : aba === "horas" ? <Horas /> : aba === "analise" ? <Analise /> : <RotasEventos />}
+      <main className={`mx-auto w-full flex-1 p-4 sm:p-6 ${["console", "analise", "campo"].includes(aba) ? "max-w-none" : "max-w-6xl"}`}>
+        {aba === "console" ? <ConsoleDespacho tecnicos={tecnicos} /> : aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "indicadores" ? <Indicadores /> : aba === "despesas" ? <Despesas tecnicos={tecnicos} /> : aba === "horas" ? <Horas /> : aba === "analise" ? <Analise /> : <RotasEventos />}
       </main>
     </div>
   );

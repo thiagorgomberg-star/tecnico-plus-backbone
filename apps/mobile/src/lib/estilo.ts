@@ -1,21 +1,25 @@
 import { StyleSheet } from 'react-native';
 
-// Paleta inspirada no Oracle Field Service: cabeçalho escuro, azul de ação e cor por status.
+import { TEMAS, temaAtual } from './tema';
+
+const tema = TEMAS[temaAtual()];
+
+// Paleta inspirada no Oracle Field Service: cabeçalho na cor do tema, cor de ação e cor por status.
 export const cores = {
   fundo: '#F1EFED',
   cartao: '#FFFFFF',
   texto: '#161513',
   suave: '#6F6964',
-  primaria: '#0572CE',
-  cabecalho: '#312D2A',
+  primaria: tema.primaria,
+  cabecalho: tema.cabecalho,
   cabecalhoTexto: '#FFFFFF',
   perigo: '#C74634',
   alerta: '#E08A1E',
   sucesso: '#508223',
   borda: '#E4E1DD',
-  cabecalhoSuave: '#D5D1CD',
-  barra: '#3A3631',
-  selecionado: '#E6F0FA',
+  cabecalhoSuave: tema.cabecalhoSuave,
+  barra: tema.barra,
+  selecionado: tema.selecionado,
   linha: '#EDEAE7',
   texto2: '#3D3935',
 };

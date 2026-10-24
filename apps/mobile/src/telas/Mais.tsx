@@ -4,6 +4,7 @@ import Cabecalho from '../componentes/Cabecalho';
 import Icone, { NomeIcone } from '../componentes/Icone';
 import { VERSAO_APP } from '../lib/atualizacao';
 import { cores, fundoDe } from '../lib/estilo';
+import { Tema, TEMAS, temaAtual, trocarTema } from '../lib/tema';
 
 type Destino = 'preventiva' | 'escala' | 'rotas' | 'despesas';
 type Props = { nome: string; cargo: string | null; pendentes: number; abrir: (d: Destino) => void; sair: () => void };
@@ -40,6 +41,20 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
         {item('receipt-text-outline', 'Despesas', 'Combustível, pedágio, ferramentas: foto do comprovante e valores', () => abrir('despesas'), cores.alerta)}
         {item('calendar-month-outline', 'Minha escala', 'Jornada, plantão e folgas do mês', () => abrir('escala'))}
         {item('map-outline', 'Rotas KMZ', 'Trechos do backbone para abrir no Google Earth', () => abrir('rotas'), '#227E9E')}
+        <Text style={s.secao}>APARÊNCIA</Text>
+        <View style={s.temas}>
+          {(Object.keys(TEMAS) as Tema[]).map((t) => {
+            const ativo = t === temaAtual();
+            return (
+              <Pressable key={t} style={[s.tema, ativo && { borderColor: TEMAS[t].cabecalho }]} disabled={ativo} onPress={() => trocarTema(t)}>
+                <View style={[s.temaCor, { backgroundColor: TEMAS[t].cabecalho }]}>
+                  {ativo ? <Icone nome="check" tamanho={18} cor="#fff" /> : null}
+                </View>
+                <Text style={[s.temaRotulo, ativo && { fontWeight: '700' }]}>{TEMAS[t].rotulo}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
         <Text style={s.secao}>CONTA</Text>
         {item('logout', 'Sair', pendentes > 0 ? `${pendentes} registro(s) ainda não enviados` : '', sair, cores.perigo)}
         <Text style={s.versao}>Técnico Plus · versão {VERSAO_APP || 'desenvolvimento'}</Text>
@@ -59,5 +74,9 @@ const s = StyleSheet.create({
   itemIcone: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   rotulo: { fontSize: 16, fontWeight: '600', color: cores.texto },
   detalhe: { fontSize: 13, color: cores.suave, marginTop: 2 },
+  temas: { flexDirection: 'row', gap: 10, backgroundColor: cores.cartao, padding: 12, borderBottomWidth: 1, borderBottomColor: cores.borda },
+  tema: { flex: 1, alignItems: 'center', gap: 6, paddingVertical: 10, borderRadius: 10, borderWidth: 2, borderColor: cores.linha },
+  temaCor: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  temaRotulo: { fontSize: 13, color: cores.texto },
   versao: { textAlign: 'center', color: cores.suave, fontSize: 12, marginVertical: 24 },
 });
