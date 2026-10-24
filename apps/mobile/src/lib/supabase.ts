@@ -2,8 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 
-const url = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const chave = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+// Endereço e chave pública do projeto (a chave publishable pode ficar no app;
+// quem protege os dados são as regras do banco). Variáveis de ambiente têm prioridade.
+const url = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://wnuivnpywflczknxpytx.supabase.co';
+const chave = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_dRn1z_bQvs2zqEK_EBSCmQ_trb_hjpG';
 
 export const supabase = createClient(url, chave, {
   auth: {

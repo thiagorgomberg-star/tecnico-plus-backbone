@@ -1,0 +1,57 @@
+# Gera o APK do app do técnico e publica como release do GitHub.
+# Link fixo da versão mais recente:
+#   https://github.com/thiagorgomberg-star/tecnico-plus-backbone/releases/latest/download/tecnico-plus.apk
+name: APK Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['apps/mobile/**', '.github/workflows/apk-android.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-android
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Dependências
+        run: npm ci
+
+      - name: Projeto Android (expo prebuild)
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Compilar APK
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a --no-daemon
+
+      - name: Publicar release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk tecnico-plus.apk
+          gh release create "apk-${{ github.run_number }}" tecnico-plus.apk \
+            --title "Técnico Plus - versão ${{ github.run_number }}" \
+            --notes "APK gerado do commit ${{ github.sha }}. Instale no Android permitindo 'fontes desconhecidas'." \
+            --latest
