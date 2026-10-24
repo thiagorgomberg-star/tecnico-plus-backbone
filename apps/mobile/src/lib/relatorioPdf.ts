@@ -13,7 +13,7 @@ import { OrdemServico, rotuloStatus } from './tipos';
 type Item = { id: string; nome: string; unidade: string; categoria: 'servico' | 'material' };
 type Lancamento = { item_id: string; quantidade: number; observacao: string | null };
 type Pessoa = { id: string; nome: string };
-type Foto = { src: string; tiradaEm: string | null; tipo: string; caixaId: string | null; fibra: number | null };
+type Foto = { src: string; tiradaEm: string | null; tipo: string; caixaId: string | null; fibra: number | null; descricao?: string | null };
 
 const esc = (t: unknown) =>
   String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -63,8 +63,8 @@ export async function compartilharRelatorio(os: OrdemServico) {
     supabase.from('ordens_servico')
       .select('criado_em, enviada_em, iniciada_em, concluida_em, tecnico:usuarios!ordens_servico_tecnico_id_fkey(nome, cargo), rota:rotas(trecho)')
       .eq('id', os.id).maybeSingle(),
-    supabase.from('os_anexos').select('caminho_arquivo, tirada_em, tipo, caixa_id, fibra').eq('os_id', os.id)
-      .in('tipo', ['foto_antes', 'foto_depois', 'foto_caixa', 'foto_otdr']).order('criado_em'),
+    supabase.from('os_anexos').select('caminho_arquivo, tirada_em, tipo, caixa_id, fibra, descricao').eq('os_id', os.id)
+      .in('tipo', ['foto_antes', 'foto_depois', 'foto_caixa', 'foto_otdr', 'assinatura']).order('criado_em'),
   ]);
   const extra = completa as unknown as {
     criado_em: string; enviada_em: string | null; iniciada_em: string | null; concluida_em: string | null;
@@ -76,13 +76,13 @@ export async function compartilharRelatorio(os: OrdemServico) {
     const { data: urls } = await supabase.storage.from('os-anexos').createSignedUrls(anexos.map((a) => a.caminho_arquivo), 600);
     const imagens = await Promise.all((urls ?? []).map((u) => (u.signedUrl ? dataUrl(u.signedUrl) : null)));
     imagens.forEach((src, i) => src && fotos.push({
-      src, tiradaEm: anexos[i].tirada_em, tipo: anexos[i].tipo, caixaId: anexos[i].caixa_id, fibra: anexos[i].fibra,
+      src, tiradaEm: anexos[i].tirada_em, tipo: anexos[i].tipo, caixaId: anexos[i].caixa_id, fibra: anexos[i].fibra, descricao: anexos[i].descricao,
     }));
   }
   for (const p of pendentes) {
     if (p.tipo !== 'foto' || p.osId !== os.id) continue;
     const src = await dataUrl(p.arquivo);
-    if (src) fotos.push({ src, tiradaEm: p.tiradaEm, tipo: p.tipoAnexo, caixaId: p.caixaId ?? null, fibra: p.fibra ?? null });
+    if (src) fotos.push({ src, tiradaEm: p.tiradaEm, tipo: p.tipoAnexo, caixaId: p.caixaId ?? null, fibra: p.fibra ?? null, descricao: p.descricao ?? null });
   }
 
   const logo = await Asset.fromModule(require('../../assets/mascara/logo-multivale.png')).downloadAsync()
@@ -101,6 +101,7 @@ export async function compartilharRelatorio(os: OrdemServico) {
   };
 
   const fotosOs = fotos.filter((f) => f.tipo === 'foto_antes' || f.tipo === 'foto_depois');
+  const assinatura = [...fotos].reverse().find((f) => f.tipo === 'assinatura');
   const secaoCaixas = caixas.map((c) => {
     const plano = calcularPlano(c);
     const ponta = c.tipo === 'dgo' || c.tipo === 'entroncamento';
@@ -166,6 +167,8 @@ export async function compartilharRelatorio(os: OrdemServico) {
   ${secaoCaixas}
   <h2>Registro fotográfico (${fotosOs.length})</h2>
   <div class="fotos">${fotosOs.map((f, i) => `<figure><img src="${f.src}"><figcaption>Foto ${i + 1} · ${quando(f.tiradaEm)}</figcaption></figure>`).join('')}</div>
+  ${assinatura ? `<h2>Assinatura do responsável</h2><img src="${assinatura.src}" style="max-height:110px;border-bottom:1px solid #999">
+    <div>${esc(assinatura.descricao ?? '')} · ${quando(assinatura.tiradaEm)}</div>` : ''}
   <p class="s" style="font-size:8pt;margin-top:16px;border-top:1px solid #ccc;padding-top:4px">Multivale Engenharia · Backbone · gerado pelo Técnico Plus</p>
   </body></html>`;
 

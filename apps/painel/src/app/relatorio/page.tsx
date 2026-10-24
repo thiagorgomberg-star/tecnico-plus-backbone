@@ -22,7 +22,7 @@ type Relatorio = {
   eventos: { status_novo: StatusOS; criado_em: string }[];
   servicos: { quantidade: number; observacao: string | null; item: { nome: string; unidade: string; categoria: string } | null }[];
   apoio: string[];
-  fotos: { tirada_em: string | null; url: string | null; tipo?: string; caixa_id?: string | null; fibra?: number | null }[];
+  fotos: { tirada_em: string | null; url: string | null; tipo?: string; caixa_id?: string | null; fibra?: number | null; descricao?: string | null }[];
   caixas?: CaixaPainel[];
   local: { latitude: number; longitude: number; evento_localizado_em: string; evento_precisao_m: number | null } | null;
   gerado_em: string;
@@ -57,6 +57,7 @@ function Conteudo() {
 
   const { os, local } = dados;
   const fotosOs = dados.fotos.filter((f) => !f.tipo || f.tipo === "foto_antes" || f.tipo === "foto_depois");
+  const assinatura = [...dados.fotos].reverse().find((f) => f.tipo === "assinatura");
   const origem = (c: CaixaPainel) => c.origem_identificacao ?? (c.origem_dgo ? `DGO ${c.origem_dgo}` : null);
   const secao = "mt-6 break-inside-avoid";
   const titulo = "border-b-2 border-[#0572CE] pb-1 text-sm font-bold uppercase tracking-wide text-[#0572CE]";
@@ -248,6 +249,15 @@ function Conteudo() {
           </div>
         )}
       </section>
+
+      {assinatura?.url && (
+        <section className={secao}>
+          <h2 className={titulo}>Assinatura do responsável</h2>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={assinatura.url} alt="Assinatura" className="mt-2 h-28 border-b border-gray-400" />
+          <p className="mt-1">{assinatura.descricao} · {quando(assinatura.tirada_em)}</p>
+        </section>
+      )}
 
       <footer className="mt-8 border-t border-gray-300 pt-2 text-xs text-gray-500">
         Multivale Engenharia · Backbone · documento gerado pelo Técnico Plus

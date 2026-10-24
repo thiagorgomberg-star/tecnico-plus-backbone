@@ -13,7 +13,8 @@ export type ItemFila =
       tipo: 'foto';
       id: string;
       osId: string;
-      tipoAnexo: 'foto_antes' | 'foto_depois' | 'foto_caixa' | 'foto_otdr';
+      tipoAnexo: 'foto_antes' | 'foto_depois' | 'foto_caixa' | 'foto_otdr' | 'assinatura';
+      descricao?: string;
       caixaId?: string;
       fibra?: number;
       arquivo: string;
@@ -79,8 +80,9 @@ async function enviar(item: ItemFila) {
         os_id: item.osId,
         tipo: item.tipoAnexo,
         caminho_arquivo: caminho,
-        largura_px: item.largura,
-        altura_px: item.altura,
+        largura_px: item.largura || null,
+        altura_px: item.altura || null,
+        descricao: item.descricao ?? null,
         tirada_em: item.tiradaEm,
         caixa_id: item.caixaId ?? null,
         fibra: item.fibra ?? null,

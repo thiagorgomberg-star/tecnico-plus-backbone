@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { corStatus, OrdemServico, rotuloStatus, StatusOS } from "@/lib/tipos";
 
 type Anexo = {
-  id: string; tipo: string; caminho_arquivo: string; nome_arquivo: string | null;
+  id: string; tipo: string; caminho_arquivo: string; nome_arquivo: string | null; descricao: string | null;
   tirada_em: string | null; criado_em: string; url?: string;
 };
 type Evento = { id: number; status_anterior: StatusOS | null; status_novo: StatusOS; criado_em: string; usuario: { nome: string } | null };
@@ -37,7 +37,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
       .then(({ data }) => setLocal(data));
     supabase.from("caixas_mapa").select("*").eq("os_id", inicial.id).order("localizada_em")
       .then(({ data }) => setCaixas((data as unknown as CaixaPainel[]) ?? []));
-    supabase.from("os_anexos").select("id, tipo, caminho_arquivo, nome_arquivo, tirada_em, criado_em")
+    supabase.from("os_anexos").select("id, tipo, caminho_arquivo, nome_arquivo, descricao, tirada_em, criado_em")
       .eq("os_id", inicial.id).order("criado_em")
       .then(async ({ data }) => {
         const lista = data ?? [];
@@ -63,6 +63,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
 
   const fotos = anexos.filter((a) => a.tipo === "foto_antes" || a.tipo === "foto_depois");
   const apoio = anexos.filter((a) => a.tipo === "documento");
+  const assinatura = [...anexos].reverse().find((a) => a.tipo === "assinatura");
 
   // Link público do relatório (válido por 30 dias) para enviar aos parceiros.
   async function compartilhar(abrir: boolean) {
@@ -171,6 +172,15 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
                 </li>
               ))}
             </ul>
+          </>
+        )}
+
+        {assinatura && (
+          <>
+            <h3 className="mt-6 font-semibold">Assinatura do responsável</h3>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={assinatura.url} alt="Assinatura" className="mt-2 h-24 rounded border border-gray-200" />
+            <p className="text-sm text-gray-600">{assinatura.descricao} · {quando(assinatura.tirada_em ?? assinatura.criado_em)}</p>
           </>
         )}
 

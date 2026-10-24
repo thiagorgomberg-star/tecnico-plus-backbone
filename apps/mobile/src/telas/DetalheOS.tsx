@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
+import Assinatura from '../componentes/Assinatura';
 import CaixasOS from '../componentes/CaixasOS';
 import ExecucaoOS from '../componentes/ExecucaoOS';
 import MaterialApoio from '../componentes/MaterialApoio';
@@ -45,6 +46,8 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [caixaAberta, setCaixaAberta] = useState<{ caixa: Caixa | null; daOs: Caixa[] } | null>(null);
   const [versaoCaixas, setVersaoCaixas] = useState(0);
+  const [assinando, setAssinando] = useState(false);
+  const [assinadoPor, setAssinadoPor] = useState<string | null>(null);
 
   const contarFotos = useCallback(async () => {
     const pendentes = await itensPendentes();
@@ -55,6 +58,16 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
       .eq('os_id', os.id)
       .in('tipo', ['foto_antes', 'foto_depois']);
     if (count != null) setFotosEnviadas(count);
+  }, [os.id]);
+
+  useEffect(() => {
+    (async () => {
+      const pendente = (await itensPendentes()).find((i) => i.tipo === 'foto' && i.osId === os.id && i.tipoAnexo === 'assinatura');
+      if (pendente && pendente.tipo === 'foto') return setAssinadoPor(pendente.descricao ?? 'responsável');
+      const { data } = await supabase.from('os_anexos').select('descricao').eq('os_id', os.id).eq('tipo', 'assinatura')
+        .order('criado_em', { ascending: false }).limit(1);
+      if (data?.[0]) setAssinadoPor(data[0].descricao ?? 'responsável');
+    })();
   }, [os.id]);
 
   useEffect(() => {
@@ -81,6 +94,13 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
     if (acao.status === 'concluida' && totalFotos < MINIMO_FOTOS) {
       setAba('fotos');
       return Alert.alert('Faltam fotos', `Tire pelo menos ${MINIMO_FOTOS} fotos na horizontal antes de concluir (${totalFotos} até agora).`);
+    }
+    if (acao.status === 'concluida' && !assinadoPor) {
+      const seguir = await new Promise<boolean>((ok) => Alert.alert('Sem assinatura', 'Colher a assinatura do responsável no local antes de concluir?', [
+        { text: 'Assinar', onPress: () => { setAssinando(true); ok(false); } },
+        { text: 'Concluir sem', onPress: () => ok(true) },
+      ]));
+      if (!seguir) return;
     }
     const agora = new Date().toISOString();
     const campos: Record<string, unknown> = { status: acao.status, observacao_tecnico: observacao || null };
@@ -203,6 +223,17 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
             ) : null}
 
             <MaterialApoio osId={os.id} />
+
+            <View style={s.bloco}>
+              <Text style={s.rotulo}>ASSINATURA DO RESPONSÁVEL NO LOCAL</Text>
+              <Text style={s.valor}>{assinadoPor ? `Assinado por ${assinadoPor}` : 'Ainda não colhida.'}</Text>
+              {podeEditar ? (
+                <Pressable style={[s.botaoBloco, { backgroundColor: cores.primaria }]} onPress={() => setAssinando(true)}>
+                  <Text style={s.botaoTexto}>{assinadoPor ? 'Colher de novo' : 'Colher assinatura'}</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <Assinatura osId={os.id} aberta={assinando} fechar={() => setAssinando(false)} aoSalvar={setAssinadoPor} />
 
             {acao ? (
               <View style={s.bloco}>
