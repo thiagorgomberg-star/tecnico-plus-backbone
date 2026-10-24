@@ -25,7 +25,7 @@ import { Tecnico } from "@/lib/tipos";
 
 type Perfil = { nome: string; papel: string };
 
-type AbaPainel = "os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas" | "indicadores" | "despesas" | "horas" | "analise" | "console" | "ferramental";
+type AbaPainel = "os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas" | "indicadores" | "despesas" | "horas" | "analise" | "console" | "ferramental" | "config";
 
 // Abas na ordem do menu (padrão Oracle Field Service: console de despacho primeiro).
 // Cor do painel escolhida pelo supervisor (fica salva no navegador).
@@ -67,6 +67,9 @@ const GRUPOS: [string, [AbaPainel, string][]][] = [
     ["catalogo", "Serviços e materiais"],
     ["almoxarifado", "Almoxarifado"],
     ["ferramental", "Ferramental e EPI"],
+  ]],
+  ["Sistema", [
+    ["config", "Configurações"],
   ]],
 ];
 
@@ -131,13 +134,6 @@ export default function Painel() {
           </button>
           <h1 className="truncate text-lg font-semibold tracking-wide">Técnico Plus <span className="hidden font-normal text-[#D5D1CD] sm:inline">| Backbone</span></h1>
           <div className="ml-auto flex items-center gap-3 text-sm text-[#D5D1CD]">
-            <div className="hidden items-center gap-1 sm:flex" title="Cor do painel">
-              {(Object.keys(TEMAS) as Tema[]).map((t) => (
-                <button key={t} aria-label={`Cor ${TEMAS[t].rotulo}`} title={TEMAS[t].rotulo}
-                  onClick={() => { setTema(t); try { localStorage.setItem("tema-painel", t); } catch {} }}
-                  className={`h-4 w-4 rounded-full border-2 ${tema === t ? "border-white" : "border-white/30"}`} style={{ background: TEMAS[t].topo }} />
-              ))}
-            </div>
             {sessao && <Avisos usuarioId={sessao.user.id} />}
             <span className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white ring-2 ring-white/40" style={{ background: cor.destaque }}>
               {(perfil?.nome ?? "S").split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase()}
@@ -168,7 +164,22 @@ export default function Painel() {
           ))}
         </nav>
       <main className={`mx-auto w-full min-w-0 flex-1 p-4 sm:p-6 ${["console", "analise", "campo"].includes(aba) ? "max-w-none" : "max-w-6xl"}`}>
-        {aba === "console" ? <ConsoleDespacho tecnicos={tecnicos} /> : aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "indicadores" ? <Indicadores /> : aba === "despesas" ? <Despesas tecnicos={tecnicos} /> : aba === "horas" ? <Horas /> : aba === "analise" ? <Analise /> : aba === "ferramental" ? <Ferramental tecnicos={tecnicos} /> : <RotasEventos />}
+        {aba === "console" ? <ConsoleDespacho tecnicos={tecnicos} /> : aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "indicadores" ? <Indicadores /> : aba === "despesas" ? <Despesas tecnicos={tecnicos} /> : aba === "horas" ? <Horas /> : aba === "analise" ? <Analise /> : aba === "ferramental" ? <Ferramental tecnicos={tecnicos} /> : aba === "config" ? (
+          <section className="max-w-md rounded-xl border border-gray-200 bg-white p-5">
+            <h2 className="mb-1 text-lg font-semibold">Configurações</h2>
+            <p className="mb-4 text-sm text-gray-500">Cor do painel (fica salva neste navegador).</p>
+            <div className="flex flex-col gap-2">
+              {(Object.keys(TEMAS) as Tema[]).map((t) => (
+                <button key={t} onClick={() => { setTema(t); try { localStorage.setItem("tema-painel", t); } catch {} }}
+                  className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm ${tema === t ? "border-blue-600 font-semibold" : "border-gray-200 hover:bg-gray-50"}`}>
+                  <span className="h-5 w-5 rounded-full border border-gray-300" style={{ background: TEMAS[t].topo }} />
+                  {TEMAS[t].rotulo}
+                  {tema === t && <span className="ml-auto text-blue-600">✓</span>}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : <RotasEventos />}
       </main>
       </div>
     </div>
