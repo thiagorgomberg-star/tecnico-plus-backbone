@@ -4,6 +4,7 @@ import type { Session } from "@supabase/supabase-js";
 import { useCallback, useEffect, useState } from "react";
 
 import Almoxarifado from "@/componentes/Almoxarifado";
+import Analise from "@/componentes/Analise";
 import Avisos from "@/componentes/Avisos";
 import AtividadesPreventiva from "@/componentes/AtividadesPreventiva";
 import CaixasRede from "@/componentes/CaixasRede";
@@ -26,7 +27,7 @@ export default function Painel() {
   const [sessao, setSessao] = useState<Session | null | undefined>(undefined);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
-  const [aba, setAba] = useState<"os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas" | "indicadores" | "despesas" | "horas">("os");
+  const [aba, setAba] = useState<"os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas" | "indicadores" | "despesas" | "horas" | "analise">("os");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSessao(data.session));
@@ -66,6 +67,8 @@ export default function Painel() {
             className={`rounded-md px-3 py-1.5 text-sm ${aba === "os" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Ordens de serviço</button>
           <button onClick={() => setAba("indicadores")}
             className={`rounded-md px-3 py-1.5 text-sm ${aba === "indicadores" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Indicadores</button>
+          <button onClick={() => setAba("analise")}
+            className={`rounded-md px-3 py-1.5 text-sm ${aba === "analise" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Análise (BI)</button>
           <button onClick={() => setAba("campo")}
             className={`rounded-md px-3 py-1.5 text-sm ${aba === "campo" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Equipe em campo</button>
           <button onClick={() => setAba("escala")}
@@ -92,7 +95,7 @@ export default function Painel() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">
-        {aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "indicadores" ? <Indicadores /> : aba === "despesas" ? <Despesas tecnicos={tecnicos} /> : aba === "horas" ? <Horas /> : <RotasEventos />}
+        {aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "indicadores" ? <Indicadores /> : aba === "despesas" ? <Despesas tecnicos={tecnicos} /> : aba === "horas" ? <Horas /> : aba === "analise" ? <Analise /> : <RotasEventos />}
       </main>
     </div>
   );
