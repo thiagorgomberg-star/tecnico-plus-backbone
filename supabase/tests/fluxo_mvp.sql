@@ -19,6 +19,7 @@ select 'alertas tec', mensagem from alertas;
 update ordens_servico set status='baixada' where numero=1; -- deve falhar
 update ordens_servico set status='aceita' where numero=1;
 update ordens_servico set status='em_execucao' where numero=1;
+insert into os_anexos (os_id,tipo,caminho_arquivo,largura_px,altura_px) select id,'foto_depois','f'||g||'.jpg',1920,1080 from ordens_servico, generate_series(1,10) g where numero=1;
 update ordens_servico set status='concluida' where numero=1;
 update usuarios set papel='admin' where id=auth.uid(); -- deve falhar
 update usuarios set push_token='abc' where id=auth.uid();
