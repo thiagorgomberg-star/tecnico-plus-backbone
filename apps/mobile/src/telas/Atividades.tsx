@@ -19,7 +19,7 @@ import {
 } from '../lib/jornada';
 import { inventarioLocal, pendenciasInventario, precisaFoto } from '../lib/inventario';
 import { supabase } from '../lib/supabase';
-import { OrdemServico, rotuloStatus } from '../lib/tipos';
+import { OrdemServico, rotuloDaOs } from '../lib/tipos';
 
 type Props = { nome: string; abrirOS: (os: OrdemServico) => void; abrirInventario: () => void };
 
@@ -148,11 +148,14 @@ export default function Atividades({ nome, abrirOS, abrirInventario }: Props) {
     if (jornada.expedienteId) {
       // Status mais recente de cada O.S.: o que ainda está na fila (offline) vale mais que o do servidor.
       const status = new Map(ordens.map((o) => [o.id, o.status as string]));
+      // Pausada "para continuar amanhã" (roteamento de vários dias) não impede encerrar o expediente.
+      const continua = new Map(ordens.map((o) => [o.id, !!o.continua_em]));
       for (const item of await itensPendentes()) {
+        if (item.tipo === 'os' && 'continua_em' in item.campos) continua.set(item.osId, !!item.campos.continua_em);
         if (item.tipo === 'os' && typeof item.campos.status === 'string') status.set(item.osId, item.campos.status);
         if (item.tipo === 'inserir' && item.tabela === 'ordens_servico') status.set(String(item.linha.id), String(item.linha.status));
       }
-      const emAndamento = [...status].find(([, st]) => st === 'em_execucao' || st === 'pausada');
+      const emAndamento = [...status].find(([id, st]) => st === 'em_execucao' || (st === 'pausada' && !continua.get(id)));
       if (emAndamento) {
         const os = ordens.find((o) => o.id === emAndamento[0]);
         return Alert.alert(
@@ -355,7 +358,7 @@ const Cartao = memo(function Cartao({ os, abrir }: { os: OrdemServico; abrir: (o
         ) : null}
         <View style={s.selos}>
           <View style={[s.selo, { backgroundColor: fundoDe(cor) }]}>
-            <Text style={[s.seloTexto, { color: cor }]}>{rotuloStatus[os.status]}</Text>
+            <Text style={[s.seloTexto, { color: cor }]}>{rotuloDaOs(os)}</Text>
           </View>
           {sla ? (
             <View style={s.cartaoMeta}>

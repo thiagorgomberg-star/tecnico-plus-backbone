@@ -27,6 +27,7 @@ export type OrdemServico = {
   tecnico_id?: string | null;
   pausa_solicitada_em?: string | null;
   pausa_motivo?: string | null;
+  continua_em?: string | null; // pausada para continuar em outro dia (roteamento)
 };
 
 export type Expediente = {
@@ -35,6 +36,13 @@ export type Expediente = {
   fim: string | null;
   km_inicial: number | null;
 };
+
+// Atividades que costumam levar vários dias: podem ser pausadas para continuar no dia seguinte.
+export const variosDias = (tipo: string) => /roteamento/i.test(tipo);
+
+export const rotuloDaOs = (os: Pick<OrdemServico, 'status' | 'continua_em'>) =>
+  os.status === 'pausada' && os.continua_em
+    ? `Continua em ${os.continua_em.split('-').reverse().slice(0, 2).join('/')}` : rotuloStatus[os.status];
 
 export const rotuloStatus: Record<StatusOS, string> = {
   rascunho: 'Rascunho',

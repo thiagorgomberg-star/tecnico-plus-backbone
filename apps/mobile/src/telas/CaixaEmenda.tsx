@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
-import { Caixa, caixasDaRede, salvarCaixa } from '../lib/caixas';
+import { Caixa, caixasDaRede, proximaTag, salvarCaixa } from '../lib/caixas';
 import { cores } from '../lib/estilo';
 import {
   calcularPlano, CAPACIDADES, CaixaRede, descreverFibra, faixasDaBandeja, FUSOES_POR_BANDEJA, herdarDaAnterior, Manobra, rotuloPonto,
@@ -128,6 +128,8 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
     setCapturando(false);
   }
 
+  // Caixa nova recebe a TAG automática (CE-BKB-0001...), que vira o nome do pin no KMZ.
+  const tagAuto = nova ? proximaTag(c.tipo, [...rede, ...daOs].filter((x) => x.id !== c.id)) : null;
   const plano = calcularPlano(c);
   const bandejas = separarBandejas(c);
   const grupos = gruposEditados ? { f: c.grupos_fusionados, v: c.grupos_vagos } : { f: plano.gruposFusionados, v: plano.gruposVagos };
@@ -163,14 +165,15 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   }
 
   async function salvar() {
-    if (!c.identificacao.trim()) return Alert.alert('Informe a identificação', 'Ex.: CE-BKB-0006');
+    const identificacao = tagAuto ?? c.identificacao.trim();
+    if (!identificacao) return Alert.alert('Informe a identificação', 'Ex.: CE-BKB-0006');
     if (origemTipo === 'dgo' && !c.origem_dgo?.trim()) return Alert.alert('Informe o DGO de origem');
     if (c.latitude == null && !(await new Promise<boolean>((ok) => Alert.alert('Sem localização', 'Salvar mesmo assim?', [
       { text: 'Capturar', onPress: () => ok(false) }, { text: 'Salvar', onPress: () => ok(true) }])))) return;
     setSalvando(true);
     const final: Caixa = {
       ...c,
-      identificacao: c.identificacao.trim(),
+      identificacao,
       grupos_fusionados: grupos.f, grupos_vagos: grupos.v,
       origem_caixa_id: origemTipo === 'caixa' ? c.origem_caixa_id : null,
       origem_saida: origemTipo === 'caixa' ? c.origem_saida : null,
@@ -194,7 +197,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
 
   return (
     <View style={{ flex: 1, backgroundColor: cores.fundo }}>
-      <Cabecalho titulo={nova ? 'Nova caixa' : c.identificacao} subtitulo={rotuloPonto(c.tipo)} voltar={voltar} />
+      <Cabecalho titulo={nova ? `Nova caixa · ${tagAuto}` : c.identificacao} subtitulo={rotuloPonto(c.tipo)} voltar={voltar} />
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 32 }} pointerEvents={podeEditar ? 'auto' : 'none'}>
         <View style={s.bloco}>
           <Text style={s.rotulo}>TIPO</Text>
@@ -205,9 +208,16 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
               </Pressable>
             ))}
           </View>
-          <Text style={s.rotulo}>IDENTIFICAÇÃO *</Text>
-          <TextInput style={s.campo} value={c.identificacao} onChangeText={(t) => mudar({ identificacao: t })}
-            autoCapitalize="characters" placeholder="Ex.: CE-BKB-0006" />
+          <Text style={s.rotulo}>{tagAuto ? 'TAG (AUTOMÁTICA)' : 'IDENTIFICAÇÃO *'}</Text>
+          {tagAuto ? (
+            <>
+              <Text style={[s.campo, { fontWeight: '700', color: cores.texto, backgroundColor: cores.fundo }]}>{tagAuto}</Text>
+              <Text style={s.suave}>Gerada pelo app; é o nome do pin no KMZ. Se outra caixa ganhar a mesma TAG sem internet, o servidor ajusta para a próxima livre.</Text>
+            </>
+          ) : (
+            <TextInput style={s.campo} value={c.identificacao} onChangeText={(t) => mudar({ identificacao: t })}
+              autoCapitalize="characters" placeholder="Ex.: CE-BKB-0006" />
+          )}
         </View>
 
         <View style={s.bloco}>

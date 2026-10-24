@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabase";
 const esc = (t: unknown) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 // KMZ com um pin por caixa / DGO e, na descrição, o plano de fusão, manobras e clientes.
-async function baixarKmz(caixas: CaixaPainel[]) {
+export async function baixarKmz(caixas: CaixaPainel[], arquivo = `caixas-emenda-${new Date().toISOString().slice(0, 10)}`) {
   const estilos = { emenda: "ff00a5ff", entroncamento: "ff0000ff", dgo: "ffff0000" } as Record<string, string>;
   const pins = caixas.filter((c) => c.latitude != null).map((c) => {
     const linhas = [
@@ -48,7 +48,7 @@ ${pins.join("\n")}
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `caixas-emenda-${new Date().toISOString().slice(0, 10)}.kmz`;
+  a.download = `${arquivo}.kmz`;
   a.click();
   URL.revokeObjectURL(url);
 }

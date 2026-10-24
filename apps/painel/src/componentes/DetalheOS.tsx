@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 import CaixaDetalhe, { CaixaPainel } from "@/componentes/CaixaDetalhe";
+import { baixarKmz } from "@/componentes/CaixasRede";
 import ExecucaoOS from "@/componentes/ExecucaoOS";
 import { supabase } from "@/lib/supabase";
-import { corStatus, OrdemServico, rotuloStatus, StatusOS } from "@/lib/tipos";
+import { corStatus, OrdemServico, rotuloDaOs, rotuloStatus, StatusOS } from "@/lib/tipos";
 
 type Anexo = {
   id: string; tipo: string; caminho_arquivo: string; nome_arquivo: string | null; descricao: string | null;
@@ -90,7 +91,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
             </div>
             <h2 className="text-xl font-semibold">{os.titulo}</h2>
           </div>
-          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${corStatus[os.status]}`}>{rotuloStatus[os.status]}</span>
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${corStatus[os.status]}`}>{rotuloDaOs(os)}</span>
           <button className="rounded-md px-2 text-2xl leading-none text-gray-500 hover:bg-gray-100" onClick={fechar}>×</button>
         </div>
 
@@ -130,7 +131,11 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
 
         {caixas.length > 0 && (
           <>
-            <h3 className="mt-6 font-semibold">Caixas de emenda ({caixas.length})</h3>
+            <div className="mt-6 flex items-center gap-3">
+              <h3 className="font-semibold">Caixas de emenda ({caixas.length})</h3>
+              <button className="ml-auto rounded-lg bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-800"
+                onClick={() => baixarKmz(caixas, `Caixas-OS-${os.numero}`)}>Baixar KMZ das caixas</button>
+            </div>
             {caixas.map((c) => (
               <details key={c.id} className="mt-2 rounded-lg border border-gray-200 p-3">
                 <summary className="cursor-pointer font-medium">{c.identificacao}</summary>

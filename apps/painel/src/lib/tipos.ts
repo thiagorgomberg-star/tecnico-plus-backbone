@@ -32,12 +32,17 @@ export type OrdemServico = {
   observacao_tecnico: string | null;
   observacao_supervisor: string | null;
   pausa_solicitada_em: string | null;
+  continua_em?: string | null; // pausada para continuar em outro dia (roteamento)
   pausa_motivo: string | null;
   criado_em: string;
   tecnico?: { nome: string } | null;
 };
 
 export type Tecnico = { id: string; nome: string };
+
+export const rotuloDaOs = (os: { status: StatusOS; continua_em?: string | null }) =>
+  os.status === "pausada" && os.continua_em
+    ? `Continua em ${os.continua_em.split("-").reverse().slice(0, 2).join("/")}` : rotuloStatus[os.status];
 
 export const rotuloStatus: Record<StatusOS, string> = {
   rascunho: "Backlog",

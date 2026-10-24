@@ -7,7 +7,7 @@ import DetalheOS from "@/componentes/DetalheOS";
 import MaterialApoio from "@/componentes/MaterialApoio";
 import NovaOS from "@/componentes/NovaOS";
 import { supabase } from "@/lib/supabase";
-import { corStatus, OrdemServico, rotuloStatus, StatusOS, Tecnico } from "@/lib/tipos";
+import { corStatus, OrdemServico, rotuloDaOs, StatusOS, Tecnico } from "@/lib/tipos";
 
 const FILTROS: { rotulo: string; status: StatusOS[] | null }[] = [
   { rotulo: "Backlog", status: ["rascunho"] },
@@ -137,7 +137,7 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
                     ) : (os.tecnico?.nome ?? "—")}
                   </td>
                   <td className="p-3">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${corStatus[os.status]}`}>{rotuloStatus[os.status]}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${corStatus[os.status]}`}>{rotuloDaOs(os)}</span>
                   </td>
                   <td className={`p-3 ${atrasada ? "font-semibold text-red-700" : perto ? "font-semibold text-amber-700" : ""}`}>
                     {data(limite)}

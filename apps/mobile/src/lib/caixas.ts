@@ -49,6 +49,24 @@ export async function caixasDaOs(osId: string, aoAtualizar: (c: Caixa[]) => void
   aoAtualizar(juntas);
 }
 
+// Lista final das caixas da O.S. (servidor quando há internet, senão o que está no celular).
+export async function caixasAtuais(osId: string) {
+  let ultimas: Caixa[] = [];
+  await caixasDaOs(osId, (c) => { ultimas = c; });
+  return ultimas;
+}
+
+// Próxima TAG automática (CE-BKB-0001...) olhando as caixas conhecidas no celular; o servidor confirma ao sincronizar.
+export const PREFIXO_TAG: Record<string, string> = { emenda: 'CE-BKB-', entroncamento: 'ENT-BKB-', dgo: 'DGO-BKB-' };
+export function proximaTag(tipo: string, conhecidas: { identificacao: string }[]) {
+  const prefixo = PREFIXO_TAG[tipo] ?? PREFIXO_TAG.emenda;
+  const maior = conhecidas.reduce((m, c) => {
+    const n = c.identificacao.startsWith(prefixo) ? Number(c.identificacao.slice(prefixo.length)) : 0;
+    return Number.isFinite(n) && n > m ? n : m;
+  }, 0);
+  return `${prefixo}${String(maior + 1).padStart(4, '0')}`;
+}
+
 // Caixas já cadastradas na rede (para escolher a caixa anterior). Guarda no celular para usar offline.
 export async function caixasDaRede(): Promise<CaixaRede[]> {
   const { data } = await supabase.from('caixas_mapa').select(CAMPOS).order('atualizado_em', { ascending: false }).limit(300);

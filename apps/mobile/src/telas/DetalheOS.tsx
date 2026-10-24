@@ -8,13 +8,14 @@ import CaixasOS from '../componentes/CaixasOS';
 import ExecucaoOS from '../componentes/ExecucaoOS';
 import MaterialApoio from '../componentes/MaterialApoio';
 import { cores, corDoStatus, fundoDe } from '../lib/estilo';
-import { Caixa } from '../lib/caixas';
+import { Caixa, caixasAtuais } from '../lib/caixas';
 import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
 import { textoSla } from '../lib/formato';
 import { posicaoAtual } from '../lib/localizacao';
+import { compartilharKmz } from '../lib/kmz';
 import { compartilharRelatorio } from '../lib/relatorioPdf';
 import { ponto, supabase } from '../lib/supabase';
-import { OrdemServico, proximaAcao, rotuloStatus, StatusOS } from '../lib/tipos';
+import { OrdemServico, proximaAcao, rotuloDaOs, rotuloStatus, StatusOS, variosDias } from '../lib/tipos';
 import CaixaEmenda from './CaixaEmenda';
 
 type Evento = { id: number; status_novo: StatusOS; criado_em: string };
@@ -86,7 +87,9 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
   }, [os.id, os.status]);
 
   const totalFotos = fotosEnviadas + fotosNaFila;
-  const acao = proximaAcao[os.status];
+  // Pausada para continuar em outro dia: a ação principal é retomar.
+  const continuando = os.status === 'pausada' && !!os.continua_em;
+  const acao = continuando ? { status: 'em_execucao' as StatusOS, rotulo: 'Retomar atendimento' } : proximaAcao[os.status];
   const podeEditar = EM_CAMPO.includes(os.status);
   const podeFotografar = os.status === 'em_execucao' || os.status === 'aceita' || os.status === 'devolvida';
 
@@ -106,15 +109,19 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
     const agora = new Date().toISOString();
     const campos: Record<string, unknown> = { status: acao.status, observacao_tecnico: observacao || null };
     const hora = campoHora[acao.status];
-    if (hora) campos[hora] = agora;
+    // Ao retomar no dia seguinte, a hora de início continua a do primeiro dia.
+    if (hora && !continuando) campos[hora] = agora;
     await enfileirar({ tipo: 'os', osId: os.id, campos });
-    setOs({ ...os, status: acao.status, observacao_tecnico: observacao || null });
+    setOs({ ...os, status: acao.status, observacao_tecnico: observacao || null, continua_em: null });
     setEventos((e) => [...e, { id: -e.length - 1, status_novo: acao.status, criado_em: agora }]);
     if (acao.status === 'concluida') {
       const concluida = { ...os, status: acao.status, observacao_tecnico: observacao || null };
-      Alert.alert('O.S. concluída', 'Enviar o relatório em PDF ao supervisor pelo WhatsApp?', [
+      const caixas = await caixasAtuais(os.id);
+      Alert.alert('O.S. concluída', caixas.length
+        ? `Enviar o relatório em PDF e o KMZ com as ${caixas.length} caixa(s) trabalhadas?` : 'Enviar o relatório em PDF ao supervisor pelo WhatsApp?', [
         { text: 'Depois', style: 'cancel' },
-        { text: 'Enviar', onPress: () => enviarRelatorio(concluida) },
+        ...(caixas.length ? [{ text: 'KMZ das caixas', onPress: () => enviarKmz(concluida) }] : []),
+        { text: 'Relatório PDF', onPress: () => enviarRelatorio(concluida) },
       ]);
     }
   }
@@ -129,6 +136,31 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
     } finally {
       setGerandoPdf(false);
     }
+  }
+
+  async function enviarKmz(alvo: OrdemServico = os) {
+    try {
+      const caixas = await caixasAtuais(alvo.id);
+      if (!caixas.some((c) => c.latitude != null)) return Alert.alert('Sem caixas com localização', 'Registre as caixas com GPS para gerar o KMZ.');
+      await compartilharKmz(alvo, caixas);
+    } catch (e) {
+      Alert.alert('Não foi possível gerar o KMZ', String(e));
+    }
+  }
+
+  // Roteamento leva vários dias: pausa e continua amanhã, liberando o encerramento do expediente.
+  function continuarAmanha() {
+    const amanha = new Date(Date.now() + 86400000);
+    const data = `${amanha.getFullYear()}-${String(amanha.getMonth() + 1).padStart(2, '0')}-${String(amanha.getDate()).padStart(2, '0')}`;
+    Alert.alert('Continuar amanhã', 'A O.S. fica pausada e você pode encerrar o expediente. Amanhã toque em "Retomar atendimento".', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Pausar até amanhã', onPress: async () => {
+        const campos = { status: 'pausada', continua_em: data, pausa_motivo: 'Continua no próximo dia', observacao_tecnico: observacao || null };
+        await enfileirar({ tipo: 'os', osId: os.id, campos });
+        setOs({ ...os, status: 'pausada', continua_em: data, observacao_tecnico: observacao || null });
+        setEventos((e) => [...e, { id: -e.length - 1, status_novo: 'pausada', criado_em: new Date().toISOString() }]);
+      } },
+    ]);
   }
 
   async function pedirPausa() {
@@ -172,7 +204,8 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
         subtitulo={`${os.tipo}${os.ticket_acionamento ? ` · ${os.ticket_acionamento}` : ''}`}
         voltar={voltar}
         acoes={['concluida', 'baixada'].includes(os.status)
-          ? [{ icone: 'file-pdf-box', rotulo: 'Relatório PDF', aoTocar: () => enviarRelatorio() }] : undefined}
+          ? [{ icone: 'map-marker-multiple', rotulo: 'KMZ das caixas', aoTocar: () => enviarKmz() },
+            { icone: 'file-pdf-box', rotulo: 'Relatório PDF', aoTocar: () => enviarRelatorio() }] : undefined}
       />
       <View style={s.resumo}>
         <View style={[s.resumoIcone, { backgroundColor: fundoDe(corStatus) }]}>
@@ -182,7 +215,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
           <Text style={s.resumoTitulo} numberOfLines={2}>{os.titulo}</Text>
           <View style={s.resumoSelos}>
             <View style={[s.selo, { backgroundColor: fundoDe(corStatus) }]}>
-              <Text style={[s.seloTexto, { color: corStatus }]}>{rotuloStatus[os.status]}</Text>
+              <Text style={[s.seloTexto, { color: corStatus }]}>{rotuloDaOs(os)}</Text>
             </View>
             {os.prioridade === 'alta' || os.prioridade === 'emergencia' ? (
               <View style={[s.selo, { backgroundColor: fundoDe(cores.perigo) }]}>
@@ -217,7 +250,11 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
             {os.status === 'devolvida' && os.observacao_supervisor ? (
               <Aviso cor={cores.perigo} texto={`Devolvida pelo supervisor: ${os.observacao_supervisor}`} />
             ) : null}
-            {os.status === 'pausada' ? <Aviso cor={cores.alerta} texto="Pausada pela refeição. Retoma ao encerrar a refeição." /> : null}
+            {os.status === 'pausada' ? (
+              <Aviso cor={cores.alerta} texto={continuando
+                ? `Atividade de vários dias: pausada para continuar em ${os.continua_em!.split('-').reverse().join('/')}. Toque em "Retomar atendimento" quando voltar ao campo.`
+                : 'Pausada pela refeição. Retoma ao encerrar a refeição.'} />
+            ) : null}
             {os.pausa_solicitada_em ? (
               <Aviso cor={cores.alerta} texto={`Pausa solicitada (${os.pausa_motivo ?? ''}). Aguardando o supervisor autorizar.`} />
             ) : null}
@@ -243,7 +280,10 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
               <Acao icone="package-variant" rotulo="Caixas" cor={cores.texto2} aoTocar={() => setAba('caixas')} />
               <Acao icone="wrench-outline" rotulo="Execução" cor={cores.texto2} aoTocar={() => setAba('execucao')} />
               {['concluida', 'baixada'].includes(os.status) ? (
-                <Acao icone="whatsapp" rotulo="Relatório" cor="#25D366" aoTocar={() => enviarRelatorio()} />
+                <>
+                  <Acao icone="whatsapp" rotulo="Relatório" cor="#25D366" aoTocar={() => enviarRelatorio()} />
+                  <Acao icone="map-marker-multiple" rotulo="KMZ caixas" cor="#227E9E" aoTocar={() => enviarKmz()} />
+                </>
               ) : null}
             </View>
 
@@ -327,7 +367,12 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
         </View>
       ) : acao ? (
         <View style={[s.rodape, { flexDirection: 'row', gap: 8 }]}>
-          {os.status === 'em_execucao' && !os.pausa_solicitada_em ? (
+          {os.status === 'em_execucao' && variosDias(os.tipo) ? (
+            <Pressable style={[s.botaoRodape, s.botaoSecundario, { flex: 0.85 }]} onPress={continuarAmanha}>
+              <Icone nome="calendar-arrow-right" tamanho={20} cor={cores.texto} />
+              <Text style={[s.botaoTexto, { color: cores.texto }]} numberOfLines={1}>Seguir amanhã</Text>
+            </Pressable>
+          ) : os.status === 'em_execucao' && !os.pausa_solicitada_em ? (
             <Pressable style={[s.botaoRodape, s.botaoSecundario, { flex: 0.6 }]} onPress={() => setPedindoPausa(true)}>
               <Icone nome="pause-circle-outline" tamanho={20} cor={cores.texto} />
               <Text style={[s.botaoTexto, { color: cores.texto }]}>Pausa</Text>
