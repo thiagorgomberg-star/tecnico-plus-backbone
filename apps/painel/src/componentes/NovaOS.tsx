@@ -8,6 +8,7 @@ import { Prioridade, Tecnico, TIPOS_OS } from "@/lib/tipos";
 type Props = { tecnicos: Tecnico[]; fechar: () => void; criada: () => void };
 
 export default function NovaOS({ tecnicos, fechar, criada }: Props) {
+  const [ticket, setTicket] = useState("");
   const [titulo, setTitulo] = useState("");
   const [tipo, setTipo] = useState(TIPOS_OS[0]);
   const [prioridade, setPrioridade] = useState<Prioridade>("media");
@@ -23,6 +24,7 @@ export default function NovaOS({ tecnicos, fechar, criada }: Props) {
     if (enviar && !tecnicoId) return setErro("Escolha o técnico para enviar.");
     const { error } = await supabase.from("ordens_servico").insert({
       titulo: titulo.trim(),
+      ticket_acionamento: ticket.trim() || null,
       tipo,
       prioridade,
       tecnico_id: tecnicoId || null,
@@ -43,6 +45,9 @@ export default function NovaOS({ tecnicos, fechar, criada }: Props) {
       <div className="mt-10 w-full max-w-lg rounded-xl bg-white p-6 shadow-lg">
         <h2 className="mb-4 text-lg font-semibold">Nova ordem de serviço</h2>
         <div className="grid gap-3">
+          <label className="text-sm">Ticket de acionamento
+            <input className={campo} value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="Número do ticket do cliente" />
+          </label>
           <label className="text-sm">Título
             <input className={campo} value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ex.: Rompimento de fibra no km 12" />
           </label>

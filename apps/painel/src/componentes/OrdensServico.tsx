@@ -102,7 +102,10 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
               const atrasada = os.prazo && new Date(os.prazo) < agora && !["concluida", "baixada", "cancelada"].includes(os.status);
               return (
                 <tr key={os.id} className="border-b border-gray-100 align-top last:border-0">
-                  <td className="p-3 font-mono">#{os.numero}</td>
+                  <td className="p-3">
+                    <div className="font-mono">#{os.numero}</div>
+                    {os.ticket_acionamento && <div className="text-xs text-gray-500">Ticket {os.ticket_acionamento}</div>}
+                  </td>
                   <td className="p-3">
                     <div className="font-medium">{os.titulo}</div>
                     <div className="text-gray-500">{os.tipo} · prioridade {os.prioridade}{os.endereco ? ` · ${os.endereco}` : ""}</div>

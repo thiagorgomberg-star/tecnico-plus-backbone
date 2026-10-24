@@ -17,6 +17,7 @@ export type OrdemServico = {
   prioridade: Prioridade;
   status: StatusOS;
   titulo: string;
+  ticket_acionamento: string | null;
   descricao: string | null;
   endereco: string | null;
   tecnico_id: string | null;

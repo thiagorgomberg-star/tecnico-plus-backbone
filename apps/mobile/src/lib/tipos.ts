@@ -22,6 +22,7 @@ export type OrdemServico = {
   observacao_tecnico: string | null;
   observacao_supervisor: string | null;
   evento_localizado_em: string | null;
+  ticket_acionamento: string | null;
 };
 
 export type Expediente = {

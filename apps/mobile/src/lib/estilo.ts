@@ -1,14 +1,29 @@
 import { StyleSheet } from 'react-native';
 
+// Paleta inspirada no Oracle Field Service: cabeçalho escuro, azul de ação e cor por status.
 export const cores = {
-  fundo: '#F4F6F8',
+  fundo: '#F1EFED',
   cartao: '#FFFFFF',
-  texto: '#1B1F24',
-  suave: '#5F6B7A',
-  primaria: '#0B5CAD',
-  perigo: '#C62828',
-  sucesso: '#2E7D32',
-  borda: '#DDE2E8',
+  texto: '#161513',
+  suave: '#6F6964',
+  primaria: '#0572CE',
+  cabecalho: '#312D2A',
+  cabecalhoTexto: '#FFFFFF',
+  perigo: '#C74634',
+  alerta: '#E08A1E',
+  sucesso: '#508223',
+  borda: '#E4E1DD',
+};
+
+export const corDoStatus: Record<string, string> = {
+  enviada: '#0572CE',
+  aceita: '#227E9E',
+  em_execucao: '#508223',
+  pausada: '#E08A1E',
+  concluida: '#7B5EA7',
+  devolvida: '#C74634',
+  baixada: '#6F6964',
+  cancelada: '#A39E99',
 };
 
 export const estilo = StyleSheet.create({

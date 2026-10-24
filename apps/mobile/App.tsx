@@ -3,10 +3,11 @@ import type { Session } from '@supabase/supabase-js';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Pressable, SafeAreaView, Text, View } from 'react-native';
+import { Alert, SafeAreaView } from 'react-native';
 
-import { cores, estilo } from './src/lib/estilo';
-import { sincronizar } from './src/lib/fila';
+import { estilo } from './src/lib/estilo';
+import { itensPendentes, sincronizar } from './src/lib/fila';
+import { limparJornadaLocal } from './src/lib/jornada';
 import { supabase } from './src/lib/supabase';
 import { OrdemServico } from './src/lib/tipos';
 import CameraOS from './src/telas/CameraOS';
@@ -42,6 +43,15 @@ export default function App() {
       .then(({ data }) => data && setPerfil(data));
   }, [sessao]);
 
+  async function sair() {
+    const pendentes = await itensPendentes();
+    if (pendentes.length > 0) {
+      return Alert.alert('Registros não enviados', `Há ${pendentes.length} registro(s) aguardando internet. Conecte-se antes de sair.`);
+    }
+    await limparJornadaLocal();
+    await supabase.auth.signOut();
+  }
+
   if (!fontesProntas) return null;
 
   if (sessao && camera) {
@@ -56,22 +66,14 @@ export default function App() {
 
   return (
     <SafeAreaView style={estilo.tela}>
-      <StatusBar style="dark" />
+      <StatusBar style={sessao ? 'light' : 'dark'} />
       {!sessao ? (
         <Login />
       ) : osAberta ? (
         <DetalheOS os={osAberta} voltar={() => setOsAberta(null)}
           abrirCamera={(fotosJaFeitas) => setCamera({ osId: osAberta.id, fotosJaFeitas })} />
       ) : (
-        <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 16, paddingBottom: 0 }}>
-            <Text style={[estilo.titulo, { fontSize: 22 }]}>Técnico Plus</Text>
-            <Pressable onPress={() => supabase.auth.signOut()}>
-              <Text style={{ color: cores.primaria }}>Sair</Text>
-            </Pressable>
-          </View>
-          <Inicio nome={perfil.nome} abrirOS={setOsAberta} />
-        </View>
+        <Inicio nome={perfil.nome} abrirOS={setOsAberta} sair={sair} />
       )}
     </SafeAreaView>
   );

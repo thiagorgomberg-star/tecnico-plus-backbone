@@ -96,6 +96,7 @@ export default function DetalheOS({ os: inicial, voltar, abrirCamera }: Props) {
       <View style={[estilo.cartao, { marginTop: 0 }]}>
         <Text style={estilo.suave}>
           O.S. #{os.numero} · {os.tipo} · {rotuloStatus[os.status]}
+          {os.ticket_acionamento ? ` · Ticket ${os.ticket_acionamento}` : ''}
         </Text>
         <Text style={estilo.titulo}>{os.titulo}</Text>
         {os.endereco ? <Text style={[estilo.texto, { marginTop: 8 }]}>{os.endereco}</Text> : null}

@@ -22,6 +22,8 @@ export type ItemFila =
       longitude: number | null;
     }
   | { tipo: 'os'; id: string; osId: string; campos: Record<string, unknown> }
+  | { tipo: 'inserir'; id: string; tabela: string; linha: Record<string, unknown> }
+  | { tipo: 'atualizar'; id: string; tabela: string; linhaId: string; campos: Record<string, unknown> }
   | { tipo: 'rpc'; id: string; nome: string; args: Record<string, unknown> };
 
 type NovoItem = ItemFila extends infer T ? (T extends ItemFila ? Omit<T, 'id'> : never) : never;
@@ -87,6 +89,13 @@ async function enviar(item: ItemFila) {
     new File(item.arquivo).delete();
   } else if (item.tipo === 'os') {
     const { error } = await supabase.from('ordens_servico').update(item.campos).eq('id', item.osId);
+    if (error) throw error;
+  } else if (item.tipo === 'inserir') {
+    // A linha já leva o id gerado no celular; reenviar não duplica.
+    const { error } = await supabase.from(item.tabela).upsert(item.linha, { onConflict: 'id', ignoreDuplicates: true });
+    if (error) throw error;
+  } else if (item.tipo === 'atualizar') {
+    const { error } = await supabase.from(item.tabela).update(item.campos).eq('id', item.linhaId);
     if (error) throw error;
   } else {
     const { error } = await supabase.rpc(item.nome, item.args);
