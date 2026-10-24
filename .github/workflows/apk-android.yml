@@ -1,13 +1,11 @@
 # Gera o APK do app do técnico e publica como release do GitHub.
+# Só roda quando solicitado (Actions > APK Android > Run workflow), não a cada push.
 # Link fixo da versão mais recente:
 #   https://github.com/thiagorgomberg-star/tecnico-plus-backbone/releases/latest/download/tecnico-plus.apk
 name: APK Android
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['apps/mobile/**', '.github/workflows/apk-android.yml']
 
 permissions:
   contents: write
