@@ -13,6 +13,7 @@ import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
 import { textoSla } from '../lib/formato';
 import { posicaoAtual } from '../lib/localizacao';
 import { compartilharKmz } from '../lib/kmz';
+import { compartilharOsApresentacao } from '../lib/osApresentacao';
 import { compartilharRelatorio } from '../lib/relatorioPdf';
 import { ponto, supabase } from '../lib/supabase';
 import { OrdemServico, proximaAcao, rotuloDaOs, rotuloStatus, StatusOS, variosDias } from '../lib/tipos';
@@ -279,6 +280,10 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
                 aoTocar={podeEditar ? () => setAssinando(true) : undefined} />
               <Acao icone="package-variant" rotulo="Caixas" cor={cores.texto2} aoTocar={() => setAba('caixas')} />
               <Acao icone="wrench-outline" rotulo="Execução" cor={cores.texto2} aoTocar={() => setAba('execucao')} />
+              {!['baixada', 'cancelada'].includes(os.status) ? (
+                <Acao icone="card-account-details-outline" rotulo="O.S. abordagem" cor="#0B3C6E"
+                  aoTocar={() => compartilharOsApresentacao(os).catch((e) => Alert.alert('Não foi possível gerar', String(e)))} />
+              ) : null}
               {['concluida', 'baixada'].includes(os.status) ? (
                 <>
                   <Acao icone="whatsapp" rotulo="Relatório" cor="#25D366" aoTocar={() => enviarRelatorio()} />

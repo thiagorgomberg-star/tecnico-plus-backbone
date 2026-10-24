@@ -23,7 +23,7 @@ const quando = (v: string | null | undefined) =>
 const fmt = (n: number) => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
 
 // Imagem embutida no PDF (funciona para arquivo do celular e para link do servidor).
-async function dataUrl(uri: string) {
+export async function dataUrl(uri: string) {
   try {
     const blob = await (await fetch(uri)).blob();
     return await new Promise<string | null>((ok) => {

@@ -9,6 +9,7 @@ import Avisos from "@/componentes/Avisos";
 import AtividadesPreventiva from "@/componentes/AtividadesPreventiva";
 import CaixasRede from "@/componentes/CaixasRede";
 import Catalogo from "@/componentes/Catalogo";
+import ConfigEmpresa from "@/componentes/ConfigEmpresa";
 import ConsoleDespacho from "@/componentes/ConsoleDespacho";
 import Horas from "@/componentes/Horas";
 import Indicadores from "@/componentes/Indicadores";
@@ -167,7 +168,7 @@ export default function Painel() {
         </nav>
       <main className={`mx-auto w-full min-w-0 flex-1 p-4 sm:p-6 ${["console", "analise", "campo"].includes(aba) ? "max-w-none" : "max-w-6xl"}`}>
         {aba === "console" ? <ConsoleDespacho tecnicos={tecnicos} /> : aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "indicadores" ? <Indicadores /> : aba === "despesas" ? <Despesas tecnicos={tecnicos} /> : aba === "horas" ? <Horas /> : aba === "analise" ? <Analise /> : aba === "ferramental" ? <Ferramental tecnicos={tecnicos} /> : aba === "frota" ? <Frota tecnicos={tecnicos} /> : aba === "config" ? (
-          <section className="max-w-md rounded-xl border border-gray-200 bg-white p-5">
+          <div className="grid gap-6"><ConfigEmpresa /><section className="max-w-md rounded-xl border border-gray-200 bg-white p-5">
             <h2 className="mb-1 text-lg font-semibold">Configurações</h2>
             <p className="mb-4 text-sm text-gray-500">Cor do painel (fica salva neste navegador).</p>
             <div className="flex flex-col gap-2">
@@ -180,7 +181,7 @@ export default function Painel() {
                 </button>
               ))}
             </div>
-          </section>
+          </section></div>
         ) : <RotasEventos />}
       </main>
       </div>

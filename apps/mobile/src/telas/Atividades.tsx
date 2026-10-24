@@ -16,12 +16,13 @@ import {
   iniciarRefeicao,
   Jornada,
   lerJornada,
+  ultimoKm,
 } from '../lib/jornada';
 import { inventarioLocal, pendenciasInventario, precisaFoto } from '../lib/inventario';
 import { supabase } from '../lib/supabase';
 import { OrdemServico, rotuloDaOs } from '../lib/tipos';
 
-type Props = { nome: string; abrirOS: (os: OrdemServico) => void; abrirInventario: () => void };
+type Props = { nome: string; abrirOS: (os: OrdemServico) => void; abrirInventario: () => void; iniciarAtividade: () => void };
 
 const CACHE_OS = 'ordens-cache';
 const PESO_PRIORIDADE = { emergencia: 0, alta: 1, media: 2, baixa: 3 };
@@ -29,12 +30,13 @@ const PESO_STATUS: Record<string, number> = { em_execucao: 0, pausada: 1, devolv
 const ENCERRADAS = ['concluida', 'baixada', 'cancelada'];
 
 // Tela principal do técnico: jornada do dia e lista de atividades (padrão Oracle Field Service).
-export default function Atividades({ nome, abrirOS, abrirInventario }: Props) {
+export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtividade }: Props) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
   const [pendentes, setPendentes] = useState(0);
   const [pedindoKm, setPedindoKm] = useState(false);
   const [km, setKm] = useState('');
+  const [kmAnterior, setKmAnterior] = useState<number | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [semRede, setSemRede] = useState(false);
   const [novaVersao, setNovaVersao] = useState<number | null>(null);
@@ -126,6 +128,12 @@ export default function Atividades({ nome, abrirOS, abrirInventario }: Props) {
     if (jornada.expedienteId && jornada.kmInicial != null && valor < jornada.kmInicial) {
       return Alert.alert('Km final menor que o inicial', `O expediente começou com ${jornada.kmInicial} km.`);
     }
+    if (!jornada.expedienteId && kmAnterior != null && valor < kmAnterior) {
+      const seguir = await new Promise<boolean>((ok) => Alert.alert('Km menor que o anterior',
+        `O último km registrado foi ${kmAnterior.toLocaleString('pt-BR')}. Confirma ${valor.toLocaleString('pt-BR')} km?`,
+        [{ text: 'Corrigir', onPress: () => ok(false) }, { text: 'Confirmar', onPress: () => ok(true) }]));
+      if (!seguir) return;
+    }
     if (jornada.expedienteId) {
       setJornada(await encerrarExpediente(jornada, valor));
     } else {
@@ -169,6 +177,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario }: Props) {
         return Alert.alert('Expediente bloqueado', `Hoje está na sua escala como ${rotuloEscala[bloqueio.tipo].toLowerCase()}.`);
       }
     }
+    setKmAnterior(await ultimoKm());
     setPedindoKm(true);
   }
 
@@ -221,7 +230,15 @@ export default function Atividades({ nome, abrirOS, abrirInventario }: Props) {
       <View style={s.jornada}>
         <View style={s.jornadaLinha}>
           <View style={[s.jornadaIcone, { backgroundColor: fundoDe(corSituacao) }]}>
-            <Icone nome={!emExpediente ? 'truck-outline' : emRefeicao ? 'silverware-fork-knife' : 'truck-fast'} tamanho={22} cor={corSituacao} />
+            {!emExpediente ? <Icone nome="sleep" tamanho={24} cor={corSituacao} />
+              : emRefeicao ? <Icone nome="silverware-fork-knife" tamanho={22} cor={corSituacao} />
+              : (
+                // Técnico "ligado no 220V": silhueta com capacete e um raio.
+                <View>
+                  <Icone nome="account-hard-hat" tamanho={24} cor={corSituacao} />
+                  <Icone nome="flash" tamanho={14} cor="#F5B400" style={{ position: 'absolute', right: -7, top: -5 }} />
+                </View>
+              )}
           </View>
           <View style={{ flex: 1 }}>
             <Text style={s.jornadaTexto}>{situacao}</Text>
@@ -235,6 +252,9 @@ export default function Atividades({ nome, abrirOS, abrirInventario }: Props) {
           <View style={{ marginTop: 12 }}>
             <TextInput style={s.campo} keyboardType="numeric" value={km} onChangeText={setKm} autoFocus
               placeholder={emExpediente ? 'Km final do odômetro' : 'Km inicial do odômetro'} />
+            {!emExpediente && kmAnterior != null ? (
+              <Text style={s.jornadaDesde}>Km anterior: {kmAnterior.toLocaleString('pt-BR')} (último registrado)</Text>
+            ) : null}
             <View style={s.botoes}>
               <Pressable style={[s.botao, s.botaoSecundario]} onPress={() => { setPedindoKm(false); setKm(''); }}>
                 <Text style={[s.botaoTexto, { color: cores.texto }]}>Cancelar</Text>
@@ -253,7 +273,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario }: Props) {
                 <Text style={[s.botaoTexto, emExpediente && { color: cores.perigo }]} numberOfLines={1}>{emExpediente ? 'Encerrar expediente' : 'Iniciar expediente'}</Text>
               </Pressable>
             ) : null}
-            {emExpediente ? (
+            {emExpediente && (emRefeicao || !jornada?.refeicaoFeita) ? (
               <Pressable style={[s.botao, { backgroundColor: emRefeicao ? cores.sucesso : cores.alerta }]} onPress={alternarRefeicao}>
                 <Icone nome={emRefeicao ? 'play-circle-outline' : 'silverware-fork-knife'} tamanho={20} cor="#fff" />
                 <Text style={s.botaoTexto}>{emRefeicao ? 'Encerrar refeição' : 'Refeição'}</Text>
@@ -261,6 +281,12 @@ export default function Atividades({ nome, abrirOS, abrirInventario }: Props) {
             ) : null}
           </View>
         )}
+        {emExpediente && !emRefeicao && !pedindoKm ? (
+          <Pressable style={[s.botao, { backgroundColor: cores.primaria, marginTop: 10, flex: 0 }]} onPress={iniciarAtividade}>
+            <Icone nome="plus-circle-outline" tamanho={20} cor="#fff" />
+            <Text style={s.botaoTexto}>Iniciar atividade</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <View style={s.resumo}>

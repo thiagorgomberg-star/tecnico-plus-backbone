@@ -8,6 +8,7 @@ import { cores, estilo } from '../lib/estilo';
 import { enfileirar } from '../lib/fila';
 import { lerJornada } from '../lib/jornada';
 import { enderecoDe, posicaoAtual } from '../lib/localizacao';
+import { compartilharOsApresentacao } from '../lib/osApresentacao';
 import { ponto, supabase } from '../lib/supabase';
 import { OrdemServico } from '../lib/tipos';
 
@@ -131,13 +132,18 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
       observacao_tecnico: linha.observacao_tecnico, observacao_supervisor: null, evento_localizado_em: linha.evento_localizado_em,
       ticket_acionamento: linha.ticket_acionamento, sla_limite: null,
     });
+    Alert.alert('Atividade iniciada', 'Quer gerar a O.S. de apresentação (para mostrar em caso de abordagem policial)?', [
+      { text: 'Agora não', style: 'cancel' },
+      { text: 'Gerar O.S.', onPress: () => compartilharOsApresentacao({ id, numero: 0, tipo, titulo: linha.titulo, endereco: linha.endereco, ticket_acionamento: linha.ticket_acionamento })
+        .catch((e) => Alert.alert('Não foi possível gerar', String(e))) },
+    ]);
   }
 
   const chip = (ativo: boolean) => [s.chip, ativo && { backgroundColor: cores.primaria, borderColor: cores.primaria }];
 
   return (
     <ScrollView style={estilo.tela} keyboardShouldPersistTaps="handled">
-      <Cabecalho titulo="Nova preventiva" voltar={voltar} />
+      <Cabecalho titulo="Iniciar atividade" voltar={voltar} />
       <Text style={[estilo.suave, { marginHorizontal: 16, marginTop: 12 }]}>
         A preventiva já começa em execução, com a sua localização. Depois é igual a uma O.S.: fotos (mínimo 10) e conclusão.
       </Text>

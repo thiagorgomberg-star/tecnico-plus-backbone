@@ -6,7 +6,7 @@ import ExcluirDados from "@/componentes/ExcluirDados";
 import { supabase } from "@/lib/supabase";
 
 type Membro = {
-  id: string; nome: string; cargo: string | null; matricula: string | null; papel: string; ativo: boolean;
+  id: string; nome: string; cargo: string | null; matricula: string | null; documento: string | null; papel: string; ativo: boolean;
   inicio_jornada: string; fim_jornada: string; fim_jornada_sexta: string; regime_horas: "hora_extra" | "banco_horas";
 };
 
@@ -20,7 +20,7 @@ export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
   const recarregar = useCallback(() => { setVersao((v) => v + 1); aoMudar(); }, [aoMudar]);
 
   useEffect(() => {
-    supabase.from("usuarios").select("id, nome, cargo, matricula, papel, ativo, inicio_jornada, fim_jornada, fim_jornada_sexta, regime_horas").is("excluido_em", null).order("nome")
+    supabase.from("usuarios").select("id, nome, cargo, matricula, documento, papel, ativo, inicio_jornada, fim_jornada, fim_jornada_sexta, regime_horas").is("excluido_em", null).order("nome")
       .then(({ data }) => setMembros(data ?? []));
   }, [versao]);
 
@@ -69,6 +69,8 @@ export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs">{m.papel}</span>
             <input className="rounded border border-gray-200 px-2 py-1" defaultValue={m.cargo ?? ""} placeholder="Cargo"
               onBlur={(e) => e.target.value !== (m.cargo ?? "") && atualizar(m, { cargo: e.target.value || null })} />
+            <input className="w-36 rounded border border-gray-200 px-2 py-1" defaultValue={m.documento ?? ""} placeholder="CPF ou RG" title="Sai na O.S. de apresentação (abordagem policial)"
+              onBlur={(e) => e.target.value !== (m.documento ?? "") && atualizar(m, { documento: e.target.value.trim() || null })} />
             {m.papel === "tecnico" && (
               <label className="flex items-center gap-1 text-gray-600">
                 Seg–Qui

@@ -160,7 +160,7 @@ export default function App() {
     conteudo = (
       <>
         <View style={{ flex: 1 }}>
-          {aba === 'atividades' ? <Atividades nome={perfil.nome} abrirOS={setOsAberta} abrirInventario={() => setTela('inventario')} /> : null}
+          {aba === 'atividades' ? <Atividades nome={perfil.nome} abrirOS={setOsAberta} abrirInventario={() => setTela('inventario')} iniciarAtividade={() => setTela('preventiva')} /> : null}
           {aba === 'estoque' ? <Estoque euId={euId} /> : null}
           {aba === 'mais' ? <Mais nome={perfil.nome} cargo={perfil.cargo} pendentes={pendentes} abrir={setTela} sair={sair} /> : null}
         </View>

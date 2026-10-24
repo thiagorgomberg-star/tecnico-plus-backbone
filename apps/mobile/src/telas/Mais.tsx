@@ -45,7 +45,6 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
           </View>
         </View>
         <Text style={s.secao}>CAMPO</Text>
-        {item('shield-plus-outline', 'Iniciar preventiva', 'Abrir uma preventiva no local, com o expediente iniciado', () => abrir('preventiva'), cores.sucesso)}
         {item('toolbox-outline', 'Inventário Matinal', 'Foto de cada ferramenta e EPI a cada 30 dias', () => abrir('inventario'), '#7A5AA6')}
         {item('car-outline', 'Frota', 'Meu veículo: abastecimento, pedágio e manutenção', () => abrir('frota'), '#227E9E')}
         {item('receipt-text-outline', 'Despesas', 'Ferramentas, material, alimentação: foto do comprovante e valores', () => abrir('despesas'), cores.alerta)}
