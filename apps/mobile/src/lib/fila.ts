@@ -32,6 +32,13 @@ export type ItemFila =
       extensao: string;
       correcao?: boolean; // reenvio de uma despesa recusada: atualiza a mesma linha
     }
+  | {
+      tipo: 'inventario';
+      id: string;
+      // Inspeção do Inventário Matinal: foto do item + condição.
+      linha: { id: string; ferramenta_id: string; tecnico_id: string; feita_em: string; condicao: string; observacao: string | null; posicao: string | null };
+      arquivo: string;
+    }
   | { tipo: 'os'; id: string; osId: string; campos: Record<string, unknown> }
   | { tipo: 'inserir'; id: string; tabela: string; linha: Record<string, unknown>; conflito?: string }
   | { tipo: 'excluir'; id: string; tabela: string; filtros: Record<string, string> }
@@ -120,6 +127,15 @@ async function enviar(item: ItemFila) {
       .upsert(linha, { onConflict: 'id', ignoreDuplicates: !item.correcao });
     if (error) throw error;
     if (item.arquivo) new File(item.arquivo).delete();
+  } else if (item.tipo === 'inventario') {
+    const foto = `${item.linha.tecnico_id}/${item.linha.id}.jpg`;
+    const conteudo = await new File(item.arquivo).arrayBuffer();
+    const envio = await supabase.storage.from('inventario').upload(foto, conteudo, { contentType: 'image/jpeg' });
+    if (envio.error && !/exist|duplicate/i.test(envio.error.message)) throw envio.error;
+    const { error } = await supabase.from('inventario_inspecoes')
+      .upsert({ ...item.linha, foto }, { onConflict: 'id', ignoreDuplicates: true });
+    if (error) throw error;
+    new File(item.arquivo).delete();
   } else if (item.tipo === 'os') {
     const { error } = await supabase.from('ordens_servico').update(item.campos).eq('id', item.osId);
     if (error) throw error;

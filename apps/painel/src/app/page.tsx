@@ -15,6 +15,7 @@ import Indicadores from "@/componentes/Indicadores";
 import Equipe from "@/componentes/Equipe";
 import Despesas from "@/componentes/Despesas";
 import Escala from "@/componentes/Escala";
+import Ferramental from "@/componentes/Ferramental";
 import Login from "@/componentes/Login";
 import OrdensServico from "@/componentes/OrdensServico";
 import RotasEventos from "@/componentes/RotasEventos";
@@ -24,7 +25,7 @@ import { Tecnico } from "@/lib/tipos";
 
 type Perfil = { nome: string; papel: string };
 
-type AbaPainel = "os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas" | "indicadores" | "despesas" | "horas" | "analise" | "console";
+type AbaPainel = "os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas" | "indicadores" | "despesas" | "horas" | "analise" | "console" | "ferramental";
 
 // Abas na ordem do menu (padrão Oracle Field Service: console de despacho primeiro).
 // Cor do painel escolhida pelo supervisor (fica salva no navegador).
@@ -57,6 +58,7 @@ const ABAS: [AbaPainel, string][] = [
   ["horas", "Horas"],
   ["despesas", "Despesas"],
   ["almoxarifado", "Almoxarifado"],
+  ["ferramental", "Ferramental e EPI"],
 ];
 
 export default function Painel() {
@@ -128,7 +130,7 @@ export default function Painel() {
         </nav>
       </header>
       <main className={`mx-auto w-full flex-1 p-4 sm:p-6 ${["console", "analise", "campo"].includes(aba) ? "max-w-none" : "max-w-6xl"}`}>
-        {aba === "console" ? <ConsoleDespacho tecnicos={tecnicos} /> : aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "indicadores" ? <Indicadores /> : aba === "despesas" ? <Despesas tecnicos={tecnicos} /> : aba === "horas" ? <Horas /> : aba === "analise" ? <Analise /> : <RotasEventos />}
+        {aba === "console" ? <ConsoleDespacho tecnicos={tecnicos} /> : aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "indicadores" ? <Indicadores /> : aba === "despesas" ? <Despesas tecnicos={tecnicos} /> : aba === "horas" ? <Horas /> : aba === "analise" ? <Analise /> : aba === "ferramental" ? <Ferramental tecnicos={tecnicos} /> : <RotasEventos />}
       </main>
     </div>
   );

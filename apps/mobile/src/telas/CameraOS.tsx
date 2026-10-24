@@ -20,6 +20,8 @@ type Props = {
   fechar: () => void;
   // Fotos de uma caixa (ou da tela do OTDR de uma fibra) em vez das fotos antes/depois da O.S.
   caixa?: { id: string; tipo: 'foto_caixa' | 'foto_otdr'; fibra?: number; titulo: string };
+  // Foto única fora da O.S. (ex.: Inventário Matinal): entrega a foto com máscara e fecha a câmera.
+  unica?: { titulo: string; aoSalvar: (foto: { arquivo: string; tiradaEm: string; latitude: number | null; longitude: number | null }) => void };
 };
 
 const LARGURA_FINAL = 1600;
@@ -40,7 +42,7 @@ function distancia(a: { latitude: number; longitude: number }, b: { latitude: nu
   return Math.hypot(dx, dy);
 }
 
-export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar, caixa }: Props) {
+export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar, caixa, unica }: Props) {
   const [permissao, pedirPermissao] = useCameraPermissions();
   const camera = useRef<CameraView>(null);
   const mascara = useRef<RefMascara>(null);
@@ -143,6 +145,11 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
       if (!pasta.exists) pasta.create();
       const destino = new File(pasta, `${randomUUID()}.jpg`);
       await new File(temporario).move(destino);
+      if (unica) {
+        unica.aoSalvar({ arquivo: destino.uri, tiradaEm: dados.tiradaEm.toISOString(), latitude: dados.latitude, longitude: dados.longitude });
+        fechar();
+        return;
+      }
       await enfileirar({
         tipo: 'foto',
         osId,
@@ -192,7 +199,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
         <Text style={[estilos.texto, { color: total >= minimo ? '#8BE28F' : '#FFD54F' }]}>
           {total}/{minimo} fotos{fila.length ? ` · gravando ${fila.length}` : ''}
         </Text>
-        {caixa ? <Text style={estilos.texto}>{caixa.titulo}</Text> : (
+        {caixa || unica ? <Text style={estilos.texto}>{caixa?.titulo ?? unica?.titulo}</Text> : (
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {(['foto_antes', 'foto_depois'] as const).map((t) => (
             <Pressable key={t} onPress={() => setTipo(t)} style={[estilos.chip, tipo === t && { backgroundColor: cores.primaria }]}>

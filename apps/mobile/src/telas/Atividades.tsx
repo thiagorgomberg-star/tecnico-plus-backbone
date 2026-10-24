@@ -17,10 +17,11 @@ import {
   Jornada,
   lerJornada,
 } from '../lib/jornada';
+import { inventarioLocal, pendenciasInventario, precisaFoto } from '../lib/inventario';
 import { supabase } from '../lib/supabase';
 import { OrdemServico, rotuloStatus } from '../lib/tipos';
 
-type Props = { nome: string; abrirOS: (os: OrdemServico) => void };
+type Props = { nome: string; abrirOS: (os: OrdemServico) => void; abrirInventario: () => void };
 
 const CACHE_OS = 'ordens-cache';
 const PESO_PRIORIDADE = { emergencia: 0, alta: 1, media: 2, baixa: 3 };
@@ -28,7 +29,7 @@ const PESO_STATUS: Record<string, number> = { em_execucao: 0, pausada: 1, devolv
 const ENCERRADAS = ['concluida', 'baixada', 'cancelada'];
 
 // Tela principal do técnico: jornada do dia e lista de atividades (padrão Oracle Field Service).
-export default function Atividades({ nome, abrirOS }: Props) {
+export default function Atividades({ nome, abrirOS, abrirInventario }: Props) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
   const [pendentes, setPendentes] = useState(0);
@@ -38,6 +39,17 @@ export default function Atividades({ nome, abrirOS }: Props) {
   const [semRede, setSemRede] = useState(false);
   const [novaVersao, setNovaVersao] = useState<number | null>(null);
   const [verEncerradas, setVerEncerradas] = useState(false);
+  const [inventarioFaltam, setInventarioFaltam] = useState(0);
+
+  useEffect(() => {
+    // O que está no celular aparece na hora; o servidor atualiza depois (sem internet pode demorar).
+    const contar = () => {
+      inventarioLocal().then((i) => setInventarioFaltam(i.filter(precisaFoto).length)).catch(() => {});
+      pendenciasInventario().then(setInventarioFaltam).catch(() => {});
+    };
+    contar();
+    return aoMudarFila(contar);
+  }, []);
 
   useEffect(() => {
     if (!VERSAO_APP) return;
@@ -118,6 +130,10 @@ export default function Atividades({ nome, abrirOS }: Props) {
     } else {
       const { jornada: nova, rastreando } = await iniciarExpediente(valor);
       setJornada(nova);
+      if (inventarioFaltam > 0) {
+        Alert.alert('Inventário Matinal', `${inventarioFaltam} ferramenta(s)/EPI precisam de foto neste ciclo de 30 dias.`,
+          [{ text: 'Depois', style: 'cancel' }, { text: 'Fazer agora', onPress: abrirInventario }]);
+      }
       if (!rastreando) {
         Alert.alert('Localização em segundo plano', 'Para registrar o trajeto completo do dia, permita a localização "o tempo todo" nas configurações do app.');
       }
@@ -180,6 +196,15 @@ export default function Atividades({ nome, abrirOS }: Props) {
         <Pressable style={[s.faixa, { backgroundColor: cores.primaria }]} onPress={() => Linking.openURL(LINK_APK)}>
           <Icone nome="download" tamanho={18} cor="#fff" />
           <Text style={[s.faixaTexto, { color: '#fff' }]}>Nova versão do app ({novaVersao}). Toque para atualizar.</Text>
+        </Pressable>
+      ) : null}
+      {inventarioFaltam > 0 ? (
+        <Pressable style={[s.faixa, { backgroundColor: '#F3E8FA' }]} onPress={abrirInventario}>
+          <Icone nome="toolbox-outline" tamanho={18} cor="#5B3A86" />
+          <Text style={[s.faixaTexto, { color: '#5B3A86' }]}>
+            Inventário Matinal: {inventarioFaltam} item(ns) para fotografar. Toque para fazer.
+          </Text>
+          <Icone nome="chevron-right" tamanho={18} cor="#5B3A86" />
         </Pressable>
       ) : null}
       {semRede ? (

@@ -6,7 +6,7 @@ import { VERSAO_APP } from '../lib/atualizacao';
 import { cores, fundoDe } from '../lib/estilo';
 import { Tema, TEMAS, temaAtual, trocarTema } from '../lib/tema';
 
-type Destino = 'preventiva' | 'escala' | 'rotas' | 'despesas';
+type Destino = 'preventiva' | 'escala' | 'rotas' | 'despesas' | 'inventario';
 type Props = { nome: string; cargo: string | null; pendentes: number; abrir: (d: Destino) => void; sair: () => void };
 
 const iniciais = (nome: string) => nome.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'T';
@@ -38,6 +38,7 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
         </View>
         <Text style={s.secao}>CAMPO</Text>
         {item('shield-plus-outline', 'Iniciar preventiva', 'Abrir uma preventiva no local, com o expediente iniciado', () => abrir('preventiva'), cores.sucesso)}
+        {item('toolbox-outline', 'Inventário Matinal', 'Foto de cada ferramenta e EPI a cada 30 dias', () => abrir('inventario'), '#7A5AA6')}
         {item('receipt-text-outline', 'Despesas', 'Combustível, pedágio, ferramentas: foto do comprovante e valores', () => abrir('despesas'), cores.alerta)}
         {item('calendar-month-outline', 'Minha escala', 'Jornada, plantão e folgas do mês', () => abrir('escala'))}
         {item('map-outline', 'Rotas KMZ', 'Trechos do backbone para abrir no Google Earth', () => abrir('rotas'), '#227E9E')}

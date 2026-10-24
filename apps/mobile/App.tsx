@@ -22,6 +22,7 @@ import Atividades from './src/telas/Atividades';
 import Login from './src/telas/Login';
 import Mais from './src/telas/Mais';
 import Despesas from './src/telas/Despesas';
+import Inventario from './src/telas/Inventario';
 import MinhaEscala from './src/telas/MinhaEscala';
 import NovaPreventiva from './src/telas/NovaPreventiva';
 import Rotas from './src/telas/Rotas';
@@ -35,7 +36,7 @@ export default function App() {
   const [perfil, setPerfil] = useState<Perfil>({ nome: '', cargo: null });
   const [osAberta, setOsAberta] = useState<OrdemServico | null>(null);
   const [camera, setCamera] = useState<Camera | null>(null);
-  const [tela, setTela] = useState<'inicio' | 'rotas' | 'escala' | 'preventiva' | 'despesas'>('inicio');
+  const [tela, setTela] = useState<'inicio' | 'rotas' | 'escala' | 'preventiva' | 'despesas' | 'inventario'>('inicio');
   const [aba, setAba] = useState<Aba>('atividades');
   const [pendentes, setPendentes] = useState(0);
 
@@ -149,13 +150,15 @@ export default function App() {
     conteudo = <NovaPreventiva voltar={() => setTela('inicio')} abrirOS={(os) => { setTela('inicio'); setAba('atividades'); setOsAberta(os); }} />;
   } else if (tela === 'despesas') {
     conteudo = <Despesas voltar={() => setTela('inicio')} />;
+  } else if (tela === 'inventario') {
+    conteudo = <Inventario voltar={() => setTela('inicio')} usuario={perfil} />;
   } else if (tela === 'escala') {
     conteudo = <MinhaEscala voltar={() => setTela('inicio')} />;
   } else {
     conteudo = (
       <>
         <View style={{ flex: 1 }}>
-          {aba === 'atividades' ? <Atividades nome={perfil.nome} abrirOS={setOsAberta} /> : null}
+          {aba === 'atividades' ? <Atividades nome={perfil.nome} abrirOS={setOsAberta} abrirInventario={() => setTela('inventario')} /> : null}
           {aba === 'estoque' ? <Estoque euId={euId} /> : null}
           {aba === 'mais' ? <Mais nome={perfil.nome} cargo={perfil.cargo} pendentes={pendentes} abrir={setTela} sair={sair} /> : null}
         </View>
