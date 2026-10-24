@@ -6,7 +6,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
-import { cores, estilo } from '../lib/estilo';
+import Icone from '../componentes/Icone';
+import { cores, estilo, fundoDe } from '../lib/estilo';
 import { aoMudarFila, enfileirar, ItemFila, itensPendentes } from '../lib/fila';
 import { posicaoAtual } from '../lib/localizacao';
 import { ponto, supabase } from '../lib/supabase';
@@ -22,7 +23,7 @@ export const CATEGORIAS: Record<string, string> = {
   manutencao_veiculo: 'Manutenção do veículo',
   outros: 'Outros',
 };
-const PAGAMENTOS: Record<string, string> = { cartao_empresa: 'Cartão da empresa', reembolso: 'Reembolso', adiantamento: 'Adiantamento' };
+const PAGAMENTOS: Record<string, string> = { cartao_empresa: 'Cartão da empresa', adiantamento: 'Adiantamento' };
 const COMBUSTIVEIS: Record<string, string> = { gasolina: 'Gasolina', etanol: 'Etanol', diesel: 'Diesel', gnv: 'GNV' };
 const STATUS: Record<string, { rotulo: string; cor: string }> = {
   enviando: { rotulo: 'Aguardando internet', cor: cores.suave },
@@ -36,7 +37,7 @@ const CHAVE_PLACA = 'despesas-ultima-placa';
 type Despesa = {
   id: string; data: string; categoria: string; valor: number; pagamento: string; fornecedor: string | null; descricao: string | null;
   os_id: string | null; placa: string | null; litros: number | null; odometro_km: number | null; combustivel: string | null;
-  status: string; motivo_recusa: string | null;
+  status: string; motivo_recusa: string | null; reembolso: string | null;
 };
 type OSResumo = { id: string; numero: number; titulo: string; status: string };
 
@@ -67,7 +68,7 @@ export default function Despesas({ voltar }: { voltar: () => void }) {
     setCarregando(true);
     const desde = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
     const { data } = await supabase.from('despesas')
-      .select('id, data, categoria, valor, pagamento, fornecedor, descricao, os_id, placa, litros, odometro_km, combustivel, status, motivo_recusa')
+      .select('id, data, categoria, valor, pagamento, fornecedor, descricao, os_id, placa, litros, odometro_km, combustivel, status, motivo_recusa, reembolso')
       .gte('data', desde).order('data', { ascending: false }).order('criado_em', { ascending: false });
     if (data) {
       setLista(data);
@@ -122,6 +123,11 @@ export default function Despesas({ voltar }: { voltar: () => void }) {
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={s.valor}>{reais(d.valor)}</Text>
                 <Text style={{ color: st.cor, fontSize: 12, fontWeight: '700' }}>{st.rotulo}</Text>
+                {d.reembolso ? (
+                  <Text style={{ color: d.reembolso === 'pago' ? cores.sucesso : cores.primaria, fontSize: 12, fontWeight: '700' }}>
+                    {d.reembolso === 'pago' ? 'Reembolso pago' : 'Reembolso solicitado'}
+                  </Text>
+                ) : null}
               </View>
             </Pressable>
           );
@@ -136,7 +142,8 @@ function FormDespesa({ despesa, fechar }: { despesa: Despesa | null; fechar: () 
   const [categoria, setCategoria] = useState(despesa?.categoria ?? 'combustivel');
   const [data, setData] = useState(despesa ? brDeIso(despesa.data) : hojeBr());
   const [valor, setValor] = useState(despesa ? String(despesa.valor).replace('.', ',') : '');
-  const [pagamento, setPagamento] = useState(despesa?.pagamento ?? 'cartao_empresa');
+  const [reembolso, setReembolso] = useState(despesa ? despesa.pagamento === 'reembolso' : false);
+  const [pagamento, setPagamento] = useState(despesa && despesa.pagamento !== 'reembolso' ? despesa.pagamento : 'cartao_empresa');
   const [fornecedor, setFornecedor] = useState(despesa?.fornecedor ?? '');
   const [descricao, setDescricao] = useState(despesa?.descricao ?? '');
   const [placa, setPlaca] = useState(despesa?.placa ?? '');
@@ -216,7 +223,8 @@ function FormDespesa({ despesa, fechar }: { despesa: Despesa | null; fechar: () 
       data: iso,
       categoria,
       valor: Math.round(v * 100) / 100,
-      pagamento,
+      pagamento: reembolso ? 'reembolso' : pagamento,
+      reembolso: reembolso ? (despesa?.reembolso ?? 'solicitado') : null,
       fornecedor: fornecedor.trim() || null,
       descricao: descricao.trim() || null,
       os_id: osId,
@@ -303,8 +311,20 @@ function FormDespesa({ despesa, fechar }: { despesa: Despesa | null; fechar: () 
           <Text style={s.rotulo}>{combustivelSel ? 'Posto' : 'Estabelecimento / fornecedor'}</Text>
           <TextInput style={estilo.campo} value={fornecedor} onChangeText={setFornecedor} />
 
-          <Text style={s.rotulo}>Forma de pagamento</Text>
-          {chips(PAGAMENTOS, pagamento, setPagamento)}
+          <Pressable style={[s.reembolso, reembolso && { borderColor: cores.primaria, backgroundColor: fundoDe(cores.primaria) }]}
+            onPress={() => setReembolso(!reembolso)} disabled={despesa?.reembolso === 'pago'}>
+            <Icone nome={reembolso ? 'checkbox-marked' : 'checkbox-blank-outline'} tamanho={26} cor={reembolso ? cores.primaria : cores.suave} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.reembolsoTitulo}>SOLICITAR REEMBOLSO</Text>
+              <Text style={estilo.suave}>Paguei com meu dinheiro e quero receber de volta.</Text>
+            </View>
+          </Pressable>
+          {!reembolso && (
+            <>
+              <Text style={s.rotulo}>Forma de pagamento</Text>
+              {chips(PAGAMENTOS, pagamento, setPagamento)}
+            </>
+          )}
 
           {ordens.length > 0 && (
             <>
@@ -348,4 +368,6 @@ const s = StyleSheet.create({
   foto: { width: '100%', height: 220, marginTop: 8, borderRadius: 8, backgroundColor: cores.fundo },
   botaoFoto: { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10 },
   botaoFotoTexto: { color: '#fff', fontWeight: '700' },
+  reembolso: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 16, padding: 12, borderWidth: 1.5, borderColor: cores.borda, borderRadius: 10 },
+  reembolsoTitulo: { fontSize: 15, fontWeight: '800', color: cores.texto, letterSpacing: 0.3 },
 });

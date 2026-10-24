@@ -12,18 +12,20 @@ type Despesa = {
   odometro_km: number | null; combustivel: string | null; comprovante: string | null; status: string; motivo_recusa: string | null;
   conferida_por_nome: string | null; conferida_em: string | null; criado_em: string; latitude: number | null; longitude: number | null;
   km_rodados: number | null; km_por_litro: number | null; preco_litro: number | null;
+  reembolso: string | null; reembolso_pago_em: string | null;
 };
 
 const CATEGORIAS: Record<string, string> = {
   combustivel: "Combustível", pedagio: "Pedágio", estacionamento: "Estacionamento", alimentacao: "Alimentação",
   hospedagem: "Hospedagem", ferramenta: "Ferramenta", material: "Material", manutencao_veiculo: "Manutenção do veículo", outros: "Outros",
 };
-const PAGAMENTOS: Record<string, string> = { cartao_empresa: "Cartão da empresa", reembolso: "Reembolso", adiantamento: "Adiantamento" };
+const PAGAMENTOS: Record<string, string> = { cartao_empresa: "Cartão da empresa", reembolso: "Reembolso ao técnico", adiantamento: "Adiantamento" };
 const STATUS: Record<string, { rotulo: string; cor: string }> = {
   pendente: { rotulo: "A conferir", cor: "bg-amber-100 text-amber-800" },
   aprovada: { rotulo: "Aprovada", cor: "bg-green-100 text-green-800" },
   recusada: { rotulo: "Recusada", cor: "bg-red-100 text-red-800" },
 };
+const REEMBOLSO: Record<string, string> = { solicitado: "Reembolso solicitado", pago: "Reembolso pago" };
 const reais = (v: number) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const br = (iso: string) => iso.slice(0, 10).split("-").reverse().join("/");
 const mesAtual = () => new Date().toISOString().slice(0, 7);
@@ -34,6 +36,7 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
   const [tecnico, setTecnico] = useState("");
   const [status, setStatus] = useState("");
   const [categoria, setCategoria] = useState("");
+  const [reembolso, setReembolso] = useState("");
   const [linhas, setLinhas] = useState<Despesa[]>([]);
   const [links, setLinks] = useState<Record<string, string>>({});
   const [aberta, setAberta] = useState<Despesa | null>(null);
@@ -48,6 +51,8 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
     if (tecnico) q = q.eq("tecnico_id", tecnico);
     if (status) q = q.eq("status", status);
     if (categoria) q = q.eq("categoria", categoria);
+    if (reembolso === "todos") q = q.not("reembolso", "is", null);
+    else if (reembolso) q = q.eq("reembolso", reembolso);
     q.order("data", { ascending: false }).order("criado_em", { ascending: false }).then(async ({ data }) => {
       const lista = (data as Despesa[]) ?? [];
       setLinhas(lista);
@@ -58,7 +63,7 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
       const { data: assinados } = await supabase.storage.from("despesas").createSignedUrls(caminhos, 7 * 86400);
       setLinks(Object.fromEntries((assinados ?? []).filter((s) => s.path && s.signedUrl).map((s) => [s.path as string, s.signedUrl as string])));
     });
-  }, [mes, tecnico, status, categoria, versao]);
+  }, [mes, tecnico, status, categoria, reembolso, versao]);
 
   useEffect(() => {
     const canal = supabase.channel("despesas")
@@ -83,6 +88,8 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
       aConferir: linhas.filter((d) => d.status === "pendente").length,
       litros: comb.reduce((t, d) => t + Number(d.litros ?? 0), 0),
       km: comb.reduce((t, d) => t + Number(d.km_rodados ?? 0), 0),
+      aReembolsar: linhas.filter((d) => d.reembolso === "solicitado" && d.status === "aprovada").reduce((t, d) => t + Number(d.valor), 0),
+      reembolsoEmConferencia: linhas.filter((d) => d.reembolso === "solicitado" && d.status === "pendente").length,
       porCategoria: [...porCategoria.entries()].sort((a, b) => b[1] - a[1]),
       porTecnico: [...porTecnico.entries()].sort((a, b) => b[1] - a[1]),
     };
@@ -115,10 +122,21 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
     recarregar();
   }
 
+  async function marcarReembolsoPago(ids: string[]) {
+    if (!confirm(`Confirmar que o reembolso de ${ids.length} despesa(s) foi pago ao técnico?`)) return;
+    const { data: sessao } = await supabase.auth.getSession();
+    const { error } = await supabase.from("despesas").update({
+      reembolso: "pago", reembolso_pago_em: new Date().toISOString(), reembolso_pago_por: sessao.session?.user.id,
+    }).in("id", ids);
+    if (error) return alert(error.message);
+    setAberta(null);
+    recarregar();
+  }
+
   async function exportar() {
     const cab = ["Data", "Técnico", "Tipo", "Valor (R$)", "Pagamento", "Estabelecimento", "O.S.", "Placa", "Combustível", "Litros",
       "R$/litro", "Odômetro (km)", "Km rodados", "Km/L", "Observação", "Situação", "Motivo recusa", "Conferida por", "Conferida em",
-      "Comprovante", "Latitude", "Longitude", "Lançada em"];
+      "Comprovante", "Latitude", "Longitude", "Lançada em", "Reembolso", "Reembolso pago em"];
     const dados = linhas.map((d) => [
       new Date(`${d.data}T12:00:00`), d.tecnico, CATEGORIAS[d.categoria] ?? d.categoria, Number(d.valor), PAGAMENTOS[d.pagamento] ?? d.pagamento,
       d.fornecedor, d.os_numero, d.placa, d.combustivel, d.litros != null ? Number(d.litros) : null,
@@ -127,6 +145,7 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
       d.conferida_em ? new Date(d.conferida_em) : null,
       d.comprovante && links[d.comprovante] ? { texto: "Abrir foto", url: links[d.comprovante] } : null,
       d.latitude, d.longitude, new Date(d.criado_em),
+      d.reembolso ? REEMBOLSO[d.reembolso] : "Não", d.reembolso_pago_em ? new Date(d.reembolso_pago_em) : null,
     ]);
     const decimais = cab.map((c) => c === "Valor (R$)");
     await baixarXlsx(`Despesas ${mes}`, `Despesas ${mes}`, cab, dados, decimais);
@@ -134,6 +153,7 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
 
   const campo = "rounded-lg border border-gray-300 p-2 text-sm";
   const pendentesVisiveis = linhas.filter((d) => d.status === "pendente").map((d) => d.id);
+  const reembolsosAPagar = linhas.filter((d) => d.reembolso === "solicitado" && d.status === "aprovada").map((d) => d.id);
 
   return (
     <div className="grid gap-4">
@@ -152,11 +172,17 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
           <option value="">Todas as situações</option>
           {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.rotulo}</option>)}
         </select>
+        <select className={campo} value={reembolso} onChange={(e) => setReembolso(e.target.value)}>
+          <option value="">Com e sem reembolso</option>
+          <option value="todos">Só reembolsos</option>
+          <option value="solicitado">Reembolso a pagar</option>
+          <option value="pago">Reembolso pago</option>
+        </select>
         <button className="rounded-lg bg-green-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
           disabled={!linhas.length} onClick={exportar}>Baixar planilha (Excel)</button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Total no mês</div>
           <div className="mt-1 text-2xl font-semibold">{reais(resumo.total)}</div>
@@ -165,6 +191,18 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="text-xs font-medium uppercase tracking-wide text-gray-500">A conferir</div>
           <div className={`mt-1 text-2xl font-semibold ${resumo.aConferir ? "text-amber-600" : ""}`}>{resumo.aConferir}</div>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Reembolso a pagar</div>
+          <div className={`mt-1 text-2xl font-semibold ${resumo.aReembolsar ? "text-blue-700" : ""}`}>{reais(resumo.aReembolsar)}</div>
+          <div className="text-xs text-gray-500">
+            {resumo.reembolsoEmConferencia ? `+ ${resumo.reembolsoEmConferencia} pedido(s) em conferência` : "aprovados, ainda não pagos"}
+          </div>
+          {reembolsosAPagar.length > 0 && (
+            <button className="mt-1 text-xs font-medium text-blue-700 hover:underline" onClick={() => marcarReembolsoPago(reembolsosAPagar)}>
+              Marcar {reembolsosAPagar.length} como pago(s)
+            </button>
+          )}
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Combustível</div>
@@ -230,6 +268,11 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
                   <td className="p-3 text-right font-medium whitespace-nowrap">{reais(d.valor)}</td>
                   <td className="p-3">
                     <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS[d.status]?.cor ?? ""}`}>{STATUS[d.status]?.rotulo ?? d.status}</span>
+                    {d.reembolso && (
+                      <div className={`mt-1 text-xs font-medium whitespace-nowrap ${d.reembolso === "pago" ? "text-green-700" : "text-blue-700"}`}>
+                        {REEMBOLSO[d.reembolso]}
+                      </div>
+                    )}
                   </td>
                   <td className="p-3">
                     {d.comprovante && links[d.comprovante]
@@ -273,6 +316,10 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
               <Info r="Técnico" v={aberta.tecnico} />
               <Info r="Data" v={br(aberta.data)} />
               <Info r="Pagamento" v={PAGAMENTOS[aberta.pagamento]} />
+              {aberta.reembolso && (
+                <Info r="Reembolso" v={aberta.reembolso === "pago" && aberta.reembolso_pago_em
+                  ? `Pago em ${new Date(aberta.reembolso_pago_em).toLocaleDateString("pt-BR")}` : "Solicitado pelo técnico"} />
+              )}
               <Info r="Estabelecimento" v={aberta.fornecedor} />
               <Info r="O.S." v={aberta.os_numero} />
               {aberta.categoria === "combustivel" && (
@@ -302,6 +349,9 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
                 )}
                 {aberta.status !== "recusada" && (
                   <button className="rounded-lg border border-red-300 px-4 py-2 font-medium text-red-700" onClick={() => conferir([aberta.id], "recusada")}>Recusar</button>
+                )}
+                {aberta.status === "aprovada" && aberta.reembolso === "solicitado" && (
+                  <button className="rounded-lg bg-blue-700 px-4 py-2 font-medium text-white" onClick={() => marcarReembolsoPago([aberta.id])}>Marcar reembolso pago</button>
                 )}
               </div>
             </div>
