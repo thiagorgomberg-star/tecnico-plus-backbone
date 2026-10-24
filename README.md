@@ -18,6 +18,10 @@ Sistema da Multivale para o técnico de backbone receber e executar ordens de se
 2. Custos e KMZ: abastecimento, hora extra, deslocamento, ferramentas, importação de KMZ e meta diária de km.
 3. Almoxarifado e banco de atividades.
 
+## Supabase
+
+Projeto `tecnico-plus` (região São Paulo), id `wnuivnpywflczknxpytx`. A URL e a chave pública ficam no painel do Supabase em Project Settings → API.
+
 ## Rodar localmente
 
 ```bash
