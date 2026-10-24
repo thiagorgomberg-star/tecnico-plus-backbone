@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import AutorizarPausa from "@/componentes/AutorizarPausa";
 import DetalheOS from "@/componentes/DetalheOS";
 import MaterialApoio from "@/componentes/MaterialApoio";
 import NovaOS from "@/componentes/NovaOS";
@@ -26,6 +27,7 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
   const [novaAberta, setNovaAberta] = useState(false);
   const [apoio, setApoio] = useState<OrdemServico | null>(null);
   const [detalhe, setDetalhe] = useState<OrdemServico | null>(null);
+  const [pausa, setPausa] = useState<OrdemServico | null>(null);
 
   const [versao, setVersao] = useState(0);
   const carregar = useCallback(() => setVersao((v) => v + 1), []);
@@ -120,6 +122,11 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
                     <button className="text-left font-medium text-blue-700 hover:underline" onClick={() => setDetalhe(os)}>{os.titulo}</button>
                     <div className="text-gray-500">{os.tipo} · prioridade {os.prioridade}{os.endereco ? ` · ${os.endereco}` : ""}</div>
                     {os.observacao_tecnico && <div className="mt-1 text-gray-700">Técnico: {os.observacao_tecnico}</div>}
+                    {os.pausa_solicitada_em && (
+                      <div className="mt-1 rounded bg-orange-50 px-2 py-1 text-orange-800">
+                        Pausa solicitada: {os.pausa_motivo ?? "sem motivo"}
+                      </div>
+                    )}
                   </td>
                   <td className="p-3">
                     {os.status === "rascunho" ? (
@@ -140,6 +147,9 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
                   </td>
                   <td className="p-3">
                     <div className="flex flex-wrap gap-1.5">
+                      {os.pausa_solicitada_em && (
+                        <button className={`${botao} bg-orange-600 text-white`} onClick={() => setPausa(os)}>Autorizar pausa</button>
+                      )}
                       <button className={`${botao} border border-gray-300`} onClick={() => setApoio(os)}>Apoio</button>
                       {os.status === "rascunho" && (
                         <button className={`${botao} bg-blue-700 text-white disabled:opacity-40`} disabled={!os.tecnico_id}
@@ -165,6 +175,7 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
         </table>
       </div>
 
+      {pausa && <AutorizarPausa os={pausa} tecnicos={tecnicos} fechar={() => setPausa(null)} />}
       {detalhe && <DetalheOS os={detalhe} fechar={() => setDetalhe(null)} />}
       {apoio && <MaterialApoio osId={apoio.id} numero={apoio.numero} fechar={() => setApoio(null)} />}
       {novaAberta && <NovaOS tecnicos={tecnicos} fechar={() => setNovaAberta(false)} criada={carregar} />}

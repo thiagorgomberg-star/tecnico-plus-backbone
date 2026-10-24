@@ -46,6 +46,14 @@ export async function iniciarExpediente(kmInicial: number) {
     tabela: 'expedientes',
     linha: { id, inicio, km_inicial: kmInicial, posicao_inicio: pos ? ponto(pos.latitude, pos.longitude) : null },
   });
+  // Primeiro ponto do trajeto já no início, para o técnico aparecer no mapa mesmo parado.
+  if (pos) {
+    await enfileirar({
+      tipo: 'inserirVarios',
+      tabela: 'posicoes_gps',
+      linhas: [{ expediente_id: id, registrado_em: inicio, posicao: ponto(pos.latitude, pos.longitude), precisao_m: pos.accuracy }],
+    });
+  }
   const jornada = await gravar({ expedienteId: id, inicioExpediente: inicio, kmInicial, inicioRefeicao: null });
   const rastreando = await iniciarRastreio();
   return { jornada, rastreando };

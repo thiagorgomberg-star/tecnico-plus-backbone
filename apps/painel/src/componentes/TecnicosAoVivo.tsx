@@ -11,8 +11,8 @@ type Posicao = {
   tecnico_id: string;
   nome: string;
   registrado_em: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
   velocidade_kmh: number | null;
   bateria_pct: number | null;
 };
@@ -144,17 +144,17 @@ export default function TecnicosAoVivo() {
         type: "Feature", properties: { cor: corDe(id) }, geometry: { type: "LineString", coordinates: coords },
       })),
     });
-    const visiveis = posicoes.filter((p) => !selecionado || p.tecnico_id === selecionado);
+    const visiveis = posicoes.filter((p) => p.latitude != null && (!selecionado || p.tecnico_id === selecionado));
     (m.getSource("tecnicos") as GeoJSONSource).setData({
       type: "FeatureCollection",
       features: visiveis.map((p) => ({
         type: "Feature", properties: { cor: corDe(p.tecnico_id), nome: p.nome.split(" ")[0] },
-        geometry: { type: "Point", coordinates: [p.longitude, p.latitude] },
+        geometry: { type: "Point", coordinates: [p.longitude!, p.latitude!] },
       })),
     });
 
     // Enquadra todos na primeira carga; depois só quando o supervisor escolhe alguém.
-    const pontos = [...visiveis.map((p) => [p.longitude, p.latitude] as [number, number]), ...[...porTecnico.values()].flat()];
+    const pontos = [...visiveis.map((p) => [p.longitude!, p.latitude!] as [number, number]), ...[...porTecnico.values()].flat()];
     if (pontos.length && (!enquadrado.current || selecionado)) {
       const lons = pontos.map((p) => p[0]), lats = pontos.map((p) => p[1]);
       m.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 60, maxZoom: 15, duration: 600 });
@@ -201,7 +201,7 @@ export default function TecnicosAoVivo() {
                       {p.nome}
                     </span>
                     <span className={`mt-1 block ${minutos > 15 ? "text-red-700" : "text-gray-500"}`}>
-                      última posição há {minutos} min
+                      {p.latitude == null ? "aguardando o primeiro sinal de GPS · " : ""}última atualização há {minutos} min
                       {p.velocidade_kmh != null && p.velocidade_kmh > 3 ? ` · ${Math.round(p.velocidade_kmh)} km/h` : ""}
                       {p.bateria_pct != null ? ` · bateria ${p.bateria_pct}%` : ""}
                     </span>

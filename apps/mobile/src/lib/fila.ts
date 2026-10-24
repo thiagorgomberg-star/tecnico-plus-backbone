@@ -22,7 +22,8 @@ export type ItemFila =
       longitude: number | null;
     }
   | { tipo: 'os'; id: string; osId: string; campos: Record<string, unknown> }
-  | { tipo: 'inserir'; id: string; tabela: string; linha: Record<string, unknown> }
+  | { tipo: 'inserir'; id: string; tabela: string; linha: Record<string, unknown>; conflito?: string }
+  | { tipo: 'excluir'; id: string; tabela: string; filtros: Record<string, string> }
   | { tipo: 'inserirVarios'; id: string; tabela: string; linhas: Record<string, unknown>[] }
   | { tipo: 'atualizar'; id: string; tabela: string; linhaId: string; campos: Record<string, unknown> }
   | { tipo: 'rpc'; id: string; nome: string; args: Record<string, unknown> };
@@ -93,7 +94,12 @@ async function enviar(item: ItemFila) {
     if (error) throw error;
   } else if (item.tipo === 'inserir') {
     // A linha já leva o id gerado no celular; reenviar não duplica.
-    const { error } = await supabase.from(item.tabela).upsert(item.linha, { onConflict: 'id', ignoreDuplicates: true });
+    const { error } = await supabase.from(item.tabela).upsert(item.linha, { onConflict: item.conflito ?? 'id', ignoreDuplicates: true });
+    if (error) throw error;
+  } else if (item.tipo === 'excluir') {
+    let consulta = supabase.from(item.tabela).delete();
+    for (const [coluna, valor] of Object.entries(item.filtros)) consulta = consulta.eq(coluna, valor);
+    const { error } = await consulta;
     if (error) throw error;
   } else if (item.tipo === 'inserirVarios') {
     const { error } = await supabase.from(item.tabela).insert(item.linhas);

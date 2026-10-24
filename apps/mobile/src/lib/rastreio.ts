@@ -42,11 +42,13 @@ export async function iniciarRastreio() {
   if (primeiroPlano.status !== 'granted') return false;
   const segundoPlano = await Location.requestBackgroundPermissionsAsync();
   if (segundoPlano.status !== 'granted') return false;
-  if (await Location.hasStartedLocationUpdatesAsync(TAREFA)) return true;
+  // Reinicia sempre: depois de encerrar e abrir outro expediente o serviço antigo pode ter ficado parado.
+  if (await Location.hasStartedLocationUpdatesAsync(TAREFA)) await Location.stopLocationUpdatesAsync(TAREFA);
   await Location.startLocationUpdatesAsync(TAREFA, {
     accuracy: Location.Accuracy.High,
+    // Um ponto por minuto mesmo parado (com distância mínima o Android só manda posição em movimento).
     timeInterval: 60_000,
-    distanceInterval: 100,
+    distanceInterval: 0,
     deferredUpdatesInterval: 60_000,
     foregroundService: {
       notificationTitle: 'Técnico Plus: expediente em andamento',

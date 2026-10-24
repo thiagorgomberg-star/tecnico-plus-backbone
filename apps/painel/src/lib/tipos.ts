@@ -31,6 +31,8 @@ export type OrdemServico = {
   baixada_em: string | null;
   observacao_tecnico: string | null;
   observacao_supervisor: string | null;
+  pausa_solicitada_em: string | null;
+  pausa_motivo: string | null;
   criado_em: string;
   tecnico?: { nome: string } | null;
 };

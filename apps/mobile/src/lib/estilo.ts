@@ -13,6 +13,9 @@ export const cores = {
   alerta: '#E08A1E',
   sucesso: '#508223',
   borda: '#E4E1DD',
+  cabecalhoSuave: '#D5D1CD',
+  barra: '#3A3631',
+  selecionado: '#E6F0FA',
 };
 
 export const corDoStatus: Record<string, string> = {
@@ -24,6 +27,7 @@ export const corDoStatus: Record<string, string> = {
   devolvida: '#C74634',
   baixada: '#6F6964',
   cancelada: '#A39E99',
+  rascunho: '#A39E99',
 };
 
 export const estilo = StyleSheet.create({
