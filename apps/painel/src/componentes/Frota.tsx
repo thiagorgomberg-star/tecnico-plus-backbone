@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import Despesas from "@/componentes/Despesas";
+import KmExpedientes from "@/componentes/KmExpedientes";
 import { supabase } from "@/lib/supabase";
 import { Tecnico } from "@/lib/tipos";
 
@@ -178,6 +179,8 @@ export default function Frota({ tecnicos }: { tecnicos: Tecnico[] }) {
           ))}
         </div>
       </section>
+
+      <KmExpedientes tecnicos={tecnicos} />
 
       <Despesas tecnicos={tecnicos} frota />
 

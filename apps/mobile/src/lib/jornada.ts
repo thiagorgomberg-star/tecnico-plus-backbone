@@ -67,13 +67,20 @@ export async function iniciarExpediente(kmInicial: number) {
   return { jornada, rastreando };
 }
 
-// Último km conhecido: o maior entre o fim do último expediente (guardado no celular) e o do veículo vinculado.
+// Último km conhecido: o último expediente no servidor (o supervisor pode ter corrigido ou apagado) e o do veículo.
+// Sem internet, usa o que ficou guardado no celular.
 const CHAVE_ULTIMO_KM = 'ultimo-km';
 export async function ultimoKm(): Promise<number | null> {
-  const [local, veiculo] = await Promise.all([
-    AsyncStorage.getItem(CHAVE_ULTIMO_KM).then((v) => (v ? Number(v) : null)),
-    meuVeiculo(false).catch(() => null),
-  ]);
+  let servidor: number | null | undefined;
+  try {
+    const { data, error } = await supabase.from('expedientes').select('km_inicial, km_final')
+      .or('km_inicial.not.is.null,km_final.not.is.null').order('inicio', { ascending: false }).limit(1);
+    if (!error) servidor = data?.[0] ? (data[0].km_final ?? data[0].km_inicial) : null;
+  } catch {
+    // sem internet
+  }
+  const local = servidor === undefined ? await AsyncStorage.getItem(CHAVE_ULTIMO_KM).then((v) => (v ? Number(v) : null)) : servidor;
+  const veiculo = await meuVeiculo(false).catch(() => null);
   const kms = [local, veiculo?.km_atual ?? null].filter((n): n is number => n != null && Number.isFinite(n));
   return kms.length ? Math.max(...kms) : null;
 }
