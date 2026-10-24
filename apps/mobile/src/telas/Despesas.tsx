@@ -11,6 +11,7 @@ import { cores, estilo, fundoDe } from '../lib/estilo';
 import { aoMudarFila, enfileirar, ItemFila, itensPendentes } from '../lib/fila';
 import { posicaoAtual } from '../lib/localizacao';
 import { ponto, supabase } from '../lib/supabase';
+import { MeuVeiculo, meuVeiculo } from '../lib/veiculo';
 
 export const CATEGORIAS: Record<string, string> = {
   combustivel: 'Combustível',
@@ -23,6 +24,21 @@ export const CATEGORIAS: Record<string, string> = {
   manutencao_veiculo: 'Manutenção do veículo',
   outros: 'Outros',
 };
+// Frota: gastos do veículo (ligados à placa). Despesas: o resto.
+export type Modo = 'despesas' | 'frota';
+const DO_MODO: Record<Modo, string[]> = {
+  frota: ['combustivel', 'pedagio', 'estacionamento', 'manutencao_veiculo'],
+  despesas: ['alimentacao', 'hospedagem', 'ferramenta', 'material', 'outros'],
+};
+const ROTULO_FROTA: Record<string, string> = {
+  combustivel: 'Abastecimento', pedagio: 'Pedágio', estacionamento: 'Estacionamento', manutencao_veiculo: 'Manutenção',
+};
+export const MANUTENCOES: Record<string, string> = {
+  troca_oleo: 'Troca de óleo', pneu: 'Pneu', revisao: 'Revisão', freios: 'Freios', bateria: 'Bateria',
+  funilaria: 'Funilaria', lavagem: 'Lavagem', outro: 'Outro',
+};
+const categoriasDo = (modo: Modo) => Object.fromEntries(DO_MODO[modo].map((c) => [c, (modo === 'frota' ? ROTULO_FROTA[c] : null) ?? CATEGORIAS[c]]));
+
 const PAGAMENTOS: Record<string, string> = { cartao_empresa: 'Cartão da empresa', adiantamento: 'Adiantamento' };
 const COMBUSTIVEIS: Record<string, string> = { gasolina: 'Gasolina', etanol: 'Etanol', diesel: 'Diesel', gnv: 'GNV' };
 const STATUS: Record<string, { rotulo: string; cor: string }> = {
@@ -37,7 +53,7 @@ const CHAVE_PLACA = 'despesas-ultima-placa';
 type Despesa = {
   id: string; data: string; categoria: string; valor: number; pagamento: string; fornecedor: string | null; descricao: string | null;
   os_id: string | null; placa: string | null; litros: number | null; odometro_km: number | null; combustivel: string | null;
-  status: string; motivo_recusa: string | null; reembolso: string | null;
+  status: string; motivo_recusa: string | null; reembolso: string | null; tipo_manutencao: string | null;
 };
 type OSResumo = { id: string; numero: number; titulo: string; status: string };
 
@@ -58,7 +74,8 @@ const isoDeBr = (br: string) => {
 const brDeIso = (iso: string) => iso.split('-').reverse().join('/');
 
 // Despesas de campo com foto do comprovante. Funciona sem internet: entra na fila e sobe depois.
-export default function Despesas({ voltar }: { voltar: () => void }) {
+export default function Despesas({ voltar, modo = 'despesas' }: { voltar: () => void; modo?: Modo }) {
+  const [veiculo, setVeiculo] = useState<MeuVeiculo | null>(null);
   const [lista, setLista] = useState<Despesa[]>([]);
   const [naFila, setNaFila] = useState<Despesa[]>([]);
   const [carregando, setCarregando] = useState(false);
@@ -68,29 +85,32 @@ export default function Despesas({ voltar }: { voltar: () => void }) {
     setCarregando(true);
     const desde = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
     const { data } = await supabase.from('despesas')
-      .select('id, data, categoria, valor, pagamento, fornecedor, descricao, os_id, placa, litros, odometro_km, combustivel, status, motivo_recusa, reembolso')
-      .gte('data', desde).order('data', { ascending: false }).order('criado_em', { ascending: false });
+      .select('id, data, categoria, valor, pagamento, fornecedor, descricao, os_id, placa, litros, odometro_km, combustivel, status, motivo_recusa, reembolso, tipo_manutencao')
+      .in('categoria', DO_MODO[modo]).gte('data', desde).order('data', { ascending: false }).order('criado_em', { ascending: false });
     if (data) {
       setLista(data);
-      AsyncStorage.setItem(CACHE, JSON.stringify(data));
+      AsyncStorage.setItem(`${CACHE}-${modo}`, JSON.stringify(data));
     }
+    if (modo === 'frota') setVeiculo(await meuVeiculo());
     setCarregando(false);
-  }, []);
+  }, [modo]);
 
   useEffect(() => {
-    AsyncStorage.getItem(CACHE).then((c) => c && setLista(JSON.parse(c)));
+    AsyncStorage.getItem(`${CACHE}-${modo}`).then((c) => c && setLista(JSON.parse(c)));
+    if (modo === 'frota') meuVeiculo(false).then(setVeiculo);
     carregar();
     const lerFila = () => itensPendentes().then((itens) => setNaFila(
       itens.filter((i): i is Extract<ItemFila, { tipo: 'despesa' }> => i.tipo === 'despesa')
-        .map((i) => ({ ...(i.linha as unknown as Despesa), status: 'enviando' })),
+        .map((i) => ({ ...(i.linha as unknown as Despesa), status: 'enviando' }))
+        .filter((d) => DO_MODO[modo].includes(d.categoria)),
     ));
     lerFila();
     // Quando a fila esvazia, busca de novo para mostrar o que acabou de subir.
     return aoMudarFila(() => { lerFila(); carregar(); });
-  }, [carregar]);
+  }, [carregar, modo]);
 
   if (editando) {
-    return <FormDespesa despesa={editando === 'nova' ? null : editando} fechar={() => { setEditando(null); carregar(); }} />;
+    return <FormDespesa modo={modo} veiculo={veiculo} despesa={editando === 'nova' ? null : editando} fechar={() => { setEditando(null); carregar(); }} />;
   }
 
   const ids = new Set(naFila.map((d) => d.id));
@@ -100,19 +120,20 @@ export default function Despesas({ voltar }: { voltar: () => void }) {
 
   return (
     <View style={estilo.tela}>
-      <Cabecalho titulo="Despesas" subtitulo={`Este mês: ${reais(totalMes)}`} voltar={voltar} />
+      <Cabecalho titulo={modo === 'frota' ? 'Frota' : 'Despesas'} subtitulo={`Este mês: ${reais(totalMes)}`} voltar={voltar} />
       <ScrollView refreshControl={<RefreshControl refreshing={carregando} onRefresh={carregar} />}>
+        {modo === 'frota' && <CartaoVeiculo veiculo={veiculo} />}
         <Pressable style={[estilo.botao, { marginHorizontal: 16, marginTop: 12 }]} onPress={() => setEditando('nova')}>
-          <Text style={estilo.botaoTexto}>+ Lançar despesa</Text>
+          <Text style={estilo.botaoTexto}>{modo === 'frota' ? '+ Abastecimento, pedágio ou manutenção' : '+ Lançar despesa'}</Text>
         </Pressable>
-        {todas.length === 0 && <Text style={[estilo.suave, { margin: 16 }]}>Nenhuma despesa nos últimos 60 dias.</Text>}
+        {todas.length === 0 && <Text style={[estilo.suave, { margin: 16 }]}>Nada lançado nos últimos 60 dias.</Text>}
         {todas.map((d) => {
           const st = STATUS[d.status] ?? STATUS.pendente;
           const podeCorrigir = d.status === 'recusada' || d.status === 'pendente';
           return (
             <Pressable key={d.id} style={s.linha} disabled={!podeCorrigir} onPress={() => setEditando(d)}>
               <View style={{ flex: 1 }}>
-                <Text style={s.titulo}>{CATEGORIAS[d.categoria] ?? d.categoria}{d.fornecedor ? ` · ${d.fornecedor}` : ''}</Text>
+                <Text style={s.titulo}>{(modo === 'frota' ? ROTULO_FROTA[d.categoria] : null) ?? CATEGORIAS[d.categoria] ?? d.categoria}{d.tipo_manutencao ? ` · ${MANUTENCOES[d.tipo_manutencao]}` : ''}{d.fornecedor ? ` · ${d.fornecedor}` : ''}</Text>
                 <Text style={estilo.suave}>
                   {brDeIso(d.data)}{d.categoria === 'combustivel' && d.litros ? ` · ${d.litros} L · ${d.odometro_km} km` : ''}
                 </Text>
@@ -138,8 +159,35 @@ export default function Despesas({ voltar }: { voltar: () => void }) {
   );
 }
 
-function FormDespesa({ despesa, fechar }: { despesa: Despesa | null; fechar: () => void }) {
-  const [categoria, setCategoria] = useState(despesa?.categoria ?? 'combustivel');
+function CartaoVeiculo({ veiculo }: { veiculo: MeuVeiculo | null }) {
+  if (!veiculo) {
+    return <Text style={[estilo.suave, { marginHorizontal: 16, marginTop: 12 }]}>Nenhum veículo vinculado a você. Peça ao supervisor para vincular no painel.</Text>;
+  }
+  const oleo: Record<string, { texto: string; cor: string }> = {
+    ok: { texto: 'Troca de óleo em dia', cor: cores.sucesso },
+    proxima: { texto: 'Troca de óleo próxima', cor: cores.alerta },
+    vencida: { texto: 'Troca de óleo vencida', cor: cores.perigo },
+    sem_registro: { texto: 'Sem registro de troca de óleo', cor: cores.suave },
+  };
+  const o = oleo[veiculo.situacao_oleo] ?? oleo.sem_registro;
+  const proxima = [veiculo.proxima_troca_km ? `${veiculo.proxima_troca_km.toLocaleString('pt-BR')} km` : null,
+    veiculo.proxima_troca_data ? brDeIso(veiculo.proxima_troca_data) : null].filter(Boolean).join(' ou ');
+  return (
+    <View style={[estilo.cartao, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
+      <Icone nome="car-outline" tamanho={32} cor={cores.primaria} />
+      <View style={{ flex: 1 }}>
+        <Text style={s.titulo}>{[veiculo.marca, veiculo.modelo].filter(Boolean).join(' ') || 'Veículo'}</Text>
+        <Text style={{ fontSize: 18, fontWeight: '800', color: cores.texto, letterSpacing: 1 }}>{veiculo.placa}</Text>
+        <Text style={estilo.suave}>{[veiculo.cor, veiculo.km_atual ? `${veiculo.km_atual.toLocaleString('pt-BR')} km` : null].filter(Boolean).join(' · ')}</Text>
+        <Text style={{ color: o.cor, fontWeight: '700', marginTop: 4 }}>{o.texto}{proxima ? ` · próxima: ${proxima}` : ''}</Text>
+      </View>
+    </View>
+  );
+}
+
+function FormDespesa({ despesa, fechar, modo, veiculo }: { despesa: Despesa | null; fechar: () => void; modo: Modo; veiculo: MeuVeiculo | null }) {
+  const [categoria, setCategoria] = useState(despesa?.categoria ?? DO_MODO[modo][0]);
+  const [tipoManutencao, setTipoManutencao] = useState(despesa?.tipo_manutencao ?? 'pneu');
   const [data, setData] = useState(despesa ? brDeIso(despesa.data) : hojeBr());
   const [valor, setValor] = useState(despesa ? String(despesa.valor).replace('.', ',') : '');
   const [reembolso, setReembolso] = useState(despesa ? despesa.pagamento === 'reembolso' : false);
@@ -155,15 +203,20 @@ function FormDespesa({ despesa, fechar }: { despesa: Despesa | null; fechar: () 
   const [foto, setFoto] = useState<{ uri: string; extensao: string } | null>(null);
   const [salvando, setSalvando] = useState(false);
   const combustivelSel = categoria === 'combustivel';
+  const manutencao = categoria === 'manutencao_veiculo';
+  const pedeOdometro = combustivelSel || (manutencao && tipoManutencao === 'troca_oleo');
 
   useEffect(() => {
-    if (!despesa) AsyncStorage.getItem(CHAVE_PLACA).then((p) => p && setPlaca(p));
+    if (!despesa && modo === 'frota') {
+      if (veiculo?.placa) setPlaca(veiculo.placa);
+      else AsyncStorage.getItem(CHAVE_PLACA).then((p) => p && setPlaca(p));
+    }
     AsyncStorage.getItem('ordens-cache').then((c) => {
       if (!c) return;
       const todas: OSResumo[] = JSON.parse(c);
       setOrdens(todas.filter((o) => ['aceita', 'em_execucao', 'pausada', 'concluida'].includes(o.status)).slice(0, 8));
     });
-  }, [despesa]);
+  }, [despesa, modo, veiculo]);
 
   async function escolher(origem: 'camera' | 'galeria') {
     const permissao = origem === 'camera'
@@ -185,8 +238,11 @@ function FormDespesa({ despesa, fechar }: { despesa: Despesa | null; fechar: () 
     if (!foto && !despesa) return Alert.alert('Falta o comprovante', 'Fotografe a nota ou o recibo.');
     const l = numero(litros);
     const km = numero(odometro);
+    if (modo === 'frota' && !placa.trim()) return Alert.alert('Informe a placa', 'Placa do veículo.');
+    if (manutencao && tipoManutencao === 'troca_oleo' && (km == null || km <= 0)) {
+      return Alert.alert('Informe o odômetro', 'Km do painel na troca de óleo (conta para o próximo aviso).');
+    }
     if (combustivelSel) {
-      if (!placa.trim()) return Alert.alert('Informe a placa', 'Placa do veículo abastecido.');
       if (!l || l <= 0) return Alert.alert('Informe os litros', 'Quantidade abastecida, ex.: 42,5.');
       if (km == null || km <= 0) return Alert.alert('Informe o odômetro', 'Km do painel no momento do abastecimento.');
       if (v / l < 2 || v / l > 15) {
@@ -228,9 +284,10 @@ function FormDespesa({ despesa, fechar }: { despesa: Despesa | null; fechar: () 
       fornecedor: fornecedor.trim() || null,
       descricao: descricao.trim() || null,
       os_id: osId,
-      placa: combustivelSel || categoria === 'manutencao_veiculo' ? placa.trim().toUpperCase() || null : null,
+      placa: modo === 'frota' ? placa.trim().toUpperCase() || null : null,
       litros: combustivelSel ? l : null,
-      odometro_km: combustivelSel ? Math.round(km!) : null,
+      odometro_km: km != null && km > 0 && (combustivelSel || manutencao) ? Math.round(km) : null,
+      tipo_manutencao: manutencao ? tipoManutencao : null,
       combustivel: combustivelSel ? combustivel : null,
       status: 'pendente',
       ...(pos ? { posicao: ponto(pos.latitude, pos.longitude) } : {}),
@@ -254,7 +311,7 @@ function FormDespesa({ despesa, fechar }: { despesa: Despesa | null; fechar: () 
 
   return (
     <View style={estilo.tela}>
-      <Cabecalho titulo={despesa ? 'Corrigir despesa' : 'Lançar despesa'} voltar={fechar} />
+      <Cabecalho titulo={despesa ? 'Corrigir lançamento' : modo === 'frota' ? 'Lançar gasto do veículo' : 'Lançar despesa'} voltar={fechar} />
       <ScrollView keyboardShouldPersistTaps="handled">
         {despesa?.motivo_recusa ? (
           <Text style={{ color: cores.perigo, marginHorizontal: 16, marginTop: 12 }}>Recusada: {despesa.motivo_recusa}</Text>
@@ -272,7 +329,13 @@ function FormDespesa({ despesa, fechar }: { despesa: Despesa | null; fechar: () 
           </View>
 
           <Text style={s.rotulo}>Tipo *</Text>
-          {chips(CATEGORIAS, categoria, setCategoria)}
+          {chips(categoriasDo(modo), categoria, setCategoria)}
+          {manutencao && (
+            <>
+              <Text style={s.rotulo}>O que foi feito *</Text>
+              {chips(MANUTENCOES, tipoManutencao, setTipoManutencao)}
+            </>
+          )}
 
           <View style={s.dupla}>
             <View style={{ flex: 1 }}>
@@ -301,14 +364,20 @@ function FormDespesa({ despesa, fechar }: { despesa: Despesa | null; fechar: () 
               </View>
             </>
           )}
-          {(combustivelSel || categoria === 'manutencao_veiculo') && (
+          {manutencao && (
             <>
-              <Text style={s.rotulo}>Placa {combustivelSel ? '*' : ''}</Text>
+              <Text style={s.rotulo}>Odômetro (km) {pedeOdometro ? '*' : ''}</Text>
+              <TextInput style={estilo.campo} value={odometro} onChangeText={setOdometro} keyboardType="number-pad" />
+            </>
+          )}
+          {modo === 'frota' && (
+            <>
+              <Text style={s.rotulo}>Placa *</Text>
               <TextInput style={estilo.campo} value={placa} onChangeText={setPlaca} autoCapitalize="characters" placeholder="ABC1D23" />
             </>
           )}
 
-          <Text style={s.rotulo}>{combustivelSel ? 'Posto' : 'Estabelecimento / fornecedor'}</Text>
+          <Text style={s.rotulo}>{combustivelSel ? 'Posto' : manutencao ? 'Oficina / borracharia' : 'Estabelecimento / fornecedor'}</Text>
           <TextInput style={estilo.campo} value={fornecedor} onChangeText={setFornecedor} />
 
           <Pressable style={[s.reembolso, reembolso && { borderColor: cores.primaria, backgroundColor: fundoDe(cores.primaria) }]}
@@ -346,7 +415,7 @@ function FormDespesa({ despesa, fechar }: { despesa: Despesa | null; fechar: () 
             placeholder={categoria === 'ferramenta' || categoria === 'material' ? 'O que foi comprado e por quê' : ''} />
 
           <Pressable style={[estilo.botao, { backgroundColor: cores.sucesso }]} onPress={salvar} disabled={salvando}>
-            {salvando ? <ActivityIndicator color="#fff" /> : <Text style={estilo.botaoTexto}>{despesa ? 'Reenviar para conferência' : 'Salvar despesa'}</Text>}
+            {salvando ? <ActivityIndicator color="#fff" /> : <Text style={estilo.botaoTexto}>{despesa ? 'Reenviar para conferência' : 'Salvar'}</Text>}
           </Pressable>
         </View>
         <View style={{ height: 32 }} />

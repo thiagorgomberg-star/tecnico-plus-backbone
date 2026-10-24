@@ -7,6 +7,7 @@ import * as Sharing from 'expo-sharing';
 import { Caixa } from './caixas';
 import { itensPendentes } from './fila';
 import { calcularPlano, descreverFibra, descreverOlt, padroesPorExtenso, ehPonta, faixasDaBandeja, rotuloInstalacao, rotuloPonto, posicoesDgo, separarBandejas, svgMapaFusao } from './fusao';
+import { descreverVeiculo, meuVeiculo } from './veiculo';
 import { supabase } from './supabase';
 import { OrdemServico, rotuloStatus } from './tipos';
 
@@ -61,7 +62,7 @@ export async function compartilharRelatorio(os: OrdemServico) {
   // Dados que só o servidor tem (datas, fotos já enviadas); sem internet o relatório sai sem eles.
   const [{ data: completa }, { data: anexos }] = await Promise.all([
     supabase.from('ordens_servico')
-      .select('criado_em, enviada_em, iniciada_em, concluida_em, tecnico:usuarios!ordens_servico_tecnico_id_fkey(nome, cargo), rota:rotas(trecho)')
+      .select('criado_em, enviada_em, iniciada_em, concluida_em, tecnico:usuarios!ordens_servico_tecnico_id_fkey(nome, cargo), rota:rotas(trecho), veiculo:veiculos(placa, marca, modelo, cor)')
       .eq('id', os.id).maybeSingle(),
     supabase.from('os_anexos').select('caminho_arquivo, tirada_em, tipo, caixa_id, fibra, bandeja, descricao').eq('os_id', os.id)
       .in('tipo', ['foto_antes', 'foto_depois', 'foto_caixa', 'foto_otdr', 'foto_bandeja', 'foto_olt', 'assinatura']).order('criado_em'),
@@ -69,7 +70,10 @@ export async function compartilharRelatorio(os: OrdemServico) {
   const extra = completa as unknown as {
     criado_em: string; enviada_em: string | null; iniciada_em: string | null; concluida_em: string | null;
     tecnico: { nome: string; cargo: string | null } | null; rota: { trecho: string } | null;
+    veiculo: { placa: string; marca: string | null; modelo: string | null; cor: string | null } | null;
   } | null;
+  // Sem internet (ou O.S. ainda não iniciada no servidor): usa o veículo vinculado guardado no celular.
+  const veiculo = extra?.veiculo ?? await meuVeiculo(false);
 
   const fotos: Foto[] = [];
   if (anexos?.length) {
@@ -164,6 +168,7 @@ export async function compartilharRelatorio(os: OrdemServico) {
   <h2>Equipe</h2><div class="g">
     <div><div class="l">Técnico responsável</div>${esc(tecnico || '—')}${extra?.tecnico?.cargo ? ` · ${esc(extra.tecnico.cargo)}` : ''}</div>
     <div><div class="l">Técnicos de apoio</div>${esc(apoio.join(', ') || '—')}</div>
+    <div style="grid-column: span 2"><div class="l">Veículo</div>${esc(veiculo ? descreverVeiculo(veiculo) : '—')}</div>
   </div>
   ${extra ? `<h2>Tempos</h2><div class="g">
     <div><div class="l">Abertura</div>${quando(extra.criado_em)}</div><div><div class="l">Despacho</div>${quando(extra.enviada_em)}</div>

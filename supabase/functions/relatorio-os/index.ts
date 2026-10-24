@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
 
   const [os, eventos, servicos, apoio, anexos, local, caixas] = await Promise.all([
     admin.from("ordens_servico")
-      .select("numero, tipo, titulo, descricao, endereco, status, prioridade, ticket_acionamento, ticket_interno, criado_em, enviada_em, iniciada_em, concluida_em, baixada_em, observacao_tecnico, tecnico:usuarios!ordens_servico_tecnico_id_fkey(nome, cargo), rota:rotas(trecho)")
+      .select("numero, tipo, titulo, descricao, endereco, status, prioridade, ticket_acionamento, ticket_interno, criado_em, enviada_em, iniciada_em, concluida_em, baixada_em, observacao_tecnico, tecnico:usuarios!ordens_servico_tecnico_id_fkey(nome, cargo), rota:rotas(trecho), veiculo:veiculos(placa, marca, modelo, cor)")
       .eq("id", osId).single(),
     admin.from("os_eventos").select("status_novo, criado_em").eq("os_id", osId).order("criado_em"),
     admin.from("os_servicos_executados").select("quantidade, observacao, item:itens_execucao(nome, unidade, categoria)").eq("os_id", osId).order("lancado_em"),

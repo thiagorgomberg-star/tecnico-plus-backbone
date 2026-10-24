@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
@@ -5,13 +6,19 @@ import Icone, { NomeIcone } from '../componentes/Icone';
 import { VERSAO_APP } from '../lib/atualizacao';
 import { cores, fundoDe } from '../lib/estilo';
 import { Tema, TEMAS, temaAtual, trocarTema } from '../lib/tema';
+import { descreverVeiculo, MeuVeiculo, meuVeiculo } from '../lib/veiculo';
 
-type Destino = 'preventiva' | 'escala' | 'rotas' | 'despesas' | 'inventario';
+type Destino = 'preventiva' | 'escala' | 'rotas' | 'despesas' | 'frota' | 'inventario';
 type Props = { nome: string; cargo: string | null; pendentes: number; abrir: (d: Destino) => void; sair: () => void };
 
 const iniciais = (nome: string) => nome.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'T';
 
 export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
+  const [veiculo, setVeiculo] = useState<MeuVeiculo | null>(null);
+  useEffect(() => {
+    meuVeiculo(false).then(setVeiculo);
+    meuVeiculo().then(setVeiculo).catch(() => undefined);
+  }, []);
   const item = (icone: NomeIcone, rotulo: string, detalhe: string, acao: () => void, cor: string = cores.primaria) => (
     <Pressable style={({ pressed }) => [s.item, pressed && { backgroundColor: cores.selecionado }]} onPress={acao}>
       <View style={[s.itemIcone, { backgroundColor: fundoDe(cor) }]}>
@@ -34,12 +41,14 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
           <View style={{ flex: 1 }}>
             <Text style={s.nome} numberOfLines={1}>{nome || 'Técnico'}</Text>
             <Text style={s.detalhe}>{cargo ?? 'Técnico de campo'} · Multivale Backbone</Text>
+            {veiculo ? <Text style={[s.detalhe, { color: cores.texto, fontWeight: '600' }]}>Veículo: {descreverVeiculo(veiculo)}</Text> : null}
           </View>
         </View>
         <Text style={s.secao}>CAMPO</Text>
         {item('shield-plus-outline', 'Iniciar preventiva', 'Abrir uma preventiva no local, com o expediente iniciado', () => abrir('preventiva'), cores.sucesso)}
         {item('toolbox-outline', 'Inventário Matinal', 'Foto de cada ferramenta e EPI a cada 30 dias', () => abrir('inventario'), '#7A5AA6')}
-        {item('receipt-text-outline', 'Despesas', 'Combustível, pedágio, ferramentas: foto do comprovante e valores', () => abrir('despesas'), cores.alerta)}
+        {item('car-outline', 'Frota', 'Meu veículo: abastecimento, pedágio e manutenção', () => abrir('frota'), '#227E9E')}
+        {item('receipt-text-outline', 'Despesas', 'Ferramentas, material, alimentação: foto do comprovante e valores', () => abrir('despesas'), cores.alerta)}
         {item('calendar-month-outline', 'Minha escala', 'Jornada, plantão e folgas do mês', () => abrir('escala'))}
         {item('map-outline', 'Rotas KMZ', 'Trechos do backbone para abrir no Google Earth', () => abrir('rotas'), '#227E9E')}
         <Text style={s.secao}>APARÊNCIA</Text>

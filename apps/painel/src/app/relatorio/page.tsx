@@ -18,6 +18,7 @@ type Relatorio = {
     ticket_acionamento: string | null; ticket_interno: boolean; criado_em: string; enviada_em: string | null;
     iniciada_em: string | null; concluida_em: string | null; baixada_em: string | null; observacao_tecnico: string | null;
     tecnico: { nome: string; cargo: string | null } | null; rota: { trecho: string } | null;
+    veiculo: { placa: string; marca: string | null; modelo: string | null; cor: string | null } | null;
   };
   eventos: { status_novo: StatusOS; criado_em: string }[];
   servicos: { quantidade: number; observacao: string | null; item: { nome: string; unidade: string; categoria: string } | null }[];
@@ -99,6 +100,7 @@ function Conteudo() {
         <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5">
           <div><dt className="text-gray-500">Técnico responsável</dt><dd>{os.tecnico?.nome ?? "—"}{os.tecnico?.cargo ? ` · ${os.tecnico.cargo}` : ""}</dd></div>
           <div><dt className="text-gray-500">Técnicos de apoio</dt><dd>{dados.apoio.length ? dados.apoio.join(", ") : "—"}</dd></div>
+          <div><dt className="text-gray-500">Veículo</dt><dd>{os.veiculo ? [[os.veiculo.marca, os.veiculo.modelo].filter(Boolean).join(" "), os.veiculo.placa, os.veiculo.cor].filter(Boolean).join(" · ") : "—"}</dd></div>
         </dl>
       </section>
 

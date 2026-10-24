@@ -36,7 +36,7 @@ export default function App() {
   const [perfil, setPerfil] = useState<Perfil>({ nome: '', cargo: null });
   const [osAberta, setOsAberta] = useState<OrdemServico | null>(null);
   const [camera, setCamera] = useState<Camera | null>(null);
-  const [tela, setTela] = useState<'inicio' | 'rotas' | 'escala' | 'preventiva' | 'despesas' | 'inventario'>('inicio');
+  const [tela, setTela] = useState<'inicio' | 'rotas' | 'escala' | 'preventiva' | 'despesas' | 'frota' | 'inventario'>('inicio');
   const [aba, setAba] = useState<Aba>('atividades');
   const [pendentes, setPendentes] = useState(0);
 
@@ -150,6 +150,8 @@ export default function App() {
     conteudo = <NovaPreventiva voltar={() => setTela('inicio')} abrirOS={(os) => { setTela('inicio'); setAba('atividades'); setOsAberta(os); }} />;
   } else if (tela === 'despesas') {
     conteudo = <Despesas voltar={() => setTela('inicio')} />;
+  } else if (tela === 'frota') {
+    conteudo = <Despesas modo="frota" voltar={() => setTela('inicio')} />;
   } else if (tela === 'inventario') {
     conteudo = <Inventario voltar={() => setTela('inicio')} usuario={perfil} />;
   } else if (tela === 'escala') {
