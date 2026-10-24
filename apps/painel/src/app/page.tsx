@@ -44,21 +44,30 @@ const lerTema = (): Tema => {
   }
 };
 
-const ABAS: [AbaPainel, string][] = [
-  ["console", "Console de despacho"],
-  ["os", "Ordens de serviço"],
-  ["indicadores", "Indicadores"],
-  ["analise", "Análise (BI)"],
-  ["campo", "Equipe em campo"],
-  ["escala", "Escala"],
-  ["equipe", "Equipe"],
-  ["caixas", "Caixas e fibras"],
-  ["rotas", "Rotas e eventos"],
-  ["catalogo", "Serviços e materiais"],
-  ["horas", "Horas"],
-  ["despesas", "Despesas"],
-  ["almoxarifado", "Almoxarifado"],
-  ["ferramental", "Ferramental e EPI"],
+// Menu lateral agrupado (padrão Oracle Field Service: console de despacho primeiro).
+const GRUPOS: [string, [AbaPainel, string][]][] = [
+  ["Operação", [
+    ["console", "Console de despacho"],
+    ["os", "Ordens de serviço"],
+    ["campo", "Equipe em campo"],
+    ["escala", "Escala"],
+    ["equipe", "Equipe"],
+  ]],
+  ["Rede", [
+    ["caixas", "Caixas e fibras"],
+    ["rotas", "Rotas e eventos"],
+  ]],
+  ["Gestão", [
+    ["indicadores", "Indicadores"],
+    ["analise", "Análise (BI)"],
+    ["horas", "Horas"],
+    ["despesas", "Despesas"],
+  ]],
+  ["Materiais", [
+    ["catalogo", "Serviços e materiais"],
+    ["almoxarifado", "Almoxarifado"],
+    ["ferramental", "Ferramental e EPI"],
+  ]],
 ];
 
 export default function Painel() {
@@ -68,6 +77,20 @@ export default function Painel() {
   const [aba, setAba] = useState<AbaPainel>("console");
   const [tema, setTema] = useState<Tema>(() => (typeof window === "undefined" ? "grafite" : lerTema()));
   const cor = TEMAS[tema];
+  // Menu lateral: no computador fica aberto (lembra a escolha); no celular abre por cima e fecha ao escolher.
+  const [menuAberto, setMenuAberto] = useState(() => {
+    if (typeof window === "undefined") return true;
+    if (window.innerWidth < 1024) return false;
+    try { return localStorage.getItem("menu-painel") !== "fechado"; } catch { return true; }
+  });
+  const alternarMenu = () => setMenuAberto((a) => {
+    try { if (window.innerWidth >= 1024) localStorage.setItem("menu-painel", a ? "fechado" : "aberto"); } catch {}
+    return !a;
+  });
+  const escolher = (a: AbaPainel) => {
+    setAba(a);
+    if (window.innerWidth < 1024) setMenuAberto(false);
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSessao(data.session));
@@ -101,10 +124,14 @@ export default function Painel() {
   return (
     <div className="flex flex-1 flex-col">
       <header className="text-white" style={{ background: cor.topo }}>
-        <div className="flex items-center gap-4 px-4 py-2.5 sm:px-6">
-          <h1 className="text-lg font-semibold tracking-wide">Técnico Plus <span className="font-normal text-[#D5D1CD]">| Backbone</span></h1>
+        <div className="flex items-center gap-3 px-3 py-2.5 sm:px-4">
+          <button onClick={alternarMenu} aria-label={menuAberto ? "Recolher menu" : "Abrir menu"} title={menuAberto ? "Recolher menu" : "Abrir menu"}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded hover:bg-white/10">
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="currentColor" aria-hidden><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z" /></svg>
+          </button>
+          <h1 className="truncate text-lg font-semibold tracking-wide">Técnico Plus <span className="hidden font-normal text-[#D5D1CD] sm:inline">| Backbone</span></h1>
           <div className="ml-auto flex items-center gap-3 text-sm text-[#D5D1CD]">
-            <div className="flex items-center gap-1" title="Cor do painel">
+            <div className="hidden items-center gap-1 sm:flex" title="Cor do painel">
               {(Object.keys(TEMAS) as Tema[]).map((t) => (
                 <button key={t} aria-label={`Cor ${TEMAS[t].rotulo}`} title={TEMAS[t].rotulo}
                   onClick={() => { setTema(t); try { localStorage.setItem("tema-painel", t); } catch {} }}
@@ -119,19 +146,31 @@ export default function Painel() {
             <button className="text-white/80 hover:text-white hover:underline" onClick={() => supabase.auth.signOut()}>Sair</button>
           </div>
         </div>
-        <nav className="flex flex-wrap gap-x-1 bg-white px-2 text-[#161513] shadow-sm sm:px-4">
-          {ABAS.map(([valor, rotulo]) => (
-            <button key={valor} onClick={() => setAba(valor)}
-              style={aba === valor ? { borderColor: cor.destaque, color: cor.destaque } : undefined}
-              className={`border-b-[3px] px-3 py-2.5 text-sm ${aba === valor ? "font-semibold" : "border-transparent text-gray-600 hover:text-gray-900"}`}>
-              {rotulo}
-            </button>
+      </header>
+      <div className="relative flex flex-1">
+        {menuAberto && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setMenuAberto(false)} />}
+        <nav className={`${menuAberto ? "translate-x-0" : "-translate-x-full lg:hidden"} fixed inset-y-0 left-0 z-40 w-64 shrink-0 overflow-y-auto border-r border-gray-200 bg-white py-3 shadow-lg transition-transform lg:sticky lg:top-0 lg:h-screen lg:shadow-none`}>
+          <div className="mb-2 flex items-center justify-between px-4 lg:hidden">
+            <span className="font-semibold text-[#161513]">Menu</span>
+            <button onClick={() => setMenuAberto(false)} aria-label="Fechar menu" className="text-2xl leading-none text-gray-500">×</button>
+          </div>
+          {GRUPOS.map(([grupo, itens]) => (
+            <div key={grupo} className="mb-2">
+              <p className="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{grupo}</p>
+              {itens.map(([valor, rotulo]) => (
+                <button key={valor} onClick={() => escolher(valor)}
+                  style={aba === valor ? { borderColor: cor.destaque, color: cor.destaque, background: `${cor.destaque}12` } : undefined}
+                  className={`block w-full border-l-[3px] px-4 py-2 text-left text-sm ${aba === valor ? "font-semibold" : "border-transparent text-gray-700 hover:bg-gray-50"}`}>
+                  {rotulo}
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
-      </header>
-      <main className={`mx-auto w-full flex-1 p-4 sm:p-6 ${["console", "analise", "campo"].includes(aba) ? "max-w-none" : "max-w-6xl"}`}>
+      <main className={`mx-auto w-full min-w-0 flex-1 p-4 sm:p-6 ${["console", "analise", "campo"].includes(aba) ? "max-w-none" : "max-w-6xl"}`}>
         {aba === "console" ? <ConsoleDespacho tecnicos={tecnicos} /> : aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "indicadores" ? <Indicadores /> : aba === "despesas" ? <Despesas tecnicos={tecnicos} /> : aba === "horas" ? <Horas /> : aba === "analise" ? <Analise /> : aba === "ferramental" ? <Ferramental tecnicos={tecnicos} /> : <RotasEventos />}
       </main>
+      </div>
     </div>
   );
 }
