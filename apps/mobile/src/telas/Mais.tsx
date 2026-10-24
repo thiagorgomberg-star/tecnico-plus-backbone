@@ -4,7 +4,7 @@ import Cabecalho from '../componentes/Cabecalho';
 import { VERSAO_APP } from '../lib/atualizacao';
 import { cores } from '../lib/estilo';
 
-type Destino = 'preventiva' | 'escala' | 'rotas';
+type Destino = 'preventiva' | 'escala' | 'rotas' | 'despesas';
 type Props = { nome: string; cargo: string | null; pendentes: number; abrir: (d: Destino) => void; sair: () => void };
 
 export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
@@ -24,6 +24,7 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
       <ScrollView>
         <Text style={s.secao}>CAMPO</Text>
         {item('Iniciar preventiva', 'Abrir uma preventiva no local, com o expediente iniciado', () => abrir('preventiva'))}
+        {item('Despesas', 'Combustível, pedágio, ferramentas: foto do comprovante e valores', () => abrir('despesas'))}
         {item('Minha escala', 'Jornada, plantão e folgas do mês', () => abrir('escala'))}
         {item('Rotas KMZ', 'Trechos do backbone para abrir no Google Earth', () => abrir('rotas'))}
         <Text style={s.secao}>CONTA</Text>

@@ -10,6 +10,7 @@ import CaixasRede from "@/componentes/CaixasRede";
 import Catalogo from "@/componentes/Catalogo";
 import Indicadores from "@/componentes/Indicadores";
 import Equipe from "@/componentes/Equipe";
+import Despesas from "@/componentes/Despesas";
 import Escala from "@/componentes/Escala";
 import Login from "@/componentes/Login";
 import OrdensServico from "@/componentes/OrdensServico";
@@ -24,7 +25,7 @@ export default function Painel() {
   const [sessao, setSessao] = useState<Session | null | undefined>(undefined);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
-  const [aba, setAba] = useState<"os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas" | "indicadores">("os");
+  const [aba, setAba] = useState<"os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas" | "indicadores" | "despesas">("os");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSessao(data.session));
@@ -76,6 +77,8 @@ export default function Painel() {
             className={`rounded-md px-3 py-1.5 text-sm ${aba === "rotas" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Rotas e eventos</button>
           <button onClick={() => setAba("catalogo")}
             className={`rounded-md px-3 py-1.5 text-sm ${aba === "catalogo" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Serviços e materiais</button>
+          <button onClick={() => setAba("despesas")}
+            className={`rounded-md px-3 py-1.5 text-sm ${aba === "despesas" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Despesas</button>
           <button onClick={() => setAba("almoxarifado")}
             className={`rounded-md px-3 py-1.5 text-sm ${aba === "almoxarifado" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Almoxarifado</button>
         </nav>
@@ -86,7 +89,7 @@ export default function Painel() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">
-        {aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "indicadores" ? <Indicadores /> : <RotasEventos />}
+        {aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "indicadores" ? <Indicadores /> : aba === "despesas" ? <Despesas tecnicos={tecnicos} /> : <RotasEventos />}
       </main>
     </div>
   );

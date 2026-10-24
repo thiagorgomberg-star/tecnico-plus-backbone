@@ -59,7 +59,14 @@
         }
       ],
       "expo-sharing",
-      "expo-updates"
+      "expo-updates",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O Técnico Plus acessa suas fotos para anexar comprovantes de despesas.",
+          "cameraPermission": "O Técnico Plus usa a câmera para registrar as fotos das O.S. e dos comprovantes."
+        }
+      ]
     ],
     "updates": {
       "requestHeaders": {

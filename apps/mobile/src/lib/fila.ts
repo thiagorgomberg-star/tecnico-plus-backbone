@@ -24,6 +24,14 @@ export type ItemFila =
       latitude: number | null;
       longitude: number | null;
     }
+  | {
+      tipo: 'despesa';
+      id: string;
+      linha: Record<string, unknown> & { id: string; tecnico_id: string };
+      arquivo: string | null;
+      extensao: string;
+      correcao?: boolean; // reenvio de uma despesa recusada: atualiza a mesma linha
+    }
   | { tipo: 'os'; id: string; osId: string; campos: Record<string, unknown> }
   | { tipo: 'inserir'; id: string; tabela: string; linha: Record<string, unknown>; conflito?: string }
   | { tipo: 'excluir'; id: string; tabela: string; filtros: Record<string, string> }
@@ -95,6 +103,23 @@ async function enviar(item: ItemFila) {
     );
     if (error) throw error;
     new File(item.arquivo).delete();
+  } else if (item.tipo === 'despesa') {
+    // Comprovante primeiro (caminho único por envio); a linha leva o id gerado no celular, então reenviar não duplica.
+    const linha: Record<string, unknown> = { ...item.linha };
+    if (item.arquivo) {
+      const comprovante = `${item.linha.tecnico_id}/${item.id}.${item.extensao}`;
+      linha.comprovante = comprovante;
+      const conteudo = await new File(item.arquivo).arrayBuffer();
+      const envio = await supabase.storage.from('despesas').upload(comprovante, conteudo, {
+        contentType: item.extensao === 'pdf' ? 'application/pdf' : item.extensao === 'png' ? 'image/png' : 'image/jpeg',
+      });
+      // Já existe = subiu numa tentativa anterior que caiu antes de gravar a linha.
+      if (envio.error && !/exist|duplicate/i.test(envio.error.message)) throw envio.error;
+    }
+    const { error } = await supabase.from('despesas')
+      .upsert(linha, { onConflict: 'id', ignoreDuplicates: !item.correcao });
+    if (error) throw error;
+    if (item.arquivo) new File(item.arquivo).delete();
   } else if (item.tipo === 'os') {
     const { error } = await supabase.from('ordens_servico').update(item.campos).eq('id', item.osId);
     if (error) throw error;
