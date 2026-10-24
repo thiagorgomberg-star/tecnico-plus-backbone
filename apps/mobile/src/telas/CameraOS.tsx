@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { randomUUID } from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
@@ -26,6 +27,42 @@ type Props = {
 
 const LARGURA_FINAL = 1600;
 
+// Foto tirada mas ainda sem máscara. Fica gravada no celular (arquivo + dados) desde o clique,
+// para não se perder se o app fechar antes da máscara: na próxima abertura da câmera ela é terminada.
+type FotoCrua = Omit<DadosMascara, 'tiradaEm'> & {
+  tiradaEm: string;
+  osId: string;
+  tipoAnexo: 'foto_antes' | 'foto_depois' | 'foto_caixa' | 'foto_otdr' | 'foto_bandeja' | 'foto_olt';
+  caixaId?: string;
+  fibra?: number;
+  bandeja?: number;
+};
+const CHAVE_CRUAS = 'fotos-sem-mascara';
+
+async function lerCruas(): Promise<FotoCrua[]> {
+  try {
+    return JSON.parse((await AsyncStorage.getItem(CHAVE_CRUAS)) ?? '[]');
+  } catch {
+    return [];
+  }
+}
+
+// Serializa as gravações para uma não apagar a outra.
+let gravando: Promise<unknown> = Promise.resolve();
+function alterarCruas(mudar: (l: FotoCrua[]) => FotoCrua[]) {
+  const proxima = gravando.then(async () => {
+    const lista = mudar(await lerCruas());
+    await AsyncStorage.setItem(CHAVE_CRUAS, JSON.stringify(lista));
+  });
+  gravando = proxima.catch(() => undefined);
+  return proxima;
+}
+
+// Quantas fotos desta O.S./caixa ainda esperam a máscara (contam como tiradas).
+export async function fotosPendentesDeMascara(osId: string, caixaId?: string) {
+  return (await lerCruas()).filter((f) => f.osId === osId && (!caixaId || f.caixaId === caixaId)).length;
+}
+
 // Menor resolução da câmera que ainda cobre a largura final: foto bem mais leve de tirar e de processar.
 function melhorTamanho(tamanhos: string[]) {
   const validos = tamanhos
@@ -49,8 +86,9 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
   const { width, height } = useWindowDimensions();
   const [tipo, setTipo] = useState<'foto_antes' | 'foto_depois'>('foto_antes');
   // Fotos já tiradas esperando a máscara: o técnico pode seguir fotografando enquanto elas são gravadas.
-  const [fila, setFila] = useState<DadosMascara[]>([]);
-  const dados = fila[0] ?? null;
+  const [fila, setFila] = useState<(FotoCrua | (DadosMascara & { unica: true }))[]>([]);
+  const atual = fila[0] ?? null;
+  const dados: DadosMascara | null = atual ? { ...atual, tiradaEm: new Date(atual.tiradaEm) } : null;
   const [tirando, setTirando] = useState(false);
   const [tamanho, setTamanho] = useState<string | undefined>();
   const posicao = useRef<{ latitude: number; longitude: number } | null>(null);
@@ -59,6 +97,16 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
   const [miniaturas, setMiniaturas] = useState<string[]>([]);
   const horizontal = width > height;
   const total = fotosJaFeitas + miniaturas.length;
+
+  // Retoma as fotos que ficaram sem máscara (app fechado no meio): cada uma volta com a O.S./caixa dela.
+  useEffect(() => {
+    if (unica) return;
+    lerCruas().then((cruas) => {
+      const existentes = cruas.filter((f) => new File(f.uri).exists);
+      if (existentes.length !== cruas.length) alterarCruas((l) => l.filter((f) => new File(f.uri).exists));
+      if (existentes.length) setFila((f) => [...existentes, ...f.filter((x) => !existentes.some((e) => e.uri === x.uri))]);
+    });
+  }, []);
 
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
@@ -117,17 +165,37 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
         return;
       }
       const pos = posicao.current;
-      setFila((f) => [...f, {
+      const base = {
         uri: foto.uri,
         larguraFoto: foto.width,
         alturaFoto: foto.height,
-        tiradaEm: new Date(),
         latitude: pos?.latitude ?? null,
         longitude: pos?.longitude ?? null,
         endereco: endereco.current?.texto ?? null,
         nome: usuario.nome,
         cargo: usuario.cargo,
-      }]);
+      };
+      if (unica) {
+        setFila((f) => [...f, { ...base, tiradaEm: new Date(), unica: true }]);
+        return;
+      }
+      // Tira a foto do cache e grava os dados antes de qualquer outra coisa.
+      const pasta = new Directory(Paths.document, 'fotos-sem-mascara');
+      if (!pasta.exists) pasta.create();
+      const arquivo = new File(pasta, `${randomUUID()}.jpg`);
+      new File(foto.uri).move(arquivo);
+      const crua: FotoCrua = {
+        ...base,
+        uri: arquivo.uri,
+        tiradaEm: new Date().toISOString(),
+        osId,
+        tipoAnexo: caixa?.tipo ?? tipo,
+        caixaId: caixa?.id,
+        fibra: caixa?.fibra,
+        bandeja: caixa?.bandeja,
+      };
+      await alterarCruas((l) => [...l, crua]);
+      setFila((f) => [...f, crua]);
     } catch (e) {
       Alert.alert('Erro ao tirar a foto', String(e));
     } finally {
@@ -137,7 +205,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
 
   // Chamado quando a máscara terminou de desenhar a foto: grava a imagem final e põe na fila.
   async function salvarComMascara() {
-    if (!dados || !mascara.current) return;
+    if (!atual || !dados || !mascara.current) return;
     try {
       const alturaFinal = Math.round((LARGURA_FINAL * dados.alturaFoto * 1.137) / dados.larguraFoto);
       const temporario = await captureRef(mascara, { format: 'jpg', quality: 0.85, width: LARGURA_FINAL, height: alturaFinal });
@@ -145,18 +213,18 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
       if (!pasta.exists) pasta.create();
       const destino = new File(pasta, `${randomUUID()}.jpg`);
       await new File(temporario).move(destino);
-      if (unica) {
-        unica.aoSalvar({ arquivo: destino.uri, tiradaEm: dados.tiradaEm.toISOString(), latitude: dados.latitude, longitude: dados.longitude });
+      if ('unica' in atual) {
+        unica?.aoSalvar({ arquivo: destino.uri, tiradaEm: dados.tiradaEm.toISOString(), latitude: dados.latitude, longitude: dados.longitude });
         fechar();
         return;
       }
       await enfileirar({
         tipo: 'foto',
-        osId,
-        tipoAnexo: caixa?.tipo ?? tipo,
-        caixaId: caixa?.id,
-        fibra: caixa?.fibra,
-        bandeja: caixa?.bandeja,
+        osId: atual.osId,
+        tipoAnexo: atual.tipoAnexo,
+        caixaId: atual.caixaId,
+        fibra: atual.fibra,
+        bandeja: atual.bandeja,
         arquivo: destino.uri,
         largura: LARGURA_FINAL,
         altura: alturaFinal,
@@ -164,7 +232,12 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
         latitude: dados.latitude,
         longitude: dados.longitude,
       });
-      setMiniaturas((m) => [destino.uri, ...m]);
+      await alterarCruas((l) => l.filter((f) => f.uri !== atual.uri));
+      try { new File(atual.uri).delete(); } catch { /* já removida */ }
+      // Só conta aqui a foto que é deste alvo; as retomadas de outra O.S./caixa vão para a fila delas.
+      if (atual.osId === osId && atual.caixaId === caixa?.id && atual.fibra === caixa?.fibra && atual.bandeja === caixa?.bandeja) {
+        setMiniaturas((m) => [destino.uri, ...m]);
+      }
     } catch (e) {
       Alert.alert('Erro ao salvar a foto', String(e));
     } finally {
