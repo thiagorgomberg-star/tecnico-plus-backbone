@@ -3,6 +3,7 @@ import { randomUUID } from 'expo-crypto';
 
 import { enfileirar } from './fila';
 import { posicaoAtual } from './localizacao';
+import { iniciarRastreio, pararRastreio } from './rastreio';
 import { ponto, supabase } from './supabase';
 
 // Estado do dia guardado no celular, para o técnico abrir e fechar expediente e refeição sem internet.
@@ -45,12 +46,15 @@ export async function iniciarExpediente(kmInicial: number) {
     tabela: 'expedientes',
     linha: { id, inicio, km_inicial: kmInicial, posicao_inicio: pos ? ponto(pos.latitude, pos.longitude) : null },
   });
-  return gravar({ expedienteId: id, inicioExpediente: inicio, kmInicial, inicioRefeicao: null });
+  const jornada = await gravar({ expedienteId: id, inicioExpediente: inicio, kmInicial, inicioRefeicao: null });
+  const rastreando = await iniciarRastreio();
+  return { jornada, rastreando };
 }
 
 export async function encerrarExpediente(j: Jornada, kmFinal: number) {
   if (!j.expedienteId) return j;
   if (j.inicioRefeicao) await encerrarRefeicao(j);
+  await pararRastreio();
   const pos = await posicaoAtual();
   await enfileirar({
     tipo: 'atualizar',

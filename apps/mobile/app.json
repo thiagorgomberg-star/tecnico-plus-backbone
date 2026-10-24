@@ -21,6 +21,9 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
         "CAMERA"
       ]
     },
@@ -31,7 +34,10 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "O Técnico Plus usa sua localização durante o expediente para registrar o trajeto e o local das O.S."
+          "locationWhenInUsePermission": "O Técnico Plus usa sua localização durante o expediente para registrar o trajeto e o local das O.S.",
+          "locationAlwaysAndWhenInUsePermission": "O Técnico Plus registra o trajeto do expediente mesmo com o app fechado, até você encerrar o expediente.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       [

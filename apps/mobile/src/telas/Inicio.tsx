@@ -73,7 +73,15 @@ export default function Inicio({ nome, abrirOS, sair }: Props) {
     if (jornada.expedienteId && jornada.kmInicial != null && valor < jornada.kmInicial) {
       return Alert.alert('Km final menor que o inicial', `O expediente começou com ${jornada.kmInicial} km.`);
     }
-    setJornada(jornada.expedienteId ? await encerrarExpediente(jornada, valor) : await iniciarExpediente(valor));
+    if (jornada.expedienteId) {
+      setJornada(await encerrarExpediente(jornada, valor));
+    } else {
+      const { jornada: nova, rastreando } = await iniciarExpediente(valor);
+      setJornada(nova);
+      if (!rastreando) {
+        Alert.alert('Localização em segundo plano', 'Para registrar o trajeto completo do dia, permita a localização "o tempo todo" nas configurações do app.');
+      }
+    }
     setKm('');
   }
 

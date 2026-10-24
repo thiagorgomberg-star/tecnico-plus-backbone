@@ -1,3 +1,5 @@
+// Registra a tarefa de rastreio antes de tudo: o Android pode abrir o app só para ela, em segundo plano.
+import './src/lib/rastreio';
 import { registerRootComponent } from 'expo';
 
 import App from './App';
