@@ -2,13 +2,15 @@ import { RobotoCondensed_400Regular, RobotoCondensed_700Bold, useFonts } from '@
 import type { Session } from '@supabase/supabase-js';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { StatusBar } from 'expo-status-bar';
+import * as Notifications from 'expo-notifications';
 import { useEffect, useState } from 'react';
-import { Alert, SafeAreaView } from 'react-native';
+import { Alert, AppState, SafeAreaView } from 'react-native';
 
 import { estilo } from './src/lib/estilo';
 import { itensPendentes, sincronizar } from './src/lib/fila';
 import { limparJornadaLocal } from './src/lib/jornada';
 import { supabase } from './src/lib/supabase';
+import { ouvirAlertas, prepararAvisos, verificarAlertas } from './src/lib/avisos';
 import { OrdemServico } from './src/lib/tipos';
 import CameraOS from './src/telas/CameraOS';
 import DetalheOS from './src/telas/DetalheOS';
@@ -45,6 +47,26 @@ export default function App() {
       .eq('id', sessao.user.id)
       .single()
       .then(({ data }) => data && setPerfil(data));
+  }, [sessao]);
+
+  // Avisos de O.S.: tempo real com o app aberto e ao voltar para o app.
+  useEffect(() => {
+    if (!sessao) return;
+    prepararAvisos().then(verificarAlertas);
+    const pararDeOuvir = ouvirAlertas(sessao.user.id);
+    const aoVoltar = AppState.addEventListener('change', (estado) => estado === 'active' && verificarAlertas());
+    // Tocar na notificação abre a O.S.
+    const aoTocar = Notifications.addNotificationResponseReceivedListener(async (resposta) => {
+      const osId = resposta.notification.request.content.data?.osId as string | undefined;
+      if (!osId) return;
+      const { data } = await supabase.from('ordens_servico').select('*').eq('id', osId).maybeSingle();
+      if (data) setOsAberta(data);
+    });
+    return () => {
+      pararDeOuvir();
+      aoVoltar.remove();
+      aoTocar.remove();
+    };
   }, [sessao]);
 
   async function sair() {

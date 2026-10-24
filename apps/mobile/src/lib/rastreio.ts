@@ -2,6 +2,7 @@ import * as Battery from 'expo-battery';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 
+import { verificarAlertas } from './avisos';
 import { enfileirar } from './fila';
 import { lerJornada } from './jornada';
 
@@ -31,6 +32,8 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(TAREFA, async (
       bateria_pct: bateria,
     })),
   });
+  // Aproveita que o app acordou em segundo plano para tocar alertas novos.
+  await verificarAlertas();
 });
 
 // Pede "permitir o tempo todo"; sem isso o trajeto só é gravado com o app aberto.

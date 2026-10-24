@@ -48,7 +48,13 @@
         }
       ],
       "expo-screen-orientation",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "color": "#0572CE"
+        }
+      ]
     ]
   }
 }
