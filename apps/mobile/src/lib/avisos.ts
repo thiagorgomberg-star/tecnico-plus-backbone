@@ -23,7 +23,38 @@ const titulos: Record<string, string> = {
   prazo_proximo: 'SLA perto de vencer',
   os_atrasada: 'SLA vencido',
   encerrar_jornada: 'Lembrete de jornada',
+  os_visualizada: 'O.S. visualizada',
+  pausa_solicitada: 'Pedido de pausa',
 };
+
+// Registra o token do Firebase deste celular para o usuário logado: o servidor manda a notificação
+// mesmo com o app fechado. Sem internet, tenta de novo na próxima abertura.
+export async function registrarDispositivo() {
+  if (Platform.OS !== 'android') return;
+  try {
+    const { data } = await Notifications.getDevicePushTokenAsync();
+    if (typeof data === 'string' && data) await supabase.rpc('registrar_dispositivo', { p_token: data });
+  } catch {
+    // sem Google Play Services ou sem internet
+  }
+}
+
+// Ao sair, este celular deixa de receber os avisos do usuário.
+export async function esquecerDispositivo() {
+  try {
+    const { data } = await Notifications.getDevicePushTokenAsync();
+    if (typeof data === 'string' && data) await supabase.from('dispositivos_push').delete().eq('token', data);
+  } catch {
+    // ignora
+  }
+}
+
+export function ouvirTrocaDeToken() {
+  const assinatura = Notifications.addPushTokenListener(({ data }) => {
+    if (typeof data === 'string' && data) supabase.rpc('registrar_dispositivo', { p_token: data });
+  });
+  return () => assinatura.remove();
+}
 
 export async function prepararAvisos() {
   if (Platform.OS === 'android') {

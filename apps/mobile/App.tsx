@@ -11,7 +11,7 @@ import { cores, estilo } from './src/lib/estilo';
 import { aoMudarFila, itensPendentes, sincronizar } from './src/lib/fila';
 import { limparJornadaLocal } from './src/lib/jornada';
 import { supabase } from './src/lib/supabase';
-import { ouvirAlertas, prepararAvisos, verificarAlertas } from './src/lib/avisos';
+import { esquecerDispositivo, ouvirAlertas, ouvirTrocaDeToken, prepararAvisos, registrarDispositivo, verificarAlertas } from './src/lib/avisos';
 import { OrdemServico } from './src/lib/tipos';
 import CameraOS from './src/telas/CameraOS';
 import DetalheOS from './src/telas/DetalheOS';
@@ -75,17 +75,25 @@ export default function App() {
   // Avisos de O.S.: tempo real com o app aberto e ao voltar para o app.
   useEffect(() => {
     if (!sessao) return;
-    prepararAvisos().then(verificarAlertas);
+    prepararAvisos().then(() => {
+      verificarAlertas();
+      registrarDispositivo();
+    });
+    const pararTrocaToken = ouvirTrocaDeToken();
     const pararDeOuvir = ouvirAlertas(sessao.user.id);
     const aoVoltar = AppState.addEventListener('change', (estado) => estado === 'active' && verificarAlertas());
     // Tocar na notificação abre a O.S.
-    const aoTocar = Notifications.addNotificationResponseReceivedListener(async (resposta) => {
-      const osId = resposta.notification.request.content.data?.osId as string | undefined;
+    const abrirDaNotificacao = async (resposta: Notifications.NotificationResponse | null) => {
+      const osId = resposta?.notification.request.content.data?.osId as string | undefined;
       if (!osId) return;
       const { data } = await supabase.from('ordens_servico').select('*').eq('id', osId).maybeSingle();
       if (data) setOsAberta(data);
-    });
+    };
+    const aoTocar = Notifications.addNotificationResponseReceivedListener(abrirDaNotificacao);
+    // App estava fechado e foi aberto pelo toque na notificação.
+    Notifications.getLastNotificationResponseAsync().then(abrirDaNotificacao);
     return () => {
+      pararTrocaToken();
       pararDeOuvir();
       aoVoltar.remove();
       aoTocar.remove();
@@ -98,6 +106,7 @@ export default function App() {
       return Alert.alert('Registros não enviados', `Há ${pendentes.length} registro(s) aguardando internet. Conecte-se antes de sair.`);
     }
     await limparJornadaLocal();
+    await esquecerDispositivo();
     await supabase.auth.signOut();
   }
 

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "158189350051",
+    "project_id": "tecnico-plus-6d09f",
+    "storage_bucket": "tecnico-plus-6d09f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:158189350051:android:eeab011d9e70a33e39a316",
+        "android_client_info": {
+          "package_name": "br.com.multivale.tecnicoplus"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDMmjfNc9MdjFlA7xxbVQUAD95tCnHjELg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
