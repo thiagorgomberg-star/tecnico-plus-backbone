@@ -11,6 +11,7 @@ type Item = {
   numero_serie: string | null; patrimonio: string | null; validade: string | null; liberada_em: string; observacao: string | null;
   ultima_inspecao: string | null; ultima_condicao: string | null; ultima_foto: string | null; ultima_observacao: string | null;
   proxima_ate: string; ciclo: "pendente" | "vencida" | "vence_em_breve" | "em_dia";
+  devolucao_solicitada_em: string | null; devolucao_observacao: string | null;
 };
 type Inspecao = { id: string; feita_em: string; condicao: string; observacao: string | null; foto: string | null };
 
@@ -114,6 +115,18 @@ export default function Ferramental({ tecnicos }: { tecnicos: Tecnico[] }) {
       situacao, observacao: [i.observacao, `${situacao === "devolvida" ? "Devolvida" : "Baixada"} em ${br(hoje())}${motivo.trim() ? `: ${motivo.trim()}` : ""}`].filter(Boolean).join(" | "),
     }).eq("id", i.id);
     if (error) return alert(error.message);
+    setAberto(null);
+    recarregar();
+  }
+
+  async function excluir(i: Item) {
+    if (!confirm(`Excluir "${i.nome}" de ${i.tecnico}? O item e todas as fotos mensais dele serão apagados.`)) return;
+    if (prompt('Para confirmar, digite EXCLUIR:')?.trim().toUpperCase() !== "EXCLUIR") return alert("Nada foi excluído.");
+    const { data: inspecoes } = await supabase.from("inventario_inspecoes").select("foto").eq("ferramenta_id", i.id);
+    const { error } = await supabase.from("ferramentas").delete().eq("id", i.id);
+    if (error) return alert(error.message);
+    const arquivos = (inspecoes ?? []).map((x) => x.foto).filter((f): f is string => !!f);
+    if (arquivos.length) await supabase.storage.from("inventario").remove(arquivos);
     setAberto(null);
     recarregar();
   }
@@ -226,7 +239,8 @@ export default function Ferramental({ tecnicos }: { tecnicos: Tecnico[] }) {
                     {i.ultima_condicao ? CONDICAO[i.ultima_condicao] : "—"}
                     {i.ultima_observacao && <div className="text-xs font-normal text-gray-500">{i.ultima_observacao}</div>}
                   </td>
-                  <td className="p-3"><span className={`rounded px-2 py-0.5 text-xs font-medium ${CICLO[i.ciclo].cor}`}>{CICLO[i.ciclo].rotulo}</span></td>
+                  <td className="p-3"><span className={`rounded px-2 py-0.5 text-xs font-medium ${CICLO[i.ciclo].cor}`}>{CICLO[i.ciclo].rotulo}</span>
+                    {i.devolucao_solicitada_em && <div className="mt-1 text-xs font-semibold text-blue-700">Devolução solicitada em {br(i.devolucao_solicitada_em)}</div>}</td>
                   <td className="p-3 whitespace-nowrap">{br(i.proxima_ate)}</td>
                 </tr>
               ))}
@@ -247,9 +261,15 @@ export default function Ferramental({ tecnicos }: { tecnicos: Tecnico[] }) {
                   {aberto.patrimonio ? ` · Pat. ${aberto.patrimonio}` : ""}
                 </p>
                 {aberto.observacao && <p className="text-sm text-gray-500">{aberto.observacao}</p>}
+                {aberto.devolucao_solicitada_em && (
+                  <p className="mt-1 rounded bg-blue-50 px-2 py-1 text-sm text-blue-800">
+                    O técnico pediu a devolução em {br(aberto.devolucao_solicitada_em)}{aberto.devolucao_observacao ? `: ${aberto.devolucao_observacao}` : ""}. Confirme em &quot;Devolvida&quot; ao receber.
+                  </p>
+                )}
               </div>
               <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm" onClick={() => encerrar(aberto, "devolvida")}>Devolvida</button>
               <button className="rounded-lg border border-red-300 px-3 py-1.5 text-sm text-red-700" onClick={() => encerrar(aberto, "baixada")}>Dar baixa</button>
+              <button className="rounded-lg bg-red-700 px-3 py-1.5 text-sm text-white" onClick={() => excluir(aberto)}>Excluir</button>
               <button className="text-gray-500" onClick={() => setAberto(null)}>✕</button>
             </div>
             <h4 className="text-sm font-semibold text-gray-600">Fotos mês a mês ({historico.length})</h4>

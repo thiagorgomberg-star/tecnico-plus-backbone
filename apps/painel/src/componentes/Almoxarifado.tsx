@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { excluirComConfirmacao } from "@/lib/excluir";
 import { supabase } from "@/lib/supabase";
 import { Tecnico } from "@/lib/tipos";
 
@@ -155,6 +156,12 @@ export default function Almoxarifado({ tecnicos }: { tecnicos: Tecnico[] }) {
                 <td className="p-3 text-right font-medium">{fmt(m.quantidade)} {m.item?.unidade}</td>
                 <td className="p-3 text-gray-600">{m.tecnico?.nome ?? "—"}</td>
                 <td className="p-3 text-gray-500">{m.observacao}</td>
+                <td className="p-3 text-right">
+                  <button className="text-xs text-red-700 hover:underline"
+                    onClick={async () => (await excluirComConfirmacao("esta movimentação (o saldo será recalculado)", () => supabase.from("estoque_movimentos").delete().eq("id", m.id))) && recarregar()}>
+                    Excluir
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

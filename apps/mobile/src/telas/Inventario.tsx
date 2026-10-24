@@ -117,6 +117,17 @@ function Inspecao({ item, usuario, fechar, feito, restantes }: {
   const [condicao, setCondicao] = useState<Condicao>('ok');
   const [observacao, setObservacao] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [devolucaoPedida, setDevolucaoPedida] = useState(false);
+
+  function pedirDevolucao() {
+    Alert.alert('Devolver item', `Confirmar a devolução de "${item.nome}"? O supervisor recebe o aviso e dá baixa quando receber.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Devolver', onPress: async () => {
+        await enfileirar({ tipo: 'rpc', nome: 'solicitar_devolucao_ferramenta', args: { p_id: item.id, p_observacao: observacao.trim() || null } });
+        setDevolucaoPedida(true);
+      } },
+    ]);
+  }
 
   async function salvar() {
     if (!foto) return Alert.alert('Falta a foto', 'Fotografe o item para registrar a inspeção.');
@@ -181,6 +192,16 @@ function Inspecao({ item, usuario, fechar, feito, restantes }: {
               <Text style={estilo.botaoTexto}>{restantes > 1 ? 'Salvar e ir para o próximo' : 'Salvar inspeção'}</Text>
             )}
           </Pressable>
+
+          {item.devolucao_solicitada_em || devolucaoPedida ? (
+            <Text style={[estilo.suave, { marginTop: 16, color: cores.primaria, fontWeight: '700' }]}>
+              Devolução solicitada. O supervisor confirma quando receber o item.
+            </Text>
+          ) : (
+            <Pressable style={[estilo.botao, { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: cores.borda, marginTop: 16 }]} onPress={pedirDevolucao}>
+              <Text style={[estilo.botaoTexto, { color: cores.texto }]}>Devolver este item</Text>
+            </Pressable>
+          )}
         </View>
       </ScrollView>
       <Modal visible={camera} onRequestClose={() => setCamera(false)} animationType="fade" supportedOrientations={['landscape', 'portrait']}>

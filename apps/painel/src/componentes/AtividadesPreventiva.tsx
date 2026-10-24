@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { excluirComConfirmacao } from "@/lib/excluir";
 import { supabase } from "@/lib/supabase";
 
 type Atividade = { id: string; tipo: string; nome: string; ordem: number; ativo: boolean };
@@ -61,6 +62,10 @@ export default function AtividadesPreventiva() {
                     defaultValue={i.nome} onBlur={(e) => e.target.value.trim() && e.target.value !== i.nome && atualizar(i, { nome: e.target.value.trim() })} />
                   <button className="text-xs text-gray-600 hover:underline" onClick={() => atualizar(i, { ativo: !i.ativo })}>
                     {i.ativo ? "Desativar" : "Reativar"}
+                  </button>
+                  <button className="text-xs text-red-700 hover:underline"
+                    onClick={async () => (await excluirComConfirmacao(`"${i.nome}"`, () => supabase.from("atividades_preventiva").delete().eq("id", i.id))) && recarregar()}>
+                    Excluir
                   </button>
                 </li>
               ))}

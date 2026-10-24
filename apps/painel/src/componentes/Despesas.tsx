@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { baixarXlsx } from "@/lib/planilha";
+import { excluirComConfirmacao } from "@/lib/excluir";
 import { supabase } from "@/lib/supabase";
 import { Tecnico } from "@/lib/tipos";
 
@@ -359,6 +360,14 @@ export default function Despesas({ tecnicos, frota = false, placa }: { tecnicos:
                 {aberta.status !== "recusada" && (
                   <button className="rounded-lg border border-red-300 px-4 py-2 font-medium text-red-700" onClick={() => conferir([aberta.id], "recusada")}>Recusar</button>
                 )}
+                <button className="ml-auto rounded-lg border border-red-300 px-4 py-2 font-medium text-red-700"
+                  onClick={async () => {
+                    const ok = await excluirComConfirmacao(`a despesa de ${reais(aberta.valor)} de ${aberta.tecnico}`, () => supabase.from("despesas").delete().eq("id", aberta.id));
+                    if (!ok) return;
+                    if (aberta.comprovante) await supabase.storage.from("despesas").remove([aberta.comprovante]);
+                    setAberta(null);
+                    recarregar();
+                  }}>Excluir</button>
                 {aberta.status === "aprovada" && aberta.reembolso === "solicitado" && (
                   <button className="rounded-lg bg-blue-700 px-4 py-2 font-medium text-white" onClick={() => marcarReembolsoPago([aberta.id])}>Marcar reembolso pago</button>
                 )}

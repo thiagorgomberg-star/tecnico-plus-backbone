@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { excluirComConfirmacao } from "@/lib/excluir";
 import { supabase } from "@/lib/supabase";
 
 type Rota = { id: string; trecho: string; descricao: string | null; link_kmz: string; ativo: boolean };
@@ -220,6 +221,11 @@ function TrechoCurvas({ rota, curvas, alternar, recarregar }: { rota: Rota; curv
         </button>
         <button className="ml-auto text-gray-600 hover:underline" onClick={alternar}>
           {rota.ativo ? "Ocultar do app" : "Mostrar no app"}
+        </button>
+        <button className="text-red-700 hover:underline"
+          onClick={async () => (await excluirComConfirmacao(`o trecho "${rota.trecho}" e as curvas dele`,
+            () => supabase.from("rotas").delete().eq("id", rota.id))) && recarregar()}>
+          Excluir
         </button>
       </div>
       {aberto && (

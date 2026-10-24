@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { excluirComConfirmacao } from "@/lib/excluir";
 import { supabase } from "@/lib/supabase";
 
 type Item = { id: string; nome: string; unidade: string; categoria: "servico" | "material"; ordem: number; ativo: boolean };
@@ -74,6 +75,10 @@ export default function Catalogo() {
                     onBlur={(e) => e.target.value.trim() && e.target.value !== i.unidade && atualizar(i, { unidade: e.target.value.trim() })} />
                   <button className="text-xs text-gray-600 hover:underline" onClick={() => atualizar(i, { ativo: !i.ativo })}>
                     {i.ativo ? "Desativar" : "Reativar"}
+                  </button>
+                  <button className="text-xs text-red-700 hover:underline"
+                    onClick={async () => (await excluirComConfirmacao(`"${i.nome}"`, () => supabase.from("itens_execucao").delete().eq("id", i.id))) && recarregar()}>
+                    Excluir
                   </button>
                 </li>
               ))}

@@ -8,6 +8,7 @@ export type ItemInventario = {
   id: string; categoria: 'ferramenta' | 'epi'; nome: string; marca_modelo: string | null; numero_serie: string | null;
   patrimonio: string | null; validade: string | null; ultima_inspecao: string | null; ultima_condicao: string | null;
   proxima_ate: string; ciclo: 'pendente' | 'vencida' | 'vence_em_breve' | 'em_dia'; enviando?: boolean;
+  devolucao_solicitada_em?: string | null;
 };
 
 const CACHE = 'inventario-cache';
@@ -31,7 +32,7 @@ export async function inventarioLocal() {
 
 export async function inventarioAtualizado() {
   const { data, error } = await supabase.from('inventario_situacao')
-    .select('id, categoria, nome, marca_modelo, numero_serie, patrimonio, validade, ultima_inspecao, ultima_condicao, proxima_ate, ciclo')
+    .select('id, categoria, nome, marca_modelo, numero_serie, patrimonio, validade, ultima_inspecao, ultima_condicao, proxima_ate, ciclo, devolucao_solicitada_em')
     .order('categoria').order('nome');
   if (error || !data) return null;
   await AsyncStorage.setItem(CACHE, JSON.stringify(data));

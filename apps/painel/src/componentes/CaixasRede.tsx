@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import CaixaDetalhe, { CaixaPainel, ehPonta, origemDe } from "@/componentes/CaixaDetalhe";
 import { clienteDoCaminho, descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, midiasKmz, posicoesDgo, rastrearFibra, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from "@/lib/fusao";
+import { excluirComConfirmacao } from "@/lib/excluir";
 import { supabase } from "@/lib/supabase";
 
 const esc = (t: unknown) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -182,7 +183,26 @@ export default function CaixasRede() {
                   {c.latitude == null ? <span className="ml-1 text-red-700">· sem GPS</span> : null}
                 </span>
               </button>
-              {aberta === c.id && <div className="px-4 pb-4"><CaixaDetalhe caixa={c} /></div>}
+              {aberta === c.id && (
+                <div className="px-4 pb-4">
+                  <CaixaDetalhe caixa={c} />
+                  <button className="mt-3 rounded-lg border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
+                    onClick={async () => {
+                      const { data: fotos } = await supabase.from("os_anexos").select("caminho_arquivo").eq("caixa_id", c.id);
+                      const ok = await excluirComConfirmacao(`${c.identificacao} com fibras, manobras e ${fotos?.length ?? 0} foto(s)`, async () => {
+                        const f = await supabase.from("os_anexos").delete().eq("caixa_id", c.id);
+                        return f.error ? f : supabase.from("caixas_emenda").delete().eq("id", c.id);
+                      });
+                      if (!ok) return;
+                      const arquivos = (fotos ?? []).map((x) => x.caminho_arquivo).filter(Boolean);
+                      if (arquivos.length) await supabase.storage.from("os-anexos").remove(arquivos);
+                      setCaixas((l) => l.filter((x) => x.id !== c.id));
+                      setAberta(null);
+                    }}>
+                    Excluir {c.identificacao}
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
