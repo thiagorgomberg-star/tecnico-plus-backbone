@@ -8,6 +8,7 @@ import Avisos from "@/componentes/Avisos";
 import AtividadesPreventiva from "@/componentes/AtividadesPreventiva";
 import CaixasRede from "@/componentes/CaixasRede";
 import Catalogo from "@/componentes/Catalogo";
+import Indicadores from "@/componentes/Indicadores";
 import Equipe from "@/componentes/Equipe";
 import Escala from "@/componentes/Escala";
 import Login from "@/componentes/Login";
@@ -23,7 +24,7 @@ export default function Painel() {
   const [sessao, setSessao] = useState<Session | null | undefined>(undefined);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
-  const [aba, setAba] = useState<"os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas">("os");
+  const [aba, setAba] = useState<"os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas" | "indicadores">("os");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSessao(data.session));
@@ -58,9 +59,11 @@ export default function Painel() {
     <div className="flex flex-1 flex-col">
       <header className="flex flex-wrap items-center gap-4 border-b border-gray-200 bg-white px-4 py-3 sm:px-6">
         <h1 className="text-lg font-semibold">Técnico Plus</h1>
-        <nav className="flex gap-1">
+        <nav className="flex flex-wrap gap-1">
           <button onClick={() => setAba("os")}
             className={`rounded-md px-3 py-1.5 text-sm ${aba === "os" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Ordens de serviço</button>
+          <button onClick={() => setAba("indicadores")}
+            className={`rounded-md px-3 py-1.5 text-sm ${aba === "indicadores" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Indicadores</button>
           <button onClick={() => setAba("campo")}
             className={`rounded-md px-3 py-1.5 text-sm ${aba === "campo" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Equipe em campo</button>
           <button onClick={() => setAba("escala")}
@@ -83,7 +86,7 @@ export default function Painel() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">
-        {aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : <RotasEventos />}
+        {aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "indicadores" ? <Indicadores /> : <RotasEventos />}
       </main>
     </div>
   );

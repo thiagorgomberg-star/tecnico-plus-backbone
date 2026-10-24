@@ -197,9 +197,15 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
 
             <Campo rotulo="Endereço / referência" valor={os.endereco}>
               {os.endereco ? (
-                <Pressable onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(os.endereco!)}`)}>
-                  <Text style={s.link}>Abrir no mapa ›</Text>
-                </Pressable>
+                <View style={{ flexDirection: 'row', gap: 20 }}>
+                  {/* Rota até o local da O.S. no navegador do celular (Google Maps ou Waze). */}
+                  <Pressable onPress={() => Linking.openURL(`https://www.google.com/maps/dir/?api=1&travelmode=driving&dir_action=navigate&destination=${encodeURIComponent(os.endereco!)}`)}>
+                    <Text style={s.link}>Rota no Google Maps ›</Text>
+                  </Pressable>
+                  <Pressable onPress={() => Linking.openURL(`https://waze.com/ul?q=${encodeURIComponent(os.endereco!)}&navigate=yes`)}>
+                    <Text style={s.link}>Waze ›</Text>
+                  </Pressable>
+                </View>
               ) : null}
             </Campo>
             <Campo rotulo="Descrição" valor={os.descricao} />
