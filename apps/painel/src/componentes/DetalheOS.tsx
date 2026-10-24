@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import ExecucaoOS from "@/componentes/ExecucaoOS";
 import { supabase } from "@/lib/supabase";
 import { corStatus, OrdemServico, rotuloStatus, StatusOS } from "@/lib/tipos";
 
@@ -95,6 +96,8 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
             </div>
           )}
         </dl>
+
+        <ExecucaoOS osId={os.id} responsavelId={os.tecnico_id} />
 
         <h3 className="mt-6 flex items-center gap-2 font-semibold">
           Fotos ({fotos.length})
