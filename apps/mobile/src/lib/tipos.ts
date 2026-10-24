@@ -24,6 +24,9 @@ export type OrdemServico = {
   evento_localizado_em: string | null;
   ticket_acionamento: string | null;
   sla_limite: string | null;
+  tecnico_id?: string | null;
+  pausa_solicitada_em?: string | null;
+  pausa_motivo?: string | null;
 };
 
 export type Expediente = {

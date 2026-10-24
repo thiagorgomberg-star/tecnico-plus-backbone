@@ -4,18 +4,21 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { useEffect, useState } from 'react';
-import { Alert, AppState, SafeAreaView } from 'react-native';
+import { Alert, AppState, BackHandler, SafeAreaView, View } from 'react-native';
 
-import { estilo } from './src/lib/estilo';
-import { itensPendentes, sincronizar } from './src/lib/fila';
+import AbasInferiores, { Aba } from './src/componentes/AbasInferiores';
+import { cores, estilo } from './src/lib/estilo';
+import { aoMudarFila, itensPendentes, sincronizar } from './src/lib/fila';
 import { limparJornadaLocal } from './src/lib/jornada';
 import { supabase } from './src/lib/supabase';
 import { ouvirAlertas, prepararAvisos, verificarAlertas } from './src/lib/avisos';
 import { OrdemServico } from './src/lib/tipos';
 import CameraOS from './src/telas/CameraOS';
 import DetalheOS from './src/telas/DetalheOS';
-import Inicio from './src/telas/Inicio';
+import Estoque from './src/telas/Estoque';
+import Atividades from './src/telas/Atividades';
 import Login from './src/telas/Login';
+import Mais from './src/telas/Mais';
 import MinhaEscala from './src/telas/MinhaEscala';
 import NovaPreventiva from './src/telas/NovaPreventiva';
 import Rotas from './src/telas/Rotas';
@@ -30,6 +33,26 @@ export default function App() {
   const [osAberta, setOsAberta] = useState<OrdemServico | null>(null);
   const [camera, setCamera] = useState<Camera | null>(null);
   const [tela, setTela] = useState<'inicio' | 'rotas' | 'escala' | 'preventiva'>('inicio');
+  const [aba, setAba] = useState<Aba>('atividades');
+  const [pendentes, setPendentes] = useState(0);
+
+  useEffect(() => {
+    const contar = () => itensPendentes().then((i) => setPendentes(i.length));
+    contar();
+    return aoMudarFila(contar);
+  }, []);
+
+  // Botão voltar do Android fecha a tela aberta em vez de sair do app.
+  useEffect(() => {
+    const assinatura = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (camera) return false;
+      if (osAberta) { setOsAberta(null); return true; }
+      if (tela !== 'inicio') { setTela('inicio'); return true; }
+      if (aba !== 'atividades') { setAba('atividades'); return true; }
+      return false;
+    });
+    return () => assinatura.remove();
+  }, [osAberta, tela, aba, camera]);
 
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
@@ -90,23 +113,45 @@ export default function App() {
     );
   }
 
-  return (
-    <SafeAreaView style={estilo.tela}>
-      <StatusBar style={sessao ? 'light' : 'dark'} />
-      {!sessao ? (
+  if (!sessao) {
+    return (
+      <SafeAreaView style={estilo.tela}>
+        <StatusBar style="dark" />
         <Login />
-      ) : osAberta ? (
-        <DetalheOS os={osAberta} voltar={() => setOsAberta(null)}
-          abrirCamera={(fotosJaFeitas) => setCamera({ osId: osAberta.id, fotosJaFeitas })} />
-      ) : tela === 'rotas' ? (
-        <Rotas voltar={() => setTela('inicio')} />
-      ) : tela === 'preventiva' ? (
-        <NovaPreventiva voltar={() => setTela('inicio')} abrirOS={(os) => { setTela('inicio'); setOsAberta(os); }} />
-      ) : tela === 'escala' ? (
-        <MinhaEscala voltar={() => setTela('inicio')} />
-      ) : (
-        <Inicio abrir={setTela} nome={perfil.nome} abrirOS={setOsAberta} sair={sair} />
-      )}
+      </SafeAreaView>
+    );
+  }
+
+  const euId = sessao.user.id;
+  let conteudo;
+  if (osAberta) {
+    conteudo = (
+      <DetalheOS os={osAberta} euId={euId} voltar={() => setOsAberta(null)}
+        abrirCamera={(fotosJaFeitas) => setCamera({ osId: osAberta.id, fotosJaFeitas })} />
+    );
+  } else if (tela === 'rotas') {
+    conteudo = <Rotas voltar={() => setTela('inicio')} />;
+  } else if (tela === 'preventiva') {
+    conteudo = <NovaPreventiva voltar={() => setTela('inicio')} abrirOS={(os) => { setTela('inicio'); setAba('atividades'); setOsAberta(os); }} />;
+  } else if (tela === 'escala') {
+    conteudo = <MinhaEscala voltar={() => setTela('inicio')} />;
+  } else {
+    conteudo = (
+      <>
+        <View style={{ flex: 1 }}>
+          {aba === 'atividades' ? <Atividades nome={perfil.nome} abrirOS={setOsAberta} /> : null}
+          {aba === 'estoque' ? <Estoque euId={euId} /> : null}
+          {aba === 'mais' ? <Mais nome={perfil.nome} cargo={perfil.cargo} pendentes={pendentes} abrir={setTela} sair={sair} /> : null}
+        </View>
+        <AbasInferiores atual={aba} mudar={setAba} avisos={{ mais: pendentes }} />
+      </>
+    );
+  }
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: cores.cabecalho }}>
+      <StatusBar style="light" />
+      <View style={{ flex: 1, backgroundColor: cores.fundo }}>{conteudo}</View>
     </SafeAreaView>
   );
 }

@@ -43,6 +43,11 @@ export default function Atividades({ nome, abrirOS }: Props) {
     versaoPublicada().then((v) => v && v > VERSAO_APP && setNovaVersao(v));
   }, []);
 
+  // Mostra na hora o que está salvo no celular; o servidor atualiza em seguida (sem internet pode demorar).
+  useEffect(() => {
+    AsyncStorage.getItem(CACHE_OS).then((c) => c && setOrdens((atual) => (atual.length ? atual : JSON.parse(c))));
+  }, []);
+
   const carregar = useCallback(async () => {
     setCarregando(true);
     setJornada(await lerJornada());
