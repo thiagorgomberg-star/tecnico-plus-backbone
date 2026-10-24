@@ -8,7 +8,7 @@ export type ItemEscala = { id: string; data: string; tipo: TipoEscala; inicio: s
 export const rotuloEscala: Record<TipoEscala, string> = {
   jornada: 'Jornada',
   folga_programada: 'Folga programada',
-  plantao: 'Plantão',
+  plantao: 'Plantão/sobreaviso',
   sobreaviso: 'Sobreaviso',
   ferias: 'Férias',
   atestado: 'Atestado',

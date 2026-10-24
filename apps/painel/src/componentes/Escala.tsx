@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { feriadosNacionais } from "@/lib/feriados";
 import { supabase } from "@/lib/supabase";
 import { Tecnico } from "@/lib/tipos";
 
@@ -11,7 +12,7 @@ type Item = { id: string; tecnico_id: string; data: string; tipo: TipoEscala; in
 const TIPOS: { valor: TipoEscala; rotulo: string; cor: string }[] = [
   { valor: "jornada", rotulo: "Jornada", cor: "bg-blue-100 text-blue-800" },
   { valor: "folga_programada", rotulo: "Folga programada", cor: "bg-green-100 text-green-800" },
-  { valor: "plantao", rotulo: "Plantão", cor: "bg-red-100 text-red-800" },
+  { valor: "plantao", rotulo: "Plantão/sobreaviso", cor: "bg-red-100 text-red-800" },
   { valor: "sobreaviso", rotulo: "Sobreaviso", cor: "bg-amber-100 text-amber-800" },
   { valor: "ferias", rotulo: "Férias", cor: "bg-cyan-100 text-cyan-800" },
   { valor: "atestado", rotulo: "Atestado", cor: "bg-purple-100 text-purple-800" },
@@ -27,7 +28,8 @@ export default function Escala({ tecnicos }: { tecnicos: Tecnico[] }) {
   const [itens, setItens] = useState<Item[]>([]);
   const [versao, setVersao] = useState(0);
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
-  const [form, setForm] = useState({ data: "", tipo: "folga_programada" as TipoEscala, inicio: "", fim: "", observacao: "" });
+  const [form, setForm] = useState({ data: "", ate: "", tipo: "folga_programada" as TipoEscala, inicio: "", fim: "", observacao: "" });
+  const [editando, setEditando] = useState<Item | null>(null);
 
   const tecnicoAtual = tecnicoId || tecnicos[0]?.id || "";
   const dias = useMemo(() => {
@@ -42,14 +44,23 @@ export default function Escala({ tecnicos }: { tecnicos: Tecnico[] }) {
       .then(({ data }) => setItens(data ?? []));
   }, [tecnicoAtual, dias, versao]);
 
+  // Lança o mesmo item em todos os dias do período (de "data" até "ate"; sem "ate", só um dia).
   async function lancar(e: React.FormEvent) {
     e.preventDefault();
-    const { error } = await supabase.from("escala").upsert({
-      tecnico_id: tecnicoAtual, data: form.data, tipo: form.tipo,
-      inicio: form.inicio || null, fim: form.fim || null, observacao: form.observacao || null,
-    }, { onConflict: "tecnico_id,data,tipo" });
+    const [a, m, d] = form.data.split("-").map(Number);
+    const fim = form.ate || form.data;
+    if (fim < form.data) return alert("A data final é anterior à inicial.");
+    const linhas = [];
+    for (let dia = new Date(a, m - 1, d); iso(dia) <= fim; dia = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate() + 1)) {
+      linhas.push({
+        tecnico_id: tecnicoAtual, data: iso(dia), tipo: form.tipo,
+        inicio: form.inicio || null, fim: form.fim || null, observacao: form.observacao || null,
+      });
+      if (linhas.length > 366) return alert("Período longo demais (máximo de 1 ano).");
+    }
+    const { error } = await supabase.from("escala").upsert(linhas, { onConflict: "tecnico_id,data,tipo" });
     if (error) return alert(error.message);
-    setForm({ ...form, data: "", observacao: "" });
+    setForm({ ...form, data: "", ate: "", observacao: "" });
     recarregar();
   }
 
@@ -57,18 +68,35 @@ export default function Escala({ tecnicos }: { tecnicos: Tecnico[] }) {
     if (!confirm(`Remover ${tipo(item.tipo).rotulo} de ${item.data.split("-").reverse().join("/")}?`)) return;
     const { error } = await supabase.from("escala").delete().eq("id", item.id);
     if (error) return alert(error.message);
+    setEditando(null);
     recarregar();
   }
 
-  // Preenche o mês: jornada de segunda a sexta e plantão no sábado e domingo.
+  // Ajusta entrada, saída e observação de um dia específico.
+  async function salvarDia(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editando) return;
+    const { error } = await supabase.from("escala").update({
+      inicio: editando.inicio || null, fim: editando.fim || null, observacao: editando.observacao || null,
+    }).eq("id", editando.id);
+    if (error) return alert(error.message);
+    setEditando(null);
+    recarregar();
+  }
+
+  // Preenche o mês só com os dias úteis (segunda a sexta, fora feriados nacionais),
+  // no horário de jornada do técnico. Plantão e demais lançamentos ficam manuais.
   async function preencherMes() {
-    const linhas = dias.map((d) => {
-      const fimDeSemana = d.getDay() === 0 || d.getDay() === 6;
-      return {
-        tecnico_id: tecnicoAtual, data: iso(d), tipo: fimDeSemana ? "plantao" : "jornada",
-        inicio: fimDeSemana ? null : "08:00", fim: fimDeSemana ? null : "17:00",
-      };
-    });
+    const { data: perfil, error: erroPerfil } = await supabase.from("usuarios")
+      .select("inicio_jornada, fim_jornada, fim_jornada_sexta").eq("id", tecnicoAtual).single();
+    if (erroPerfil) return alert(erroPerfil.message);
+    const feriados = feriadosNacionais(mes.getFullYear());
+    const linhas = dias
+      .filter((d) => d.getDay() !== 0 && d.getDay() !== 6 && !feriados.has(iso(d)))
+      .map((d) => ({
+        tecnico_id: tecnicoAtual, data: iso(d), tipo: "jornada",
+        inicio: perfil.inicio_jornada, fim: d.getDay() === 5 ? perfil.fim_jornada_sexta : perfil.fim_jornada,
+      }));
     const { error } = await supabase.from("escala").upsert(linhas, { onConflict: "tecnico_id,data,tipo", ignoreDuplicates: true });
     if (error) return alert(error.message);
     recarregar();
@@ -91,20 +119,50 @@ export default function Escala({ tecnicos }: { tecnicos: Tecnico[] }) {
         </div>
         <button className="ml-auto rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-40"
           disabled={!tecnicoAtual} onClick={preencherMes}>
-          Preencher mês (Seg–Sex jornada 08h–17h, Sáb/Dom plantão)
+          Preencher dias úteis do mês (jornada do técnico)
         </button>
       </div>
 
-      <form onSubmit={lancar} className="grid gap-2 border-b border-gray-100 p-4 sm:grid-cols-[auto_auto_auto_auto_1fr_auto]">
-        <input className={campo} type="date" value={form.data} onChange={(e) => setForm({ ...form, data: e.target.value })} required />
+      <form onSubmit={lancar} className="flex flex-wrap items-center gap-2 border-b border-gray-100 p-4 text-sm">
+        <label className="flex items-center gap-1">De
+          <input className={campo} type="date" value={form.data} onChange={(e) => setForm({ ...form, data: e.target.value })} required />
+        </label>
+        <label className="flex items-center gap-1">até
+          <input className={campo} type="date" value={form.ate} min={form.data} onChange={(e) => setForm({ ...form, ate: e.target.value })} title="Deixe em branco para um dia só" />
+        </label>
         <select className={campo} value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value as TipoEscala })}>
-          {TIPOS.map((t) => <option key={t.valor} value={t.valor}>{t.rotulo}</option>)}
+          {TIPOS.filter((t) => t.valor !== "sobreaviso").map((t) => <option key={t.valor} value={t.valor}>{t.rotulo}</option>)}
         </select>
-        <input className={campo} type="time" value={form.inicio} onChange={(e) => setForm({ ...form, inicio: e.target.value })} title="Início" />
-        <input className={campo} type="time" value={form.fim} onChange={(e) => setForm({ ...form, fim: e.target.value })} title="Fim" />
-        <input className={campo} placeholder="Observação" value={form.observacao} onChange={(e) => setForm({ ...form, observacao: e.target.value })} />
+        <label className="flex items-center gap-1">Entrada
+          <input className={campo} type="time" value={form.inicio} onChange={(e) => setForm({ ...form, inicio: e.target.value })} />
+        </label>
+        <label className="flex items-center gap-1">Saída
+          <input className={campo} type="time" value={form.fim} onChange={(e) => setForm({ ...form, fim: e.target.value })} />
+        </label>
+        <input className={`${campo} min-w-40 flex-1`} placeholder="Observação" value={form.observacao} onChange={(e) => setForm({ ...form, observacao: e.target.value })} />
         <button className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800 disabled:opacity-40" disabled={!tecnicoAtual}>Lançar</button>
       </form>
+
+      {editando && (
+        <form onSubmit={salvarDia} className="flex flex-wrap items-center gap-2 border-b border-gray-100 bg-blue-50 p-4 text-sm">
+          <span className="font-medium">
+            {tipo(editando.tipo).rotulo} em {editando.data.split("-").reverse().join("/")}
+          </span>
+          <label className="flex items-center gap-1">Entrada
+            <input className={campo} type="time" value={editando.inicio?.slice(0, 5) ?? ""}
+              onChange={(e) => setEditando({ ...editando, inicio: e.target.value })} />
+          </label>
+          <label className="flex items-center gap-1">Saída
+            <input className={campo} type="time" value={editando.fim?.slice(0, 5) ?? ""}
+              onChange={(e) => setEditando({ ...editando, fim: e.target.value })} />
+          </label>
+          <input className={`${campo} min-w-48 flex-1`} placeholder="Observação" value={editando.observacao ?? ""}
+            onChange={(e) => setEditando({ ...editando, observacao: e.target.value })} />
+          <button className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800">Salvar</button>
+          <button type="button" className="rounded-lg px-3 py-2 text-red-700 hover:bg-red-50" onClick={() => remover(editando)}>Remover</button>
+          <button type="button" className="rounded-lg px-3 py-2 text-gray-600 hover:bg-gray-100" onClick={() => setEditando(null)}>Cancelar</button>
+        </form>
+      )}
 
       <div className="grid grid-cols-7 gap-px bg-gray-200 text-xs">
         {DIAS.map((d) => <div key={d} className="bg-gray-50 p-2 text-center font-semibold text-gray-600">{d}</div>)}
@@ -115,8 +173,8 @@ export default function Escala({ tecnicos }: { tecnicos: Tecnico[] }) {
             <div key={d.getDate()} className="min-h-24 bg-white p-1.5">
               <div className="mb-1 font-semibold text-gray-500">{d.getDate()}</div>
               {doDia.map((i) => (
-                <button key={i.id} onClick={() => remover(i)} title="Clique para remover"
-                  className={`mb-1 block w-full truncate rounded px-1 py-0.5 text-left ${tipo(i.tipo).cor}`}>
+                <button key={i.id} onClick={() => setEditando(i)} title="Clique para alterar horário ou remover"
+                  className={`mb-1 block w-full truncate rounded px-1 py-0.5 text-left ${tipo(i.tipo).cor} ${editando?.id === i.id ? "ring-2 ring-blue-600" : ""}`}>
                   {tipo(i.tipo).rotulo}{i.inicio ? ` ${i.inicio.slice(0, 5)}` : ""}{i.fim ? `–${i.fim.slice(0, 5)}` : ""}
                 </button>
               ))}

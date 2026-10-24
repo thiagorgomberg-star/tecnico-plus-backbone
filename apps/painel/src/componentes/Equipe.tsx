@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 
 type Membro = {
   id: string; nome: string; cargo: string | null; matricula: string | null; papel: string; ativo: boolean;
-  inicio_jornada: string; fim_jornada: string; regime_horas: "hora_extra" | "banco_horas";
+  inicio_jornada: string; fim_jornada: string; fim_jornada_sexta: string; regime_horas: "hora_extra" | "banco_horas";
 };
 
 export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
@@ -18,7 +18,7 @@ export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
   const recarregar = useCallback(() => { setVersao((v) => v + 1); aoMudar(); }, [aoMudar]);
 
   useEffect(() => {
-    supabase.from("usuarios").select("id, nome, cargo, matricula, papel, ativo, inicio_jornada, fim_jornada, regime_horas").order("nome")
+    supabase.from("usuarios").select("id, nome, cargo, matricula, papel, ativo, inicio_jornada, fim_jornada, fim_jornada_sexta, regime_horas").order("nome")
       .then(({ data }) => setMembros(data ?? []));
   }, [versao]);
 
@@ -69,12 +69,15 @@ export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
               onBlur={(e) => e.target.value !== (m.cargo ?? "") && atualizar(m, { cargo: e.target.value || null })} />
             {m.papel === "tecnico" && (
               <label className="flex items-center gap-1 text-gray-600">
-                Jornada
-                <input type="time" className="rounded border border-gray-200 px-1 py-1" defaultValue={m.inicio_jornada.slice(0, 5)}
+                Seg–Qui
+                <input type="time" className="rounded border border-gray-200 px-1 py-1" defaultValue={m.inicio_jornada.slice(0, 5)} title="Entrada"
                   onBlur={(e) => e.target.value && e.target.value !== m.inicio_jornada.slice(0, 5) && atualizar(m, { inicio_jornada: e.target.value })} />
                 às
-                <input type="time" className="rounded border border-gray-200 px-1 py-1" defaultValue={m.fim_jornada.slice(0, 5)}
+                <input type="time" className="rounded border border-gray-200 px-1 py-1" defaultValue={m.fim_jornada.slice(0, 5)} title="Saída de segunda a quinta"
                   onBlur={(e) => e.target.value && e.target.value !== m.fim_jornada.slice(0, 5) && atualizar(m, { fim_jornada: e.target.value })} />
+                · Sex até
+                <input type="time" className="rounded border border-gray-200 px-1 py-1" defaultValue={m.fim_jornada_sexta.slice(0, 5)} title="Saída na sexta"
+                  onBlur={(e) => e.target.value && e.target.value !== m.fim_jornada_sexta.slice(0, 5) && atualizar(m, { fim_jornada_sexta: e.target.value })} />
               </label>
             )}
             {m.papel === "tecnico" && (
