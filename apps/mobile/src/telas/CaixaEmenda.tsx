@@ -7,7 +7,7 @@ import { Caixa, caixasDaRede, proximaTag, salvarCaixa } from '../lib/caixas';
 import { cores } from '../lib/estilo';
 import {
   calcularPlano, CAPACIDADES, CaixaRede, descreverFibra, faixasDaBandeja, FUSOES_POR_BANDEJA, herdarDaAnterior, Manobra, rotuloPonto,
-  separarBandejas, SituacaoFibra, TIPOS_PONTO,
+  ehPonta, INSTALACOES, separarBandejas, SituacaoFibra, TIPOS_PONTO,
 } from '../lib/fusao';
 import { aoMudarFila, itensPendentes } from '../lib/fila';
 import { enderecoDe, posicaoAtual } from '../lib/localizacao';
@@ -47,13 +47,15 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const [capturando, setCapturando] = useState(false);
   const [gruposEditados, setGruposEditados] = useState(!!inicial);
   const [manobra, setManobra] = useState({ entrada: '', saida: 1, fibra: '', motivo: '' });
-  const [fibra, setFibra] = useState({ numero: '', cliente: '', semPotencia: false, potencia: '', reflexao: '', perda: '' });
+  const FIBRA_VAZIA = { numero: '', cliente: '', semPotencia: false, potencia: '', reflexao: '', perda: '', posicao: '', tx: '', rx: '' };
+  const [fibra, setFibra] = useState(FIBRA_VAZIA);
   const [camera, setCamera] = useState<Camera | null>(null);
   // Fotos já tiradas: da caixa, da tela do OTDR por fibra e de cada bandeja (enviadas + na fila).
   const [fotos, setFotos] = useState<{ caixa: number; otdr: Record<number, number>; bandeja: Record<number, number> }>({ caixa: 0, otdr: {}, bandeja: {} });
   const [salvando, setSalvando] = useState(false);
   const enderecoAuto = useRef('');
-  const ehPonta = c.tipo === 'dgo' || c.tipo === 'entroncamento';
+  const ponta = ehPonta(c.tipo);
+  const dgo = c.tipo === 'dgo';
 
   const mudar = (campos: Partial<Caixa>) => setC((x) => ({ ...x, ...campos }));
 
@@ -149,25 +151,34 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   function adicionarFibra() {
     const n = numero(fibra.numero);
     if (!n || n > c.capacidade_fibras) return Alert.alert('Fibra inválida', `De 1 a ${c.capacidade_fibras}.`);
-    const potencia = ehPonta ? numero(fibra.potencia) : null;
-    const reflexao = ehPonta ? numero(fibra.reflexao) : null;
-    const perda = ehPonta ? numero(fibra.perda) : null;
-    if (ehPonta && !fibra.semPotencia && (potencia == null || reflexao == null || perda == null)) {
-      return Alert.alert('Medição do OTDR', 'Na ponta informe sinal (dBm), reflexão (dB) e perda (dB/km) da fibra, ou marque sem potência.');
+    const potencia = ponta && !dgo ? numero(fibra.potencia) : null;
+    const reflexao = ponta ? numero(fibra.reflexao) : null;
+    const perda = ponta ? numero(fibra.perda) : null;
+    // No DGO a potência é TX/RX e opcional; o sinal só é obrigatório nas outras pontas.
+    if (ponta && !fibra.semPotencia && ((!dgo && potencia == null) || reflexao == null || perda == null)) {
+      return Alert.alert('Medição do OTDR', dgo
+        ? 'No DGO informe reflexão (dB) e perda (dB/km) da fibra, ou marque sem potência. TX/RX são opcionais.'
+        : 'Na ponta informe sinal (dBm), reflexão (dB) e perda (dB/km) da fibra, ou marque sem potência.');
     }
-    if (!ehPonta && !fibra.cliente.trim() && !fibra.semPotencia) return Alert.alert('Informe o cliente ou marque sem potência');
+    if (dgo && !fibra.posicao.trim()) return Alert.alert('Informe a posição da fibra no DGO', 'Ex.: DIO 2 · posição 14');
+    if (!ponta && !fibra.cliente.trim() && !fibra.semPotencia) return Alert.alert('Informe o cliente ou marque sem potência');
     const f: SituacaoFibra = {
       fibra: n, cliente: fibra.cliente.trim() || null, sem_potencia: fibra.semPotencia,
       potencia_dbm: potencia, reflexao_db: reflexao, perda_db_km: perda,
+      posicao_dgo: dgo ? fibra.posicao.trim() : null,
+      potencia_tx_dbm: dgo ? numero(fibra.tx) : null, potencia_rx_dbm: dgo ? numero(fibra.rx) : null,
     };
     mudar({ fibras: [...c.fibras.filter((x) => x.fibra !== n), f].sort((a, b) => a.fibra - b.fibra) });
-    setFibra({ numero: '', cliente: '', semPotencia: false, potencia: '', reflexao: '', perda: '' });
+    setFibra({ ...FIBRA_VAZIA, numero: '' });
   }
 
   async function salvar() {
     const identificacao = tagAuto ?? c.identificacao.trim();
     if (!identificacao) return Alert.alert('Informe a identificação', 'Ex.: CE-BKB-0006');
     if (origemTipo === 'dgo' && !c.origem_dgo?.trim()) return Alert.alert('Informe o DGO de origem');
+    if (c.tipo === 'site' && !c.parceiro?.trim()) return Alert.alert('Informe o parceiro do site');
+    if (dgo && !c.bastidor?.trim()) return Alert.alert('Informe o bastidor do DGO');
+    if ((c.tipo === 'emenda' || c.tipo === 'entroncamento') && !c.instalacao) return Alert.alert('Informe se a caixa é aérea ou subterrânea');
     if (c.latitude == null && !(await new Promise<boolean>((ok) => Alert.alert('Sem localização', 'Salvar mesmo assim?', [
       { text: 'Capturar', onPress: () => ok(false) }, { text: 'Salvar', onPress: () => ok(true) }])))) return;
     setSalvando(true);
@@ -179,14 +190,14 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
       origem_saida: origemTipo === 'caixa' ? c.origem_saida : null,
       origem_dgo: origemTipo === 'dgo' ? c.origem_dgo?.trim() || null : null,
       origem: origemTipo === 'caixa' ? anterior?.identificacao ?? c.origem : origemTipo === 'dgo' ? `DGO ${c.origem_dgo}` : null,
-      fibras: ehPonta ? c.fibras : c.fibras.map((f) => ({ ...f, potencia_dbm: null, reflexao_db: null, perda_db_km: null })),
+      fibras: ponta ? c.fibras : c.fibras.map((f) => ({ ...f, potencia_dbm: null, reflexao_db: null, perda_db_km: null })),
     };
     await salvarCaixa(final, nova);
     setC(final);
     setSalvando(false);
     if (nova) {
       setNova(false);
-      Alert.alert('Caixa salva', ehPonta
+      Alert.alert('Caixa salva', ponta
         ? 'Agora tire as fotos da caixa, de cada bandeja e a foto da tela do OTDR de cada fibra medida.'
         : 'Agora tire as fotos da caixa e de cada bandeja com as fibras acomodadas.');
     } else voltar();
@@ -218,6 +229,32 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
             <TextInput style={s.campo} value={c.identificacao} onChangeText={(t) => mudar({ identificacao: t })}
               autoCapitalize="characters" placeholder="Ex.: CE-BKB-0006" />
           )}
+          {c.tipo === 'emenda' || c.tipo === 'entroncamento' ? (
+            <>
+              <Text style={s.rotulo}>INSTALAÇÃO</Text>
+              <View style={s.chips}>
+                {INSTALACOES.map((t) => (
+                  <Pressable key={t.valor} style={chip(c.instalacao === t.valor)} onPress={() => mudar({ instalacao: t.valor })}>
+                    <Text style={textoChip(c.instalacao === t.valor)}>{t.rotulo}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          ) : null}
+          {dgo ? (
+            <>
+              <Text style={s.rotulo}>BASTIDOR *</Text>
+              <TextInput style={s.campo} value={c.bastidor ?? ''} onChangeText={(t) => mudar({ bastidor: t })}
+                placeholder="Ex.: Sala 2 · Bastidor B03" />
+            </>
+          ) : null}
+          {c.tipo === 'site' ? (
+            <>
+              <Text style={s.rotulo}>PARCEIRO *</Text>
+              <TextInput style={s.campo} value={c.parceiro ?? ''} onChangeText={(t) => mudar({ parceiro: t })}
+                placeholder="Ex.: Claro, Vivo, TIM" />
+            </>
+          ) : null}
         </View>
 
         <View style={s.bloco}>
@@ -391,7 +428,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
         </View>
 
         <View style={s.bloco}>
-          <Text style={s.rotulo}>{ehPonta ? 'FIBRAS: CLIENTE, SINAL E SEM POTÊNCIA' : 'FIBRAS: CLIENTE E SEM POTÊNCIA'} ({c.fibras.length})</Text>
+          <Text style={s.rotulo}>{dgo ? 'FIBRAS: CLIENTE, POSIÇÃO NO DGO E OTDR' : ponta ? 'FIBRAS: CLIENTE, SINAL E SEM POTÊNCIA' : 'FIBRAS: CLIENTE E SEM POTÊNCIA'} ({c.fibras.length})</Text>
           {c.fibras.map((f) => (
             <View key={f.fibra} style={s.linha}>
               <View style={{ flex: 1 }}>
@@ -399,12 +436,17 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
                 <Text style={[s.suave, f.sem_potencia && { color: cores.perigo, fontWeight: '700' }]}>
                   {[f.cliente, f.sem_potencia ? 'SEM POTÊNCIA' : null].filter(Boolean).join(' · ')}
                 </Text>
-                {ehPonta && !f.sem_potencia ? (
+                {dgo ? (
                   <Text style={s.suave}>
-                    Sinal {f.potencia_dbm ?? '—'} dBm · Reflexão {f.reflexao_db ?? '—'} dB · Perda {f.perda_db_km ?? '—'} dB/km
+                    Posição {f.posicao_dgo || '—'}{f.potencia_tx_dbm != null ? ` · TX ${f.potencia_tx_dbm} dBm` : ''}{f.potencia_rx_dbm != null ? ` · RX ${f.potencia_rx_dbm} dBm` : ''}
                   </Text>
                 ) : null}
-                {ehPonta && !f.sem_potencia ? (
+                {ponta && !f.sem_potencia ? (
+                  <Text style={s.suave}>
+                    {dgo ? '' : `Sinal ${f.potencia_dbm ?? '—'} dBm · `}Reflexão {f.reflexao_db ?? '—'} dB · Perda {f.perda_db_km ?? '—'} dB/km
+                  </Text>
+                ) : null}
+                {ponta && !f.sem_potencia ? (
                   <Pressable disabled={nova} onPress={() => setCamera({ tipo: 'foto_otdr', fibra: f.fibra, titulo: `OTDR · fibra ${f.fibra}`, feitas: fotos.otdr[f.fibra] ?? 0 })}>
                     <Text style={{ color: fotos.otdr[f.fibra] ? cores.sucesso : nova ? cores.suave : cores.perigo, fontWeight: '700', marginTop: 4 }}>
                       {fotos.otdr[f.fibra] ? `✓ Foto do OTDR (${fotos.otdr[f.fibra]}) · tirar outra` : nova ? 'Foto do OTDR: salve a caixa primeiro' : '📷 Falta a foto do OTDR · tirar'}
@@ -425,10 +467,22 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
             <Text style={s.texto}>Sem potência</Text>
             <Switch value={fibra.semPotencia} onValueChange={(v) => setFibra({ ...fibra, semPotencia: v })} />
           </View>
-          {ehPonta ? (
+          {dgo ? (
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TextInput style={[s.campo, { flex: 1 }]} keyboardType="numbers-and-punctuation" placeholder="Sinal dBm"
-                value={fibra.potencia} onChangeText={(t) => setFibra({ ...fibra, potencia: t })} />
+              <TextInput style={[s.campo, { flex: 1.4 }]} placeholder="Posição no DGO *" value={fibra.posicao}
+                onChangeText={(t) => setFibra({ ...fibra, posicao: t })} />
+              <TextInput style={[s.campo, { flex: 1 }]} keyboardType="numbers-and-punctuation" placeholder="TX dBm"
+                value={fibra.tx} onChangeText={(t) => setFibra({ ...fibra, tx: t })} />
+              <TextInput style={[s.campo, { flex: 1 }]} keyboardType="numbers-and-punctuation" placeholder="RX dBm"
+                value={fibra.rx} onChangeText={(t) => setFibra({ ...fibra, rx: t })} />
+            </View>
+          ) : null}
+          {ponta ? (
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {dgo ? null : (
+                <TextInput style={[s.campo, { flex: 1 }]} keyboardType="numbers-and-punctuation" placeholder="Sinal dBm"
+                  value={fibra.potencia} onChangeText={(t) => setFibra({ ...fibra, potencia: t })} />
+              )}
               <TextInput style={[s.campo, { flex: 1 }]} keyboardType="numbers-and-punctuation" placeholder="Reflexão dB"
                 value={fibra.reflexao} onChangeText={(t) => setFibra({ ...fibra, reflexao: t })} />
               <TextInput style={[s.campo, { flex: 1 }]} keyboardType="numbers-and-punctuation" placeholder="Perda dB/km"
@@ -447,9 +501,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           {!nova ? (
             <Pressable style={[s.botao, { backgroundColor: cores.primaria }]}
               onPress={() => setCamera({ tipo: 'foto_caixa', titulo: c.identificacao, feitas: fotos.caixa })}>
-              <Text style={s.botaoTexto}>Fotos da caixa ({fotos.caixa})</Text>
+              <Text style={s.botaoTexto}>{dgo ? 'Fotos do DGO' : 'Fotos da acomodação da caixa'} ({fotos.caixa})</Text>
             </Pressable>
-          ) : <Text style={s.suave}>Depois de salvar, tire as fotos da caixa{ehPonta ? ' e do OTDR' : ''}.</Text>}
+          ) : <Text style={s.suave}>Depois de salvar, tire as fotos da acomodação da caixa{ponta ? ' e do OTDR' : ''}.</Text>}
         </View>
       </ScrollView>
       <Modal visible={!!camera} onRequestClose={() => setCamera(null)} animationType="fade" supportedOrientations={['landscape', 'portrait']}>

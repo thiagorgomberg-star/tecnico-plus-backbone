@@ -6,7 +6,7 @@ import * as Sharing from 'expo-sharing';
 
 import { Caixa } from './caixas';
 import { itensPendentes } from './fila';
-import { calcularPlano, descreverFibra, faixasDaBandeja, rotuloPonto, separarBandejas, svgMapaFusao } from './fusao';
+import { calcularPlano, descreverFibra, ehPonta, faixasDaBandeja, rotuloInstalacao, rotuloPonto, separarBandejas, svgMapaFusao } from './fusao';
 import { supabase } from './supabase';
 import { OrdemServico, rotuloStatus } from './tipos';
 
@@ -104,31 +104,36 @@ export async function compartilharRelatorio(os: OrdemServico) {
   const assinatura = [...fotos].reverse().find((f) => f.tipo === 'assinatura');
   const secaoCaixas = caixas.map((c) => {
     const plano = calcularPlano(c);
-    const ponta = c.tipo === 'dgo' || c.tipo === 'entroncamento';
+    const ponta = ehPonta(c.tipo);
+    const dgo = c.tipo === 'dgo';
     const daCaixa = fotos.filter((f) => f.caixaId === c.id);
     const manobras = c.manobras.map((m) =>
       `<tr><td>${esc(descreverFibra(m.fibra_entrada, c.capacidade_fibras))}</td><td>Saída ${m.saida}: ${esc(descreverFibra(m.fibra_saida, c.saidas[m.saida - 1] ?? c.capacidade_fibras))}</td><td>${esc(m.motivo ?? '—')}</td></tr>`).join('');
     const fibras = c.fibras.map((f) =>
       `<tr><td>${esc(descreverFibra(f.fibra, c.capacidade_fibras))}</td><td>${esc(f.cliente ?? '—')}</td>` +
-      (ponta ? `<td>${f.potencia_dbm ?? '—'}</td><td>${f.reflexao_db ?? '—'}</td><td>${f.perda_db_km ?? '—'}</td>` : '') +
+      (dgo ? `<td>${esc(f.posicao_dgo ?? '—')}</td><td>${f.potencia_tx_dbm ?? '—'}</td><td>${f.potencia_rx_dbm ?? '—'}</td>`
+        : ponta ? `<td>${f.potencia_dbm ?? '—'}</td>` : '') +
+      (ponta ? `<td>${f.reflexao_db ?? '—'}</td><td>${f.perda_db_km ?? '—'}</td>` : '') +
       `<td>${f.sem_potencia ? '<b style="color:#dc2626">SEM POTÊNCIA</b>' : 'OK'}</td></tr>`).join('');
     return `<div style="break-inside:avoid-page">
-      <h2>${esc(rotuloPonto(c.tipo))} ${esc(c.identificacao)}</h2>
+      <h2>${esc(rotuloPonto(c.tipo))} ${esc(c.identificacao)}${rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ''}${c.parceiro ? ` · ${esc(c.parceiro)}` : ''}</h2>
       <div class="g">
         <div><div class="l">Vem de</div>${esc(c.origem ?? '—')}</div>
         <div><div class="l">Localização</div>${c.latitude != null ? `${c.latitude.toFixed(6)}, ${c.longitude!.toFixed(6)}` : '—'}</div>
+        ${c.bastidor ? `<div><div class="l">Bastidor</div>${esc(c.bastidor)}</div>` : ''}
+        ${c.parceiro ? `<div><div class="l">Parceiro</div>${esc(c.parceiro)}</div>` : ''}
         <div style="grid-column: span 2"><div class="l">Endereço</div>${esc(c.endereco ?? '—')}</div>
         <div><div class="l">Plano de fusão</div>${c.capacidade_fibras} FO → ${c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO`).join(', ') || '—'}</div>
         <div><div class="l">Grupos</div>${c.grupos_fusionados} fusionados · ${c.grupos_vagos} vagos · ${plano.param} fibras param aqui</div>
       </div>
       ${c.observacao ? `<p><span class="l">Observação:</span> ${esc(c.observacao)}</p>` : ''}
       ${manobras ? `<p class="l" style="margin-top:8px">Manobras</p><table><tr class="l"><td>Fibra de entrada</td><td>Ligada a</td><td>Motivo</td></tr>${manobras}</table>` : ''}
-      ${fibras ? `<p class="l" style="margin-top:8px">Fibras</p><table><tr class="l"><td>Fibra</td><td>Cliente</td>${ponta ? '<td>Sinal dBm</td><td>Reflexão dB</td><td>Perda dB/km</td>' : ''}<td>Situação</td></tr>${fibras}</table>` : ''}
+      ${fibras ? `<p class="l" style="margin-top:8px">Fibras</p><table><tr class="l"><td>Fibra</td><td>Cliente</td>${dgo ? '<td>Posição DGO</td><td>TX dBm</td><td>RX dBm</td>' : ponta ? '<td>Sinal dBm</td>' : ''}${ponta ? '<td>Reflexão dB</td><td>Perda dB/km</td>' : ''}<td>Situação</td></tr>${fibras}</table>` : ''}
       ${c.saidas.length ? `<div style="margin-top:8px">${svgMapaFusao(c)}</div>` : ''}
       ${separarBandejas(c).length ? `<p class="l" style="margin-top:8px">Bandejas (${c.fusoes_por_bandeja || 12} fusões por bandeja)</p><table><tr class="l"><td>Bandeja</td><td>Fusões</td><td>Fibras de entrada</td></tr>${
         separarBandejas(c).map((b) => `<tr><td>Bandeja ${b.numero}</td><td>${b.ligacoes.length}</td><td>${esc(faixasDaBandeja(b))}</td></tr>`).join('')}</table>` : ''}
       ${daCaixa.length ? `<div class="fotos" style="margin-top:8px">${daCaixa.map((f) =>
-        `<figure><img src="${f.src}"><figcaption>${f.tipo === 'foto_otdr' ? `OTDR · fibra ${f.fibra}` : f.tipo === 'foto_bandeja' ? `Bandeja ${f.bandeja} · fibras acomodadas` : 'Caixa'} · ${quando(f.tiradaEm)}</figcaption></figure>`).join('')}</div>` : ''}
+        `<figure><img src="${f.src}"><figcaption>${f.tipo === 'foto_otdr' ? `OTDR · fibra ${f.fibra}` : f.tipo === 'foto_bandeja' ? `Bandeja ${f.bandeja} · fibras acomodadas` : dgo ? 'DGO' : 'Acomodação da caixa'} · ${quando(f.tiradaEm)}</figcaption></figure>`).join('')}</div>` : ''}
     </div>`;
   }).join('');
 

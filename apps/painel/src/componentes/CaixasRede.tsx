@@ -3,32 +3,59 @@
 import { useEffect, useMemo, useState } from "react";
 
 import CaixaDetalhe, { CaixaPainel, ehPonta, origemDe } from "@/componentes/CaixaDetalhe";
-import { clienteDoCaminho, descreverFibra, faixasDaBandeja, rastrearFibra, rotuloPonto, separarBandejas } from "@/lib/fusao";
+import { clienteDoCaminho, descreverFibra, faixasDaBandeja, FotoKmz, htmlFotosKmz, htmlPreviaPlano, rastrearFibra, rotuloInstalacao, rotuloPonto, separarBandejas } from "@/lib/fusao";
 import { supabase } from "@/lib/supabase";
 
 const esc = (t: unknown) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-// KMZ com um pin por caixa / DGO e, na descrição, o plano de fusão, manobras e clientes.
+// Fotos da acomodação e das bandejas de cada caixa, copiadas para dentro do KMZ (pasta files/).
+async function fotosParaKmz(caixas: CaixaPainel[], zip: { file: (nome: string, dados: Blob) => unknown }) {
+  const porCaixa: Record<string, FotoKmz[]> = {};
+  const tag = new Map(caixas.map((c) => [c.id, c.identificacao.replace(/[^A-Za-z0-9_-]+/g, "_")]));
+  const ids = [...tag.keys()];
+  const tipoDe = new Map(caixas.map((c) => [c.id, c.tipo]));
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data: anexos } = await supabase.from("os_anexos").select("caminho_arquivo, tipo, caixa_id, bandeja")
+      .in("caixa_id", ids.slice(i, i + 100)).in("tipo", ["foto_caixa", "foto_bandeja"]).order("tipo").order("bandeja").order("criado_em");
+    if (!anexos?.length) continue;
+    const { data: urls } = await supabase.storage.from("os-anexos").createSignedUrls(anexos.map((a) => a.caminho_arquivo), 600);
+    const blobs = await Promise.all((urls ?? []).map((u) => (u.signedUrl
+      ? fetch(u.signedUrl).then((r) => (r.ok ? r.blob() : null)).catch(() => null) : null)));
+    blobs.forEach((b, j) => {
+      if (!b) return;
+      const a = anexos[j];
+      const lista = (porCaixa[a.caixa_id] ??= []);
+      const nome = `files/${tag.get(a.caixa_id)}-${a.tipo === "foto_bandeja" ? `B${a.bandeja ?? 0}` : "caixa"}-${lista.length + 1}.jpg`;
+      zip.file(nome, b);
+      lista.push({ arquivo: nome, legenda: a.tipo === "foto_bandeja" ? `Bandeja ${a.bandeja ?? "?"} · fibras acomodadas` : tipoDe.get(a.caixa_id) === "dgo" ? "DGO" : "Acomodação da caixa" });
+    });
+  }
+  return porCaixa;
+}
+
+// KMZ com um pin por caixa / DGO / site de parceiro e, na descrição, a prévia do plano de fusão com os clientes.
 export async function baixarKmz(caixas: CaixaPainel[], arquivo = `caixas-emenda-${new Date().toISOString().slice(0, 10)}`) {
-  const estilos = { emenda: "ff00a5ff", entroncamento: "ff0000ff", dgo: "ffff0000" } as Record<string, string>;
+  const JSZip = (await import("jszip")).default;
+  const zip = new JSZip();
+  const fotos = await fotosParaKmz(caixas.filter((c) => c.latitude != null), zip);
+  const estilos = { emenda: "ff00a5ff", entroncamento: "ff0000ff", dgo: "ffff0000", site: "ff00b000" } as Record<string, string>;
   const pins = caixas.filter((c) => c.latitude != null).map((c) => {
     const linhas = [
-      `${rotuloPonto(c.tipo)} · O.S. ${c.os_numero}${c.trecho ? ` · ${c.trecho}` : ""}`,
+      `${rotuloPonto(c.tipo)}${rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ""} · O.S. ${c.os_numero}${c.trecho ? ` · ${c.trecho}` : ""}`,
+      c.parceiro ? `Parceiro: ${c.parceiro}` : null,
+      c.bastidor ? `Bastidor: ${c.bastidor}` : null,
       origemDe(c) ? `Vem de: ${origemDe(c)}${c.origem_saida ? ` (saída ${c.origem_saida})` : ""}` : null,
       `Entrada ${c.capacidade_fibras} FO → ${c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO`).join(", ") || "sem saída"}`,
       `Grupos: ${c.grupos_fusionados} fusionados, ${c.grupos_vagos} vagos`,
-      ...separarBandejas(c).map((b) => `Bandeja ${b.numero}: ${b.ligacoes.length} fusões (${faixasDaBandeja(b)})`),
+      ...(c.tipo === "dgo" ? [] : separarBandejas(c)).map((b) => `Bandeja ${b.numero}: ${b.ligacoes.length} fusões (${faixasDaBandeja(b)})`),
       ...c.manobras.map((m) => `Manobra: ${descreverFibra(m.fibra_entrada, c.capacidade_fibras)} → Saída ${m.saida} FO ${m.fibra_saida}${m.motivo ? ` (${m.motivo})` : ""}`),
-      ...(c.fibras ?? []).map((f) => `Fibra ${f.fibra}: ${[f.cliente, f.sem_potencia ? "SEM POTÊNCIA" : null,
-        f.potencia_dbm != null ? `${f.potencia_dbm} dBm` : null, f.reflexao_db != null ? `reflexão ${f.reflexao_db} dB` : null,
-        f.perda_db_km != null ? `${f.perda_db_km} dB/km` : null].filter(Boolean).join(" · ")}`),
       c.observacao ? `Obs.: ${c.observacao}` : null,
       c.tecnico ? `Técnico: ${c.tecnico}` : null,
     ].filter(Boolean);
     return `    <Placemark>
       <name>${esc(c.identificacao)}</name>
       <styleUrl>#${c.tipo}</styleUrl>
-      <description><![CDATA[${linhas.map(esc).join("<br>")}]]></description>
+      <description><![CDATA[${linhas.map(esc).join("<br>")}${htmlPreviaPlano(c)}${htmlFotosKmz(fotos[c.id] ?? [])}]]></description>
       <Point><coordinates>${c.longitude},${c.latitude},0</coordinates></Point>
     </Placemark>`;
   });
@@ -41,8 +68,6 @@ ${pins.join("\n")}
   </Document>
 </kml>
 `;
-  const JSZip = (await import("jszip")).default;
-  const zip = new JSZip();
   zip.file("doc.kml", kml);
   const blob = await zip.generateAsync({ type: "blob", mimeType: "application/vnd.google-earth.kmz" });
   const url = URL.createObjectURL(blob);

@@ -18,6 +18,9 @@ export type Caixa = CaixaRede & {
   localizada_em: string | null;
   manobras: Manobra[];
   fibras: SituacaoFibra[];
+  parceiro?: string | null;
+  instalacao?: string | null;
+  bastidor?: string | null;
 };
 
 const chaveOs = (osId: string) => `caixas-os-${osId}`;
@@ -33,7 +36,7 @@ async function ler<T>(chave: string, padrao: T): Promise<T> {
 }
 
 const CAMPOS = 'id, os_id, tipo, identificacao, capacidade_fibras, saidas, grupos_fusionados, grupos_vagos, observacao, endereco, ' +
-  'latitude, longitude, precisao_m, localizada_em, origem_caixa_id, origem_saida, origem_dgo, origem_identificacao, manobras, fibras, fusoes_por_bandeja';
+  'latitude, longitude, precisao_m, localizada_em, origem_caixa_id, origem_saida, origem_dgo, origem_identificacao, manobras, fibras, fusoes_por_bandeja, parceiro, instalacao, bastidor';
 
 // Caixas da O.S.: na hora vem do celular; com internet atualiza do servidor (sem perder o que ainda está na fila).
 export async function caixasDaOs(osId: string, aoAtualizar: (c: Caixa[]) => void) {
@@ -57,7 +60,7 @@ export async function caixasAtuais(osId: string) {
 }
 
 // Próxima TAG automática (CE-BKB-0001...) olhando as caixas conhecidas no celular; o servidor confirma ao sincronizar.
-export const PREFIXO_TAG: Record<string, string> = { emenda: 'CE-BKB-', entroncamento: 'ENT-BKB-', dgo: 'DGO-BKB-' };
+export const PREFIXO_TAG: Record<string, string> = { emenda: 'CE-BKB-', entroncamento: 'ENT-BKB-', dgo: 'DGO-BKB-', site: 'SITE-BKB-' };
 export function proximaTag(tipo: string, conhecidas: { identificacao: string }[]) {
   const prefixo = PREFIXO_TAG[tipo] ?? PREFIXO_TAG.emenda;
   const maior = conhecidas.reduce((m, c) => {
@@ -90,6 +93,9 @@ export async function salvarCaixa(caixa: Caixa, nova: boolean) {
     grupos_fusionados: caixa.grupos_fusionados,
     grupos_vagos: caixa.grupos_vagos,
     fusoes_por_bandeja: caixa.fusoes_por_bandeja || 12,
+    parceiro: caixa.tipo === 'site' ? caixa.parceiro?.trim() || null : null,
+    bastidor: caixa.tipo === 'dgo' ? caixa.bastidor?.trim() || null : null,
+    instalacao: caixa.tipo === 'emenda' || caixa.tipo === 'entroncamento' ? caixa.instalacao ?? null : null,
     observacao: caixa.observacao,
     endereco: caixa.endereco,
     posicao: caixa.latitude != null && caixa.longitude != null ? ponto(caixa.latitude, caixa.longitude) : null,
@@ -112,12 +118,14 @@ export async function salvarCaixa(caixa: Caixa, nova: boolean) {
       linhas: caixa.manobras.map((m) => ({ caixa_id: caixa.id, fibra_entrada: m.fibra_entrada, saida: m.saida, fibra_saida: m.fibra_saida, motivo: m.motivo || null })),
     });
   }
-  const fibras = caixa.fibras.filter((f) => f.cliente || f.sem_potencia || f.potencia_dbm != null || f.reflexao_db != null || f.perda_db_km != null);
+  const fibras = caixa.fibras.filter((f) => f.cliente || f.sem_potencia || f.potencia_dbm != null || f.reflexao_db != null || f.perda_db_km != null
+    || f.posicao_dgo || f.potencia_tx_dbm != null || f.potencia_rx_dbm != null);
   if (fibras.length) {
     await enfileirar({
       tipo: 'inserirVarios', tabela: 'caixa_fibras',
       linhas: fibras.map((f) => ({ caixa_id: caixa.id, fibra: f.fibra, cliente: f.cliente || null, sem_potencia: f.sem_potencia,
-        potencia_dbm: f.potencia_dbm ?? null, reflexao_db: f.reflexao_db ?? null, perda_db_km: f.perda_db_km ?? null })),
+        potencia_dbm: f.potencia_dbm ?? null, reflexao_db: f.reflexao_db ?? null, perda_db_km: f.perda_db_km ?? null,
+        posicao_dgo: f.posicao_dgo || null, potencia_tx_dbm: f.potencia_tx_dbm ?? null, potencia_rx_dbm: f.potencia_rx_dbm ?? null })),
     });
   }
 }

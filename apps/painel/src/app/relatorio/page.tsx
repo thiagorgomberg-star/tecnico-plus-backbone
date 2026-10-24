@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import type { CaixaPainel } from "@/componentes/CaixaDetalhe";
-import { calcularPlano, descreverFibra, faixasDaBandeja, rotuloPonto, separarBandejas, svgMapaFusao } from "@/lib/fusao";
+import { calcularPlano, descreverFibra, ehPonta, faixasDaBandeja, rotuloInstalacao, rotuloPonto, separarBandejas, svgMapaFusao } from "@/lib/fusao";
 import { rotuloStatus, StatusOS } from "@/lib/tipos";
 
 // Relatório do evento aberto pelo link compartilhado com parceiros (sem login).
@@ -170,15 +170,18 @@ function Conteudo() {
       </section>
 
       {(dados.caixas ?? []).map((c) => {
-        const ponta = c.tipo === "dgo" || c.tipo === "entroncamento";
+        const ponta = ehPonta(c.tipo);
+        const dgo = c.tipo === "dgo";
         const plano = calcularPlano(c);
         const daCaixa = dados.fotos.filter((f) => f.caixa_id === c.id);
         return (
           <section key={c.id} className="mt-6">
-            <h2 className={titulo}>{rotuloPonto(c.tipo)} {c.identificacao}</h2>
+            <h2 className={titulo}>{rotuloPonto(c.tipo)} {c.identificacao}{rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ""}{c.parceiro ? ` · ${c.parceiro}` : ""}</h2>
             <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5">
               <div><dt className="text-gray-500">Vem de</dt><dd>{origem(c) ?? "—"}</dd></div>
               <div><dt className="text-gray-500">Localização</dt><dd>{c.latitude != null ? `${c.latitude.toFixed(6)}, ${c.longitude!.toFixed(6)}` : "—"}</dd></div>
+              {c.bastidor ? <div><dt className="text-gray-500">Bastidor</dt><dd>{c.bastidor}</dd></div> : null}
+              {c.parceiro ? <div><dt className="text-gray-500">Parceiro</dt><dd>{c.parceiro}</dd></div> : null}
               <div><dt className="text-gray-500">Plano de fusão</dt><dd>{c.capacidade_fibras} FO → {c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO`).join(", ") || "—"}</dd></div>
               <div><dt className="text-gray-500">Grupos</dt><dd>{c.grupos_fusionados} fusionados · {c.grupos_vagos} vagos · {plano.param} param aqui</dd></div>
             </dl>
@@ -199,14 +202,15 @@ function Conteudo() {
             {(c.fibras ?? []).length > 0 && (
               <table className="mt-3 w-full break-inside-avoid">
                 <thead className="text-left text-xs text-gray-500">
-                  <tr><th>Fibra</th><th>Cliente</th>{ponta && <><th>Sinal dBm</th><th>Reflexão dB</th><th>Perda dB/km</th></>}<th>Situação</th></tr>
+                  <tr><th>Fibra</th><th>Cliente</th>{dgo ? <><th>Posição DGO</th><th>TX dBm</th><th>RX dBm</th></> : ponta && <th>Sinal dBm</th>}{ponta && <><th>Reflexão dB</th><th>Perda dB/km</th></>}<th>Situação</th></tr>
                 </thead>
                 <tbody>
                   {c.fibras!.map((f) => (
                     <tr key={f.fibra} className="border-b border-gray-100">
                       <td className="py-1">{descreverFibra(f.fibra, c.capacidade_fibras)}</td>
                       <td className="py-1">{f.cliente ?? "—"}</td>
-                      {ponta && <><td>{f.potencia_dbm ?? "—"}</td><td>{f.reflexao_db ?? "—"}</td><td>{f.perda_db_km ?? "—"}</td></>}
+                      {dgo ? <><td>{f.posicao_dgo ?? "—"}</td><td>{f.potencia_tx_dbm ?? "—"}</td><td>{f.potencia_rx_dbm ?? "—"}</td></> : ponta && <td>{f.potencia_dbm ?? "—"}</td>}
+                      {ponta && <><td>{f.reflexao_db ?? "—"}</td><td>{f.perda_db_km ?? "—"}</td></>}
                       <td className="py-1">{f.sem_potencia ? <b className="text-red-700">SEM POTÊNCIA</b> : "OK"}</td>
                     </tr>
                   ))}
@@ -236,7 +240,7 @@ function Conteudo() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {f.url ? <img src={f.url} alt="" className="aspect-[4/3] w-full rounded border border-gray-200 object-cover" /> : null}
                     <figcaption className="mt-0.5 text-xs text-gray-500">
-                      {f.tipo === "foto_otdr" ? `OTDR · fibra ${f.fibra}` : f.tipo === "foto_bandeja" ? `Bandeja ${f.bandeja}` : "Caixa"} · {quando(f.tirada_em)}
+                      {f.tipo === "foto_otdr" ? `OTDR · fibra ${f.fibra}` : f.tipo === "foto_bandeja" ? `Bandeja ${f.bandeja} · fibras acomodadas` : dgo ? "DGO" : "Acomodação da caixa"} · {quando(f.tirada_em)}
                     </figcaption>
                   </figure>
                 ))}

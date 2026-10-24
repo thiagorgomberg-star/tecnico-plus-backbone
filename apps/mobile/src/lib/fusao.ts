@@ -5,9 +5,14 @@ export const TIPOS_PONTO = [
   { valor: 'emenda', rotulo: 'Caixa de emenda' },
   { valor: 'entroncamento', rotulo: 'Caixa de entroncamento' },
   { valor: 'dgo', rotulo: 'DGO' },
+  { valor: 'site', rotulo: 'Site de parceiro' },
 ] as const;
 export type TipoPonto = (typeof TIPOS_PONTO)[number]['valor'];
 export const rotuloPonto = (t: string) => TIPOS_PONTO.find((x) => x.valor === t)?.rotulo ?? 'Caixa';
+// Pontas da rede (DGO, entroncamento e site de parceiro): ali se mede sinal e OTDR por fibra.
+export const ehPonta = (t: string) => t === 'dgo' || t === 'entroncamento' || t === 'site';
+export const INSTALACOES = [{ valor: 'aerea', rotulo: 'Aérea' }, { valor: 'subterranea', rotulo: 'Subterrânea' }] as const;
+export const rotuloInstalacao = (t: string | null | undefined) => INSTALACOES.find((x) => x.valor === t)?.rotulo ?? null;
 
 export const CAPACIDADES = [6, 12, 24, 36, 48, 72, 96, 144, 288];
 
@@ -32,6 +37,8 @@ export type SituacaoFibra = {
   fibra: number; cliente: string | null; sem_potencia: boolean;
   // Só nas pontas (DGO / entroncamento), medidos com OTDR:
   potencia_dbm?: number | null; reflexao_db?: number | null; perda_db_km?: number | null;
+  // Só no DGO: posição da fibra no DGO e potência TX/RX (opcionais).
+  posicao_dgo?: string | null; potencia_tx_dbm?: number | null; potencia_rx_dbm?: number | null;
 };
 export type PlanoCaixa = {
   identificacao: string; capacidade_fibras: number; saidas: number[]; manobras: Manobra[];
@@ -131,6 +138,48 @@ export function herdarDaAnterior(anterior: PlanoCaixa, saida: number) {
 }
 
 const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Prévia do plano de fusão para o balão do pin no KMZ (HTML simples, que o Google Earth e o My Maps mostram):
+// as fibras com cliente/parceiro ou manobra, com as cores, para onde vão nesta caixa e a situação.
+export function htmlPreviaPlano(caixa: PlanoCaixa) {
+  const { ligacoes } = calcularPlano(caixa);
+  const destino = new Map(ligacoes.map((l) => [l.entrada, l]));
+  const situacao = new Map((caixa.fibras ?? []).map((f) => [f.fibra, f]));
+  const nums = [...new Set([...situacao.keys(), ...ligacoes.filter((l) => l.manobra).map((l) => l.entrada)])]
+    .filter((n) => n <= caixa.capacidade_fibras).sort((a, b) => a - b);
+  const amostra = (hex: string) => `<td bgcolor="${hex}" style="background:${hex};width:10px;border:1px solid #9ca3af">&nbsp;</td>`;
+  const linhas = nums.map((n) => {
+    const f = fibra(n, caixa.capacidade_fibras);
+    const l = destino.get(n);
+    const s = situacao.get(n);
+    const vai = l ? `Saída ${l.saida} · FO ${l.fibraSaida}${l.manobra ? ' <b style="color:#dc2626">M</b>' : ''}` : 'Termina aqui';
+    const estado = s?.sem_potencia ? '<b style="color:#dc2626">Sem potência</b>'
+      : s?.cliente ? '<b style="color:#15803d">Ativo</b>' : 'Livre';
+    const sinal = [s?.posicao_dgo ? `Pos. ${esc(s.posicao_dgo)}` : null, s?.potencia_dbm != null ? `${s.potencia_dbm} dBm` : null,
+      s?.potencia_tx_dbm != null ? `TX ${s.potencia_tx_dbm}` : null, s?.potencia_rx_dbm != null ? `RX ${s.potencia_rx_dbm}` : null]
+      .filter(Boolean).map((t) => ` · ${t}`).join('');
+    return `<tr>${amostra(f.corTubo.hex)}${amostra(f.corFibra.hex)}<td><b>FO ${n}</b> T${f.tubo}/F${f.posicao}</td>`
+      + `<td>${vai}</td><td>${esc(s?.cliente ?? '')}</td><td>${estado}${sinal}</td></tr>`;
+  });
+  const semCliente = ligacoes.filter((l) => !situacao.has(l.entrada) && !l.manobra).length;
+  const resumo = `${ligacoes.length} fusões · ${nums.filter((n) => situacao.get(n)?.cliente && !situacao.get(n)?.sem_potencia).length} ativas`
+    + (semCliente ? ` · ${semCliente} fusionadas sem cliente` : '');
+  if (!linhas.length) return `<p style="margin:4px 0"><b>Plano de fusão:</b> ${resumo}</p>`;
+  return `<p style="margin:6px 0 2px"><b>Plano de fusão</b> · ${resumo}</p>`
+    + '<table cellpadding="2" cellspacing="0" border="0" style="font-size:11px;border-collapse:collapse">'
+    + '<tr style="color:#6b7280"><td>T</td><td>F</td><td>Fibra entrada</td><td>Vai para</td><td>Cliente / parceiro</td><td>Situação</td></tr>'
+    + linhas.join('') + '</table>';
+}
+
+// Fotos da caixa no balão do pin: os arquivos vão dentro do KMZ (pasta files/), então abrem sem internet no Google Earth.
+export type FotoKmz = { arquivo: string; legenda: string };
+export function htmlFotosKmz(fotos: FotoKmz[]) {
+  if (!fotos.length) return '';
+  const celulas = fotos.map((f) => `<td valign="top" style="padding:0 6px 6px 0"><a href="${f.arquivo}"><img src="${f.arquivo}" width="220"></a><br><small>${esc(f.legenda)}</small></td>`);
+  const linhas: string[] = [];
+  for (let i = 0; i < celulas.length; i += 2) linhas.push(`<tr>${celulas.slice(i, i + 2).join('')}</tr>`);
+  return `<p style="margin:8px 0 2px"><b>Fotos (${fotos.length})</b></p><table cellpadding="0" cellspacing="0" border="0">${linhas.join('')}</table>`;
+}
 
 // Desenho no estilo do mapa de fusão: entrada à esquerda, saídas à direita, só os tubos com fusão.
 export function svgMapaFusao(caixa: PlanoCaixa) {

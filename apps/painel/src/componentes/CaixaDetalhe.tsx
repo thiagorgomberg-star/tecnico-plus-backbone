@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { CaixaRede, calcularPlano, descreverFibra, faixasDaBandeja, rotuloPonto, separarBandejas, svgMapaFusao } from "@/lib/fusao";
+import { CaixaRede, calcularPlano, ehPonta, descreverFibra, faixasDaBandeja, rotuloInstalacao, rotuloPonto, separarBandejas, svgMapaFusao } from "@/lib/fusao";
 import { supabase } from "@/lib/supabase";
 
 export type CaixaPainel = CaixaRede & {
@@ -19,17 +19,21 @@ export type CaixaPainel = CaixaRede & {
   grupos_vagos: number;
   observacao: string | null;
   origem_identificacao: string | null;
+  parceiro?: string | null;
+  instalacao?: string | null;
+  bastidor?: string | null;
 };
 
 type Foto = { id: string; tipo: string; fibra: number | null; bandeja: number | null; url?: string };
 
-export const ehPonta = (tipo: string) => tipo === "dgo" || tipo === "entroncamento";
+export { ehPonta };
 export const origemDe = (c: CaixaPainel) => c.origem_identificacao ?? (c.origem_dgo ? `DGO ${c.origem_dgo}` : null);
 
 // Dados completos de uma caixa: plano, manobras, fibras (cliente / OTDR nas pontas), mapa de fusão e fotos.
 export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
   const [fotos, setFotos] = useState<Foto[]>([]);
   const ponta = ehPonta(c.tipo);
+  const dgo = c.tipo === "dgo";
   const plano = calcularPlano({ ...c, origem: origemDe(c) });
 
   useEffect(() => {
@@ -45,7 +49,7 @@ export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
   return (
     <div className="text-sm">
       <dl className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-        <div><dt className="text-gray-500">Tipo</dt><dd>{rotuloPonto(c.tipo)}</dd></div>
+        <div><dt className="text-gray-500">Tipo</dt><dd>{rotuloPonto(c.tipo)}{rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ""}{c.parceiro ? ` · ${c.parceiro}` : ""}</dd></div>
         <div><dt className="text-gray-500">Vem de</dt><dd>{origemDe(c) ?? "—"}{c.origem_saida ? ` (saída ${c.origem_saida})` : ""}</dd></div>
         <div>
           <dt className="text-gray-500">Localização</dt>
@@ -55,6 +59,7 @@ export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
             </a>
           ) : "—"}</dd>
         </div>
+        {c.bastidor ? <div><dt className="text-gray-500">Bastidor</dt><dd>{c.bastidor}</dd></div> : null}
         <div><dt className="text-gray-500">O.S. / técnico</dt><dd>#{c.os_numero} · {c.tecnico ?? "—"}</dd></div>
         <div className="sm:col-span-2"><dt className="text-gray-500">Endereço</dt><dd>{c.endereco ?? "—"}</dd></div>
         <div>
@@ -88,7 +93,7 @@ export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
           <h4 className="mt-4 font-semibold">Fibras ({c.fibras!.length})</h4>
           <table className="mt-1 w-full">
             <thead className="text-left text-xs text-gray-500">
-              <tr><th>Fibra</th><th>Cliente</th>{ponta && <><th>Sinal dBm</th><th>Reflexão dB</th><th>Perda dB/km</th><th>OTDR</th></>}<th>Situação</th></tr>
+              <tr><th>Fibra</th><th>Cliente</th>{dgo && <><th>Posição DGO</th><th>TX dBm</th><th>RX dBm</th></>}{ponta && <><th>{dgo ? "" : "Sinal dBm"}</th><th>Reflexão dB</th><th>Perda dB/km</th><th>OTDR</th></>}<th>Situação</th></tr>
             </thead>
             <tbody>
               {c.fibras!.map((f) => {
@@ -97,9 +102,16 @@ export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
                   <tr key={f.fibra} className="border-t border-gray-100">
                     <td className="py-1">{descreverFibra(f.fibra, c.capacidade_fibras)}</td>
                     <td className="py-1">{f.cliente ?? "—"}</td>
+                    {dgo && (
+                      <>
+                        <td className="py-1">{f.posicao_dgo ?? "—"}</td>
+                        <td className="py-1">{f.potencia_tx_dbm ?? "—"}</td>
+                        <td className="py-1">{f.potencia_rx_dbm ?? "—"}</td>
+                      </>
+                    )}
                     {ponta && (
                       <>
-                        <td className="py-1">{f.potencia_dbm ?? "—"}</td>
+                        <td className="py-1">{dgo ? "" : f.potencia_dbm ?? "—"}</td>
                         <td className="py-1">{f.reflexao_db ?? "—"}</td>
                         <td className="py-1">{f.perda_db_km ?? "—"}</td>
                         <td className="py-1">
@@ -150,7 +162,7 @@ export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
           {fotos.filter((f) => f.tipo === "foto_caixa").map((f) => (
             <a key={f.id} href={f.url} target="_blank" rel="noreferrer">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={f.url} alt="Foto da caixa" className="aspect-[4/3] w-full rounded border border-gray-200 object-cover" />
+              <img src={f.url} alt={dgo ? "DGO" : "Acomodação da caixa"} className="aspect-[4/3] w-full rounded border border-gray-200 object-cover" />
             </a>
           ))}
         </div>
