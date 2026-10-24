@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import CaixaDetalhe, { CaixaPainel } from "@/componentes/CaixaDetalhe";
 import ExecucaoOS from "@/componentes/ExecucaoOS";
 import { supabase } from "@/lib/supabase";
 import { corStatus, OrdemServico, rotuloStatus, StatusOS } from "@/lib/tipos";
@@ -22,6 +23,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [local, setLocal] = useState<Local | null>(null);
   const [foto, setFoto] = useState<Anexo | null>(null);
+  const [caixas, setCaixas] = useState<CaixaPainel[]>([]);
   const [versao, setVersao] = useState(0);
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
 
@@ -33,6 +35,8 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
       .then(({ data }) => setEventos((data as unknown as Evento[]) ?? []));
     supabase.from("eventos_mapa").select("latitude, longitude, evento_localizado_em, evento_precisao_m").eq("id", inicial.id).maybeSingle()
       .then(({ data }) => setLocal(data));
+    supabase.from("caixas_mapa").select("*").eq("os_id", inicial.id).order("localizada_em")
+      .then(({ data }) => setCaixas((data as unknown as CaixaPainel[]) ?? []));
     supabase.from("os_anexos").select("id, tipo, caminho_arquivo, nome_arquivo, tirada_em, criado_em")
       .eq("os_id", inicial.id).order("criado_em")
       .then(async ({ data }) => {
@@ -50,6 +54,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "os_anexos", filter: filtro }, recarregar)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "os_eventos", filter: filtro }, recarregar)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "ordens_servico", filter: `id=eq.${inicial.id}` }, recarregar)
+      .on("postgres_changes", { event: "*", schema: "public", table: "caixas_emenda", filter: filtro }, recarregar)
       .subscribe();
     return () => {
       supabase.removeChannel(canal);
@@ -121,6 +126,18 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
         </dl>
 
         <ExecucaoOS osId={os.id} responsavelId={os.tecnico_id} />
+
+        {caixas.length > 0 && (
+          <>
+            <h3 className="mt-6 font-semibold">Caixas de emenda ({caixas.length})</h3>
+            {caixas.map((c) => (
+              <details key={c.id} className="mt-2 rounded-lg border border-gray-200 p-3">
+                <summary className="cursor-pointer font-medium">{c.identificacao}</summary>
+                <div className="mt-2"><CaixaDetalhe caixa={c} /></div>
+              </details>
+            ))}
+          </>
+        )}
 
         <h3 className="mt-6 flex items-center gap-2 font-semibold">
           Fotos ({fotos.length})

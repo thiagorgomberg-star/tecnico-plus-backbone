@@ -28,15 +28,17 @@ Deno.serve(async (req) => {
   }
   const osId = link.os_id;
 
-  const [os, eventos, servicos, apoio, anexos, local] = await Promise.all([
+  const [os, eventos, servicos, apoio, anexos, local, caixas] = await Promise.all([
     admin.from("ordens_servico")
       .select("numero, tipo, titulo, descricao, endereco, status, prioridade, ticket_acionamento, ticket_interno, criado_em, enviada_em, iniciada_em, concluida_em, baixada_em, observacao_tecnico, tecnico:usuarios!ordens_servico_tecnico_id_fkey(nome, cargo), rota:rotas(trecho)")
       .eq("id", osId).single(),
     admin.from("os_eventos").select("status_novo, criado_em").eq("os_id", osId).order("criado_em"),
     admin.from("os_servicos_executados").select("quantidade, observacao, item:itens_execucao(nome, unidade, categoria)").eq("os_id", osId).order("lancado_em"),
     admin.from("os_tecnicos_apoio").select("tecnico:usuarios!os_tecnicos_apoio_tecnico_id_fkey(nome)").eq("os_id", osId),
-    admin.from("os_anexos").select("tipo, caminho_arquivo, tirada_em").eq("os_id", osId).in("tipo", ["foto_antes", "foto_depois"]).order("criado_em"),
+    admin.from("os_anexos").select("tipo, caminho_arquivo, tirada_em, caixa_id, fibra").eq("os_id", osId)
+      .in("tipo", ["foto_antes", "foto_depois", "foto_caixa", "foto_otdr"]).order("criado_em"),
     admin.from("eventos_mapa").select("latitude, longitude, evento_localizado_em, evento_precisao_m").eq("id", osId).maybeSingle(),
+    admin.from("caixas_mapa").select("*").eq("os_id", osId).order("localizada_em"),
   ]);
   if (os.error || !os.data) return responder({ erro: "O.S. não encontrada." }, 404);
 
@@ -50,7 +52,10 @@ Deno.serve(async (req) => {
     eventos: eventos.data ?? [],
     servicos: servicos.data ?? [],
     apoio: (apoio.data ?? []).map((a) => (a.tecnico as { nome?: string } | null)?.nome).filter(Boolean),
-    fotos: (anexos.data ?? []).map((a, i) => ({ tirada_em: a.tirada_em, url: urls?.[i]?.signedUrl ?? null })),
+    fotos: (anexos.data ?? []).map((a, i) => ({
+      tirada_em: a.tirada_em, url: urls?.[i]?.signedUrl ?? null, tipo: a.tipo, caixa_id: a.caixa_id, fibra: a.fibra,
+    })),
+    caixas: caixas.data ?? [],
     local: local.data,
     gerado_em: new Date().toISOString(),
   });

@@ -3,6 +3,8 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
+import type { CaixaPainel } from "@/componentes/CaixaDetalhe";
+import { calcularPlano, descreverFibra, rotuloPonto, svgMapaFusao } from "@/lib/fusao";
 import { rotuloStatus, StatusOS } from "@/lib/tipos";
 
 // Relatório do evento aberto pelo link compartilhado com parceiros (sem login).
@@ -20,7 +22,8 @@ type Relatorio = {
   eventos: { status_novo: StatusOS; criado_em: string }[];
   servicos: { quantidade: number; observacao: string | null; item: { nome: string; unidade: string; categoria: string } | null }[];
   apoio: string[];
-  fotos: { tirada_em: string | null; url: string | null }[];
+  fotos: { tirada_em: string | null; url: string | null; tipo?: string; caixa_id?: string | null; fibra?: number | null }[];
+  caixas?: CaixaPainel[];
   local: { latitude: number; longitude: number; evento_localizado_em: string; evento_precisao_m: number | null } | null;
   gerado_em: string;
 };
@@ -53,6 +56,8 @@ function Conteudo() {
   if (!dados) return <p className="p-10 text-center text-gray-500">Carregando relatório...</p>;
 
   const { os, local } = dados;
+  const fotosOs = dados.fotos.filter((f) => !f.tipo || f.tipo === "foto_antes" || f.tipo === "foto_depois");
+  const origem = (c: CaixaPainel) => c.origem_identificacao ?? (c.origem_dgo ? `DGO ${c.origem_dgo}` : null);
   const secao = "mt-6 break-inside-avoid";
   const titulo = "border-b-2 border-[#0572CE] pb-1 text-sm font-bold uppercase tracking-wide text-[#0572CE]";
 
@@ -163,13 +168,77 @@ function Conteudo() {
         </ol>
       </section>
 
+      {(dados.caixas ?? []).map((c) => {
+        const ponta = c.tipo === "dgo" || c.tipo === "entroncamento";
+        const plano = calcularPlano(c);
+        const daCaixa = dados.fotos.filter((f) => f.caixa_id === c.id);
+        return (
+          <section key={c.id} className="mt-6">
+            <h2 className={titulo}>{rotuloPonto(c.tipo)} {c.identificacao}</h2>
+            <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5">
+              <div><dt className="text-gray-500">Vem de</dt><dd>{origem(c) ?? "—"}</dd></div>
+              <div><dt className="text-gray-500">Localização</dt><dd>{c.latitude != null ? `${c.latitude.toFixed(6)}, ${c.longitude!.toFixed(6)}` : "—"}</dd></div>
+              <div><dt className="text-gray-500">Plano de fusão</dt><dd>{c.capacidade_fibras} FO → {c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO`).join(", ") || "—"}</dd></div>
+              <div><dt className="text-gray-500">Grupos</dt><dd>{c.grupos_fusionados} fusionados · {c.grupos_vagos} vagos · {plano.param} param aqui</dd></div>
+            </dl>
+            {c.manobras.length > 0 && (
+              <table className="mt-3 w-full break-inside-avoid">
+                <thead className="text-left text-xs text-gray-500"><tr><th>Manobra · fibra de entrada</th><th>Ligada a</th><th>Motivo</th></tr></thead>
+                <tbody>
+                  {c.manobras.map((m) => (
+                    <tr key={m.fibra_entrada} className="border-b border-gray-100">
+                      <td className="py-1">{descreverFibra(m.fibra_entrada, c.capacidade_fibras)}</td>
+                      <td className="py-1">Saída {m.saida}: {descreverFibra(m.fibra_saida, c.saidas[m.saida - 1] ?? c.capacidade_fibras)}</td>
+                      <td className="py-1">{m.motivo ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {(c.fibras ?? []).length > 0 && (
+              <table className="mt-3 w-full break-inside-avoid">
+                <thead className="text-left text-xs text-gray-500">
+                  <tr><th>Fibra</th><th>Cliente</th>{ponta && <><th>Sinal dBm</th><th>Reflexão dB</th><th>Perda dB/km</th></>}<th>Situação</th></tr>
+                </thead>
+                <tbody>
+                  {c.fibras!.map((f) => (
+                    <tr key={f.fibra} className="border-b border-gray-100">
+                      <td className="py-1">{descreverFibra(f.fibra, c.capacidade_fibras)}</td>
+                      <td className="py-1">{f.cliente ?? "—"}</td>
+                      {ponta && <><td>{f.potencia_dbm ?? "—"}</td><td>{f.reflexao_db ?? "—"}</td><td>{f.perda_db_km ?? "—"}</td></>}
+                      <td className="py-1">{f.sem_potencia ? <b className="text-red-700">SEM POTÊNCIA</b> : "OK"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {c.saidas.length > 0 && (
+              <div className="mt-3" dangerouslySetInnerHTML={{ __html: svgMapaFusao({ ...c, origem: origem(c) }) }} />
+            )}
+            {daCaixa.length > 0 && (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                {daCaixa.map((f, i) => (
+                  <figure key={i} className="break-inside-avoid">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {f.url ? <img src={f.url} alt="" className="aspect-[4/3] w-full rounded border border-gray-200 object-cover" /> : null}
+                    <figcaption className="mt-0.5 text-xs text-gray-500">
+                      {f.tipo === "foto_otdr" ? `OTDR · fibra ${f.fibra}` : "Caixa"} · {quando(f.tirada_em)}
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            )}
+          </section>
+        );
+      })}
+
       <section className="mt-6">
-        <h2 className={titulo}>Registro fotográfico ({dados.fotos.length})</h2>
-        {dados.fotos.length === 0 ? (
+        <h2 className={titulo}>Registro fotográfico ({fotosOs.length})</h2>
+        {fotosOs.length === 0 ? (
           <p className="mt-2 text-gray-500">Sem fotos.</p>
         ) : (
           <div className="mt-2 grid grid-cols-2 gap-3">
-            {dados.fotos.map((f, i) => (
+            {fotosOs.map((f, i) => (
               <figure key={i} className="break-inside-avoid">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 {f.url ? <img src={f.url} alt={`Foto ${i + 1}`} className="aspect-[4/3] w-full rounded border border-gray-200 object-cover" /> : null}
