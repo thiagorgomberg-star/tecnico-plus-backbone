@@ -1,0 +1,9 @@
+{
+  "name": "tecnico-plus-backbone",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "mobile": "npm run start -w @tecnico/mobile",
+    "painel": "npm run dev -w @tecnico/painel"
+  }
+}
