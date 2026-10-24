@@ -60,6 +60,12 @@ export const rotuloPadrao = (p: string | null | undefined) => PADROES_CORES.find
 const TUBOS_POR_COROA = 12;
 const NATURAL = { nome: 'Natural', hex: '#f5f5dc' };
 // Padrão de cada cabo da caixa: entrada e cada saída. "BR × EUA" quando a caixa liga padrões diferentes.
+// Por extenso, para o relatório: "Entrada: Brasileiro · Saída 1: Americano · Saída 2: Brasileiro".
+export function padroesPorExtenso(c: { tipo?: string; padrao_cores_entrada?: string | null; padrao_cores_saidas?: (string | null)[] | null; saidas: number[] }) {
+  const partes = c.tipo === 'dgo' ? [] : [`Entrada: ${rotuloPadrao(c.padrao_cores_entrada)}`];
+  c.saidas.forEach((_, i) => partes.push(`${c.tipo === 'dgo' ? 'Cabo' : 'Saída'} ${i + 1}: ${rotuloPadrao(c.padrao_cores_saidas?.[i])}`));
+  return partes.join(' · ');
+}
 export function resumoPadroes(c: { padrao_cores_entrada?: string | null; padrao_cores_saidas?: (string | null)[] | null; saidas: number[] }) {
   const entrada = c.padrao_cores_entrada || 'abnt';
   const saidas = c.saidas.map((_, i) => c.padrao_cores_saidas?.[i] || 'abnt');
