@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import Almoxarifado from "@/componentes/Almoxarifado";
 import Avisos from "@/componentes/Avisos";
+import AtividadesPreventiva from "@/componentes/AtividadesPreventiva";
 import Catalogo from "@/componentes/Catalogo";
 import Equipe from "@/componentes/Equipe";
 import Escala from "@/componentes/Escala";
@@ -79,7 +80,7 @@ export default function Painel() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">
-        {aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <Catalogo /> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : <RotasEventos />}
+        {aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : <RotasEventos />}
       </main>
     </div>
   );

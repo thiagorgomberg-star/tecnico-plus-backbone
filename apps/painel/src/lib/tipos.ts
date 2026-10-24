@@ -63,4 +63,4 @@ export const corStatus: Record<StatusOS, string> = {
   cancelada: "bg-gray-100 text-gray-500",
 };
 
-export const TIPOS_OS = ["Corretiva", "Preventiva", "Preventiva site", "Roteamento de fibras", "Vistoria de rota"];
+export const TIPOS_OS = ["Corretiva", "Preventiva rede", "Preventiva site", "Roteamento de fibras", "Vistoria de rota"];

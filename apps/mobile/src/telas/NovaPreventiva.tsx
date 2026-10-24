@@ -1,18 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { randomUUID } from 'expo-crypto';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { cores, estilo } from '../lib/estilo';
 import { enfileirar } from '../lib/fila';
 import { lerJornada } from '../lib/jornada';
-import { posicaoAtual } from '../lib/localizacao';
+import { enderecoDe, posicaoAtual } from '../lib/localizacao';
 import { ponto, supabase } from '../lib/supabase';
 import { OrdemServico } from '../lib/tipos';
 
 type Rota = { id: string; trecho: string };
-const TIPOS = ['Preventiva', 'Preventiva site'];
+const TIPOS = ['Preventiva rede', 'Preventiva site'];
 const CACHE_ROTAS = 'rotas-cache';
+const CACHE_ATIVIDADES = 'atividades-preventiva-cache';
+
+type Atividade = { id: string; tipo: string; nome: string };
+
+type Captura = { latitude: number; longitude: number; precisao: number | null; em: string };
 
 // O técnico abre e já inicia uma preventiva em campo (funciona sem internet).
 export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void; abrirOS: (os: OrdemServico) => void }) {
@@ -22,9 +27,15 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
   const [local, setLocal] = useState('');
   const [endereco, setEndereco] = useState('');
   const [atividades, setAtividades] = useState('');
+  const [lista, setLista] = useState<Atividade[]>([]);
+  const [marcadas, setMarcadas] = useState<string[]>([]);
   const [ticket, setTicket] = useState('');
   const [observacao, setObservacao] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [captura, setCaptura] = useState<Captura | null>(null);
+  const [capturando, setCapturando] = useState(false);
+  // Endereço que o GPS preencheu; se o técnico editar o campo, uma nova captura não sobrescreve.
+  const enderecoAuto = useRef('');
 
   useEffect(() => {
     AsyncStorage.getItem(CACHE_ROTAS).then((c) => c && setRotas(JSON.parse(c)));
@@ -33,13 +44,49 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
       setRotas(data);
       AsyncStorage.setItem(CACHE_ROTAS, JSON.stringify(data));
     });
+    AsyncStorage.getItem(CACHE_ATIVIDADES).then((c) => c && setLista(JSON.parse(c)));
+    supabase.from('atividades_preventiva').select('id, tipo, nome').eq('ativo', true).order('ordem').order('nome').then(({ data }) => {
+      if (!data) return;
+      setLista(data);
+      AsyncStorage.setItem(CACHE_ATIVIDADES, JSON.stringify(data));
+    });
+  }, []);
+
+  const doTipo = lista.filter((a) => a.tipo === tipo);
+  const marcar = (nome: string) => setMarcadas((m) => (m.includes(nome) ? m.filter((x) => x !== nome) : [...m, nome]));
+
+  // Captura a posição (funciona sem internet) e preenche o endereço (com internet; offline, as coordenadas).
+  async function capturar() {
+    setCapturando(true);
+    const pos = await posicaoAtual().catch(() => null);
+    if (!pos) {
+      setCapturando(false);
+      return Alert.alert('Localização indisponível', 'Permita o acesso à localização e confira se o GPS está ligado.');
+    }
+    const nova = { latitude: pos.latitude, longitude: pos.longitude, precisao: pos.accuracy, em: new Date().toISOString() };
+    setCaptura(nova);
+    const texto = (await enderecoDe(pos.latitude, pos.longitude, 5000)) ??
+      `Coordenadas ${pos.latitude.toFixed(6)}, ${pos.longitude.toFixed(6)}`;
+    setEndereco((atual) => {
+      if (atual.trim() && atual !== enderecoAuto.current) return atual;
+      enderecoAuto.current = texto;
+      return texto;
+    });
+    setCapturando(false);
+  }
+
+  useEffect(() => {
+    capturar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function iniciar() {
     if (rotas.length > 0 && !rotaId) return Alert.alert('Escolha o trecho', 'Informe em qual trecho do backbone é a preventiva.');
     if (!local.trim()) return Alert.alert('Informe o local', tipo === 'Preventiva site' ? 'Nome do site/POP.' : 'Ponto ou trecho atendido.');
     if (!endereco.trim()) return Alert.alert('Informe o endereço ou referência', 'Ex.: km, cidade, rodovia.');
-    if (!atividades.trim()) return Alert.alert('Descreva as atividades', 'O que será verificado ou executado.');
+    const escolhidas = doTipo.filter((a) => marcadas.includes(a.nome)).map((a) => `• ${a.nome}`);
+    const descricao = [...escolhidas, atividades.trim()].filter(Boolean).join('\n');
+    if (!descricao) return Alert.alert('Informe as atividades', 'Marque o que será executado ou descreva em "Outras atividades".');
 
     const jornada = await lerJornada();
     if (!jornada.expedienteId) return Alert.alert('Expediente não iniciado', 'Inicie o expediente antes de abrir uma preventiva.');
@@ -51,7 +98,8 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
       setSalvando(false);
       return Alert.alert('Sessão expirada', 'Entre de novo no app.');
     }
-    const coords = await posicaoAtual().catch(() => null);
+    const coords = captura ?? (await posicaoAtual().catch(() => null));
+    const posicao = coords ? ponto(coords.latitude, coords.longitude) : null;
     const id = randomUUID();
     const agora = new Date().toISOString();
     const linha = {
@@ -61,14 +109,17 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
       prioridade: 'media',
       titulo: local.trim(),
       endereco: endereco.trim(),
-      descricao: atividades.trim(),
+      descricao,
       ticket_acionamento: ticket.trim() || null,
       observacao_tecnico: observacao.trim() || null,
       rota_id: rotaId,
       tecnico_id: usuario,
       criada_por: usuario,
       iniciada_em: agora,
-      local: coords ? ponto(coords.latitude, coords.longitude) : null,
+      local: posicao,
+      evento_posicao: posicao,
+      evento_localizado_em: captura?.em ?? (coords ? agora : null),
+      evento_precisao_m: captura?.precisao ?? (coords && 'accuracy' in coords ? coords.accuracy : null),
     };
     await enfileirar({ tipo: 'inserir', tabela: 'ordens_servico', linha });
     setSalvando(false);
@@ -76,7 +127,7 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
     abrirOS({
       id, numero: 0, tipo, prioridade: 'media', status: 'em_execucao',
       titulo: linha.titulo, descricao: linha.descricao, endereco: linha.endereco, prazo: null,
-      observacao_tecnico: linha.observacao_tecnico, observacao_supervisor: null, evento_localizado_em: null,
+      observacao_tecnico: linha.observacao_tecnico, observacao_supervisor: null, evento_localizado_em: linha.evento_localizado_em,
       ticket_acionamento: linha.ticket_acionamento, sla_limite: null,
     });
   }
@@ -97,7 +148,7 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
         <Text style={s.rotulo}>Tipo</Text>
         <View style={s.chips}>
           {TIPOS.map((t) => (
-            <Pressable key={t} style={chip(tipo === t)} onPress={() => setTipo(t)}>
+            <Pressable key={t} style={chip(tipo === t)} onPress={() => { setTipo(t); setMarcadas([]); }}>
               <Text style={[s.chipTexto, tipo === t && { color: '#fff' }]}>{t}</Text>
             </Pressable>
           ))}
@@ -120,12 +171,36 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
         <TextInput style={estilo.campo} value={local} onChangeText={setLocal}
           placeholder={tipo === 'Preventiva site' ? 'Ex.: POP Taubaté' : 'Ex.: Caixa de emenda km 112'} />
 
+        <Text style={s.rotulo}>Localização</Text>
+        <View style={s.local}>
+          <Text style={{ flex: 1, color: captura ? cores.texto : cores.suave }}>
+            {capturando ? 'Capturando...' : captura
+              ? `${captura.latitude.toFixed(6)}, ${captura.longitude.toFixed(6)}${captura.precisao != null ? ` · ±${Math.round(captura.precisao)} m` : ''}`
+              : 'Ainda não capturada'}
+          </Text>
+          <Pressable style={s.botaoLocal} onPress={capturar} disabled={capturando}>
+            {capturando ? <ActivityIndicator color="#fff" size="small" />
+              : <Text style={{ color: '#fff', fontWeight: '700' }}>{captura ? 'Capturar de novo' : 'Capturar localização'}</Text>}
+          </Pressable>
+        </View>
+
         <Text style={s.rotulo}>Endereço ou referência *</Text>
-        <TextInput style={estilo.campo} value={endereco} onChangeText={setEndereco} placeholder="Ex.: Rod. Dutra km 112, Caçapava" />
+        <TextInput style={estilo.campo} value={endereco} onChangeText={setEndereco} placeholder="Preenchido pelo GPS; pode ajustar" multiline />
 
         <Text style={s.rotulo}>Atividades a executar *</Text>
-        <TextInput style={[estilo.campo, { minHeight: 90, textAlignVertical: 'top' }]} value={atividades} onChangeText={setAtividades}
-          multiline placeholder="O que será verificado, limpo, medido ou trocado" />
+        {doTipo.map((a) => {
+          const ok = marcadas.includes(a.nome);
+          return (
+            <Pressable key={a.id} style={s.item} onPress={() => marcar(a.nome)}>
+              <View style={[s.caixa, ok && { backgroundColor: cores.primaria, borderColor: cores.primaria }]}>
+                {ok ? <Text style={{ color: '#fff', fontWeight: '700' }}>✓</Text> : null}
+              </View>
+              <Text style={{ flex: 1, color: cores.texto, fontSize: 15 }}>{a.nome}</Text>
+            </Pressable>
+          );
+        })}
+        <TextInput style={[estilo.campo, { minHeight: 60, textAlignVertical: 'top' }]} value={atividades} onChangeText={setAtividades}
+          multiline placeholder={doTipo.length ? 'Outras atividades (opcional)' : 'O que será verificado, limpo, medido ou trocado'} />
 
         <Text style={s.rotulo}>Ticket (opcional)</Text>
         <TextInput style={estilo.campo} value={ticket} onChangeText={setTicket} autoCapitalize="characters"
@@ -148,4 +223,8 @@ const s = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   chip: { borderWidth: 1, borderColor: cores.borda, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
   chipTexto: { color: cores.texto, fontSize: 14 },
+  item: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9 },
+  caixa: { width: 24, height: 24, borderRadius: 4, borderWidth: 2, borderColor: cores.borda, alignItems: 'center', justifyContent: 'center' },
+  local: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
+  botaoLocal: { backgroundColor: cores.primaria, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, minWidth: 120, alignItems: 'center' },
 });

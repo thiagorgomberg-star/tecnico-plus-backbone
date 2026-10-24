@@ -10,7 +10,7 @@ import { captureRef } from 'react-native-view-shot';
 import MascaraFoto, { DadosMascara, RefMascara } from '../componentes/MascaraFoto';
 import { enfileirar } from '../lib/fila';
 import { cores } from '../lib/estilo';
-import { posicaoAtual } from '../lib/localizacao';
+import { enderecoDe } from '../lib/localizacao';
 
 type Props = {
   osId: string;
@@ -22,19 +22,20 @@ type Props = {
 
 const LARGURA_FINAL = 1600;
 
-// Endereço só quando houver internet; offline a máscara sai só com as coordenadas.
-async function enderecoDe(latitude: number, longitude: number) {
-  try {
-    const consulta = Location.reverseGeocodeAsync({ latitude, longitude });
-    const limite = new Promise<never>((_, rejeitar) => setTimeout(() => rejeitar(new Error('tempo')), 2500));
-    const [r] = await Promise.race([consulta, limite]);
-    if (!r) return null;
-    const rua = [r.street, r.streetNumber].filter(Boolean).join(', ');
-    return [rua, r.district, r.city ?? r.subregion].filter(Boolean).join(' - ') +
-      (r.region ? ` - ${r.region}` : '') + (r.postalCode ? `, ${r.postalCode}` : '');
-  } catch {
-    return null;
-  }
+// Menor resolução da câmera que ainda cobre a largura final: foto bem mais leve de tirar e de processar.
+function melhorTamanho(tamanhos: string[]) {
+  const validos = tamanhos
+    .map((t) => { const [l, a] = t.split('x').map(Number); return { t, l: Math.max(l, a), a: Math.min(l, a) }; })
+    .filter((x) => x.l >= LARGURA_FINAL && Math.abs(x.l / x.a - 4 / 3) < 0.05);
+  validos.sort((x, y) => x.l * x.a - y.l * y.a);
+  return validos[0]?.t;
+}
+
+// Distância aproximada em metros (suficiente para decidir se o endereço precisa ser consultado de novo).
+function distancia(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
+  const dy = (a.latitude - b.latitude) * 111320;
+  const dx = (a.longitude - b.longitude) * 111320 * Math.cos((a.latitude * Math.PI) / 180);
+  return Math.hypot(dx, dy);
 }
 
 export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar }: Props) {
@@ -43,8 +44,14 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar 
   const mascara = useRef<RefMascara>(null);
   const { width, height } = useWindowDimensions();
   const [tipo, setTipo] = useState<'foto_antes' | 'foto_depois'>('foto_antes');
-  const [dados, setDados] = useState<DadosMascara | null>(null);
-  const [processando, setProcessando] = useState(false);
+  // Fotos já tiradas esperando a máscara: o técnico pode seguir fotografando enquanto elas são gravadas.
+  const [fila, setFila] = useState<DadosMascara[]>([]);
+  const dados = fila[0] ?? null;
+  const [tirando, setTirando] = useState(false);
+  const [tamanho, setTamanho] = useState<string | undefined>();
+  const posicao = useRef<{ latitude: number; longitude: number } | null>(null);
+  const endereco = useRef<{ latitude: number; longitude: number; texto: string } | null>(null);
+  const consultando = useRef(false);
   const [miniaturas, setMiniaturas] = useState<string[]>([]);
   const horizontal = width > height;
   const total = fotosJaFeitas + miniaturas.length;
@@ -56,31 +63,71 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar 
     };
   }, []);
 
-  async function fotografar() {
-    if (!camera.current || processando) return;
-    setProcessando(true);
+  // GPS acompanhando enquanto a câmera está aberta: a foto usa a última posição na hora, sem esperar o satélite.
+  // O endereço só é consultado de novo quando o técnico anda mais de 30 m.
+  useEffect(() => {
+    let assinatura: Location.LocationSubscription | null = null;
+    let ativo = true;
+    const atualizar = (c: { latitude: number; longitude: number }) => {
+      posicao.current = { latitude: c.latitude, longitude: c.longitude };
+      const ultimo = endereco.current;
+      if (consultando.current || (ultimo?.texto && distancia(ultimo, c) < 30)) return;
+      consultando.current = true;
+      enderecoDe(c.latitude, c.longitude, 8000).then((texto) => {
+        consultando.current = false;
+        if (ativo && texto) endereco.current = { latitude: c.latitude, longitude: c.longitude, texto };
+      });
+    };
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted' || !ativo) return;
+      const ultima = await Location.getLastKnownPositionAsync({ maxAge: 120000 });
+      if (ultima && ativo) atualizar(ultima.coords);
+      assinatura = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.High, timeInterval: 2000, distanceInterval: 3 },
+        (p) => atualizar(p.coords),
+      );
+      if (!ativo) assinatura.remove();
+    })();
+    return () => {
+      ativo = false;
+      assinatura?.remove();
+    };
+  }, []);
+
+  async function cameraPronta() {
     try {
-      const [foto, pos] = await Promise.all([camera.current.takePictureAsync({ quality: 0.85 }), posicaoAtual()]);
+      setTamanho(melhorTamanho((await camera.current?.getAvailablePictureSizesAsync()) ?? []));
+    } catch {
+      // fica com o tamanho padrão da câmera
+    }
+  }
+
+  async function fotografar() {
+    if (!camera.current || tirando) return;
+    setTirando(true);
+    try {
+      const foto = await camera.current.takePictureAsync({ quality: 0.8, shutterSound: false });
       if (foto.width <= foto.height) {
         Alert.alert('Foto na vertical', 'Gire o celular na horizontal e tire a foto de novo.');
-        setProcessando(false);
         return;
       }
-      const endereco = pos ? await enderecoDe(pos.latitude, pos.longitude) : null;
-      setDados({
+      const pos = posicao.current;
+      setFila((f) => [...f, {
         uri: foto.uri,
         larguraFoto: foto.width,
         alturaFoto: foto.height,
         tiradaEm: new Date(),
         latitude: pos?.latitude ?? null,
         longitude: pos?.longitude ?? null,
-        endereco,
+        endereco: endereco.current?.texto ?? null,
         nome: usuario.nome,
         cargo: usuario.cargo,
-      });
+      }]);
     } catch (e) {
       Alert.alert('Erro ao tirar a foto', String(e));
-      setProcessando(false);
+    } finally {
+      setTirando(false);
     }
   }
 
@@ -109,8 +156,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar 
     } catch (e) {
       Alert.alert('Erro ao salvar a foto', String(e));
     } finally {
-      setDados(null);
-      setProcessando(false);
+      setFila((f) => f.slice(1));
     }
   }
 
@@ -127,7 +173,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar 
 
   return (
     <View style={estilos.tela}>
-      <CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back" />
+      <CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back" pictureSize={tamanho} onCameraReady={cameraPronta} />
 
       {!horizontal && (
         <View style={estilos.aviso}>
@@ -136,9 +182,11 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar 
       )}
 
       <View style={estilos.topo}>
-        <Pressable onPress={fechar}><Text style={estilos.texto}>‹ Concluir fotos</Text></Pressable>
+        <Pressable onPress={() => (fila.length ? Alert.alert('Aguarde', 'Ainda gravando as últimas fotos.') : fechar())}>
+          <Text style={estilos.texto}>‹ Concluir fotos</Text>
+        </Pressable>
         <Text style={[estilos.texto, { color: total >= minimo ? '#8BE28F' : '#FFD54F' }]}>
-          {total}/{minimo} fotos
+          {total}/{minimo} fotos{fila.length ? ` · gravando ${fila.length}` : ''}
         </Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {(['foto_antes', 'foto_depois'] as const).map((t) => (
@@ -153,15 +201,15 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar 
         {miniaturas.map((uri) => <Image key={uri} source={{ uri }} style={estilos.miniatura} />)}
       </ScrollView>
 
-      <Pressable style={[estilos.disparo, (!horizontal || processando) && { opacity: 0.4 }]}
-        disabled={!horizontal || processando} onPress={fotografar}>
-        {processando ? <ActivityIndicator color={cores.primaria} /> : null}
+      <Pressable style={[estilos.disparo, (!horizontal || tirando) && { opacity: 0.4 }]}
+        disabled={!horizontal || tirando} onPress={fotografar}>
+        {tirando ? <ActivityIndicator color={cores.primaria} /> : null}
       </Pressable>
 
       {/* Desenhada fora da tela só para gerar a imagem final com a máscara. */}
       {dados && (
         <View style={{ position: 'absolute', left: -10000, top: 0 }} pointerEvents="none">
-          <MascaraFoto ref={mascara} dados={dados} aoCarregar={() => setTimeout(salvarComMascara, 150)} />
+          <MascaraFoto key={dados.uri} ref={mascara} dados={dados} aoCarregar={() => setTimeout(salvarComMascara, 150)} />
         </View>
       )}
     </View>
