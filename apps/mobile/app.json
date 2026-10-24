@@ -2,7 +2,9 @@
   "expo": {
     "name": "Técnico Plus",
     "slug": "tecnico-plus",
+    "owner": "tgomberg",
     "version": "1.0.0",
+    "runtimeVersion": "1",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -56,7 +58,13 @@
           "color": "#0572CE"
         }
       ],
-      "expo-sharing"
-    ]
+      "expo-sharing",
+      "expo-updates"
+    ],
+    "updates": {
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      }
+    }
   }
 }

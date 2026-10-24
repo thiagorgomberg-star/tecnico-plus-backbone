@@ -14,6 +14,9 @@ concurrency:
   group: apk-android
   cancel-in-progress: false
 
+env:
+  EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -44,6 +47,18 @@ jobs:
             const app = JSON.parse(fs.readFileSync("app.json"));
             app.expo.version = "1.0.${{ github.run_number }}";
             app.expo.android.versionCode = ${{ github.run_number }};
+            fs.writeFileSync("app.json", JSON.stringify(app, null, 2));
+          '
+
+      - name: Projeto Expo (atualizações pelo ar)
+        if: env.EXPO_TOKEN != ''
+        working-directory: apps/mobile
+        run: |
+          npx --yes eas-cli@latest init --non-interactive --force
+          node -e '
+            const fs = require("fs");
+            const app = JSON.parse(fs.readFileSync("app.json"));
+            app.expo.updates.url = "https://u.expo.dev/" + app.expo.extra.eas.projectId;
             fs.writeFileSync("app.json", JSON.stringify(app, null, 2));
           '
 

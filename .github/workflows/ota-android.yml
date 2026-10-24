@@ -1,0 +1,55 @@
+# Publica uma atualização pelo ar (Expo Updates) para os APKs já instalados: o app baixa ao abrir e reinicia.
+# Só serve para mudança de código/tela. Biblioteca nativa nova ou permissão nova exige APK novo
+# (e, nesse caso, subir o "runtimeVersion" do app.json antes de gerar o APK).
+# Só roda quando solicitado (Actions > Atualização pelo ar > Run workflow).
+name: Atualização pelo ar
+
+on:
+  workflow_dispatch:
+    inputs:
+      mensagem:
+        description: O que mudou
+        required: false
+        default: Atualização do app
+
+concurrency:
+  group: ota-android
+  cancel-in-progress: false
+
+jobs:
+  ota:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Dependências
+        run: npm ci
+
+      - name: Projeto Expo
+        working-directory: apps/mobile
+        run: |
+          npx --yes eas-cli@latest init --non-interactive --force
+          node -e '
+            const fs = require("fs");
+            const app = JSON.parse(fs.readFileSync("app.json"));
+            app.expo.updates.url = "https://u.expo.dev/" + app.expo.extra.eas.projectId;
+            fs.writeFileSync("app.json", JSON.stringify(app, null, 2));
+          '
+
+      - name: Publicar atualização
+        working-directory: apps/mobile
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Mantém o número do último APK publicado, usado pelo aviso de APK novo.
+          export EXPO_PUBLIC_VERSAO_APP=$(gh release view --repo "${{ github.repository }}" --json tagName -q .tagName | sed 's/apk-//')
+          npx --yes eas-cli@latest update --channel production --platform android \
+            --message "${{ inputs.mensagem }}" --non-interactive
