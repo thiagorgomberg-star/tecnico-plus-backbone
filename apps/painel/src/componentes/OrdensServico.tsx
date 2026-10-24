@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import DetalheOS from "@/componentes/DetalheOS";
 import MaterialApoio from "@/componentes/MaterialApoio";
 import NovaOS from "@/componentes/NovaOS";
 import { supabase } from "@/lib/supabase";
@@ -24,6 +25,7 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
   const [novaAberta, setNovaAberta] = useState(false);
   const [apoio, setApoio] = useState<OrdemServico | null>(null);
+  const [detalhe, setDetalhe] = useState<OrdemServico | null>(null);
 
   const [versao, setVersao] = useState(0);
   const carregar = useCallback(() => setVersao((v) => v + 1), []);
@@ -110,12 +112,12 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
               return (
                 <tr key={os.id} className="border-b border-gray-100 align-top last:border-0">
                   <td className="p-3">
-                    <div className="font-mono">#{os.numero}</div>
+                    <button className="font-mono text-blue-700 hover:underline" onClick={() => setDetalhe(os)}>#{os.numero}</button>
                     {os.ticket_acionamento && <div className="font-mono text-xs text-gray-500">{os.ticket_interno ? "Token" : "Ticket"} {os.ticket_acionamento}</div>}
                     {os.criada_por === os.tecnico_id && <div className="text-xs font-medium text-green-700">Aberta pelo técnico em campo</div>}
                   </td>
                   <td className="p-3">
-                    <div className="font-medium">{os.titulo}</div>
+                    <button className="text-left font-medium text-blue-700 hover:underline" onClick={() => setDetalhe(os)}>{os.titulo}</button>
                     <div className="text-gray-500">{os.tipo} · prioridade {os.prioridade}{os.endereco ? ` · ${os.endereco}` : ""}</div>
                     {os.observacao_tecnico && <div className="mt-1 text-gray-700">Técnico: {os.observacao_tecnico}</div>}
                   </td>
@@ -163,6 +165,7 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
         </table>
       </div>
 
+      {detalhe && <DetalheOS os={detalhe} fechar={() => setDetalhe(null)} />}
       {apoio && <MaterialApoio osId={apoio.id} numero={apoio.numero} fechar={() => setApoio(null)} />}
       {novaAberta && <NovaOS tecnicos={tecnicos} fechar={() => setNovaAberta(false)} criada={carregar} />}
     </section>
