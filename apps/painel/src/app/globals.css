@@ -5,3 +5,8 @@ body {
   color: #1b1f24;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
+
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

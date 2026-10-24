@@ -59,6 +59,20 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
   const fotos = anexos.filter((a) => a.tipo === "foto_antes" || a.tipo === "foto_depois");
   const apoio = anexos.filter((a) => a.tipo === "documento");
 
+  // Link público do relatório (válido por 30 dias) para enviar aos parceiros.
+  async function compartilhar(abrir: boolean) {
+    const { data, error } = await supabase.from("os_relatorios_compartilhados").insert({ os_id: os.id }).select("token").single();
+    if (error || !data) return alert(error?.message ?? "Não foi possível gerar o link.");
+    const link = `${window.location.origin}/relatorio?t=${data.token}`;
+    if (abrir) return window.open(link, "_blank");
+    try {
+      await navigator.clipboard.writeText(link);
+      alert("Link do relatório copiado (válido por 30 dias):\n\n" + link);
+    } catch {
+      prompt("Copie o link do relatório (válido por 30 dias):", link);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-20 flex justify-end bg-black/40" onClick={fechar}>
       <div className="h-full w-full max-w-3xl overflow-y-auto bg-white p-6" onClick={(e) => e.stopPropagation()}>
@@ -72,6 +86,15 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
           </div>
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${corStatus[os.status]}`}>{rotuloStatus[os.status]}</span>
           <button className="rounded-md px-2 text-2xl leading-none text-gray-500 hover:bg-gray-100" onClick={fechar}>×</button>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2 text-sm">
+          <button className="rounded-lg bg-blue-700 px-3 py-1.5 font-medium text-white hover:bg-blue-800" onClick={() => compartilhar(false)}>
+            Compartilhar relatório
+          </button>
+          <button className="rounded-lg border border-gray-300 px-3 py-1.5 hover:bg-gray-50" onClick={() => compartilhar(true)}>
+            Ver relatório / PDF
+          </button>
         </div>
 
         <dl className="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
