@@ -41,3 +41,9 @@ createdb tecnico_teste
 psql -d tecnico_teste -f supabase/tests/stub_auth.sql -f supabase/migrations/20261024120000_mvp.sql
 psql -d tecnico_teste -f supabase/tests/fluxo_mvp.sql
 ```
+
+## Publicação do painel (Vercel)
+
+Projeto importado do GitHub com **Root Directory** `apps/painel`. Não precisa de variáveis de ambiente:
+o endereço e a chave pública do Supabase estão em `apps/painel/src/lib/supabase.ts`.
+Cada push na `main` publica uma versão nova.
