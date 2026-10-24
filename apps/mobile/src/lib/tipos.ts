@@ -3,6 +3,7 @@ export type StatusOS =
   | 'enviada'
   | 'aceita'
   | 'em_execucao'
+  | 'pausada'
   | 'concluida'
   | 'devolvida'
   | 'baixada'
@@ -20,6 +21,7 @@ export type OrdemServico = {
   prazo: string | null;
   observacao_tecnico: string | null;
   observacao_supervisor: string | null;
+  evento_localizado_em: string | null;
 };
 
 export type Expediente = {
@@ -34,6 +36,7 @@ export const rotuloStatus: Record<StatusOS, string> = {
   enviada: 'Nova',
   aceita: 'Aceita',
   em_execucao: 'Em execução',
+  pausada: 'Pausada (refeição)',
   concluida: 'Concluída',
   devolvida: 'Devolvida',
   baixada: 'Baixada',
