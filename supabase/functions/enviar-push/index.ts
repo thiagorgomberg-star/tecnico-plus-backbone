@@ -1,7 +1,8 @@
 // Envia o alerta como notificação pelo Firebase (toca mesmo com o app fechado).
 // Chamada pelo gatilho do banco a cada alerta novo, só com o id: a função marca o alerta como avisado
 // de forma atômica (não toca duas vezes) e, se não conseguir enviar, devolve para pendente,
-// para o próprio app avisar quando abrir. A conta de serviço do Firebase fica no segredo FCM_CONTA_SERVICO.
+// para o próprio app avisar quando abrir. A conta de serviço do Firebase fica no Vault (fcm_conta_servico)
+// ou no segredo FCM_CONTA_SERVICO da função.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const titulos: Record<string, string> = {
@@ -58,7 +59,7 @@ Deno.serve(async (req) => {
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
     auth: { persistSession: false },
   });
-  const segredo = Deno.env.get("FCM_CONTA_SERVICO");
+  const segredo = Deno.env.get("FCM_CONTA_SERVICO") ?? (await admin.rpc("interno_segredo_fcm")).data;
   if (!segredo) return new Response("sem conta de serviço", { status: 200 });
 
   const { data: alerta } = await admin.from("alertas")
