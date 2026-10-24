@@ -1,8 +1,9 @@
 "use client";
 
 import type { Session } from "@supabase/supabase-js";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import Equipe from "@/componentes/Equipe";
 import Escala from "@/componentes/Escala";
 import Login from "@/componentes/Login";
 import OrdensServico from "@/componentes/OrdensServico";
@@ -17,7 +18,7 @@ export default function Painel() {
   const [sessao, setSessao] = useState<Session | null | undefined>(undefined);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
-  const [aba, setAba] = useState<"os" | "campo" | "escala" | "rotas">("os");
+  const [aba, setAba] = useState<"os" | "campo" | "escala" | "rotas" | "equipe">("os");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSessao(data.session));
@@ -25,13 +26,16 @@ export default function Painel() {
     return () => data.subscription.unsubscribe();
   }, []);
 
+  const [versaoEquipe, setVersaoEquipe] = useState(0);
+  const equipeMudou = useCallback(() => setVersaoEquipe((v) => v + 1), []);
+
   useEffect(() => {
     if (!sessao) return;
     supabase.from("usuarios").select("nome, papel").eq("id", sessao.user.id).single()
       .then(({ data }) => setPerfil(data));
     supabase.from("usuarios").select("id, nome").eq("papel", "tecnico").eq("ativo", true).order("nome")
       .then(({ data }) => setTecnicos(data ?? []));
-  }, [sessao]);
+  }, [sessao, versaoEquipe]);
 
   if (sessao === undefined) return null;
   if (!sessao) return <Login />;
@@ -56,6 +60,8 @@ export default function Painel() {
             className={`rounded-md px-3 py-1.5 text-sm ${aba === "campo" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Equipe em campo</button>
           <button onClick={() => setAba("escala")}
             className={`rounded-md px-3 py-1.5 text-sm ${aba === "escala" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Escala</button>
+          <button onClick={() => setAba("equipe")}
+            className={`rounded-md px-3 py-1.5 text-sm ${aba === "equipe" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Equipe</button>
           <button onClick={() => setAba("rotas")}
             className={`rounded-md px-3 py-1.5 text-sm ${aba === "rotas" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Rotas e eventos</button>
         </nav>
@@ -65,7 +71,7 @@ export default function Painel() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">
-        {aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : <RotasEventos />}
+        {aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : <RotasEventos />}
       </main>
     </div>
   );
