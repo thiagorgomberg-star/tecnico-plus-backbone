@@ -73,7 +73,7 @@ export default function Horas() {
           onClick={exportar}>Baixar planilha (Excel)</button>
       </div>
       <p className="text-xs text-gray-500">
-        Calculado dos expedientes no app, menos as refeições. Dia útil e sábado: 50%. Domingo e feriado nacional: 100%.
+        Controle interno (o ponto oficial é o Sólides; o técnico não vê esta tela). Calculado dos expedientes no app, menos as refeições. Dia útil e sábado: 50%. Domingo e feriado nacional: 100%.
         Plantão sem trabalho: sobreaviso a 1/3 da hora. Diferença de até 10 min no dia não conta. Faltas só em dias já passados.
         Banco de horas: crédito 1 para 1.
       </p>
