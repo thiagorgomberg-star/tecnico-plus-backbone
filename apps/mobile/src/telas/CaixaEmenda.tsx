@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
-import { Caixa, caixasDaRede, proximaTag, salvarCaixa } from '../lib/caixas';
+import { Caixa, caixasDaRede, PREFIXO_TAG, proximaTag, salvarCaixa } from '../lib/caixas';
 import { cores } from '../lib/estilo';
 import {
   calcularPlano, CAPACIDADES, CaixaRede, descreverFibra, faixasDaBandeja, FUSOES_POR_BANDEJA, herdarDaAnterior, Manobra, PADROES_CORES, rotuloPonto,
@@ -133,7 +133,10 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   }
 
   // Caixa nova recebe a TAG automática (CE-BKB-0001...), que vira o nome do pin no KMZ.
-  const tagAuto = nova ? proximaTag(c.tipo, [...rede, ...daOs].filter((x) => x.id !== c.id)) : null;
+  // TAG automática na caixa nova, ou quando a caixa muda de tipo (ex.: emenda → DGO) e ainda tem a TAG do tipo antigo.
+  const prefixoDaTag = Object.values(PREFIXO_TAG).find((p) => c.identificacao.startsWith(p));
+  const tagDeOutroTipo = !!prefixoDaTag && prefixoDaTag !== (PREFIXO_TAG[c.tipo] ?? PREFIXO_TAG.emenda);
+  const tagAuto = nova || tagDeOutroTipo ? proximaTag(c.tipo, [...rede, ...daOs].filter((x) => x.id !== c.id)) : null;
   const plano = calcularPlano(c);
   const bandejas = separarBandejas(c);
   const grupos = gruposEditados ? { f: c.grupos_fusionados, v: c.grupos_vagos } : { f: plano.gruposFusionados, v: plano.gruposVagos };
