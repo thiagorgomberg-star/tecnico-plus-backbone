@@ -25,7 +25,7 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
         <Text style={s.secao}>CAMPO</Text>
         {item('Iniciar preventiva', 'Abrir uma preventiva no local, com o expediente iniciado', () => abrir('preventiva'))}
         {item('Despesas', 'Combustível, pedágio, ferramentas: foto do comprovante e valores', () => abrir('despesas'))}
-        {item('Minha escala', 'Jornada, plantão e folgas do mês', () => abrir('escala'))}
+        {item('Minha escala', 'Jornada, plantão, folgas e minhas horas extras', () => abrir('escala'))}
         {item('Rotas KMZ', 'Trechos do backbone para abrir no Google Earth', () => abrir('rotas'))}
         <Text style={s.secao}>CONTA</Text>
         {item('Sair', pendentes > 0 ? `${pendentes} registro(s) ainda não enviados` : '', sair, cores.perigo)}
