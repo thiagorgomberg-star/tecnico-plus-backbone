@@ -3,9 +3,10 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Linking, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
+import Icone, { iconeDoTipo, NomeIcone } from '../componentes/Icone';
 import { LINK_APK, VERSAO_APP, versaoPublicada } from '../lib/atualizacao';
 import { bloqueioDeHoje, rotuloEscala } from '../lib/escala';
-import { cores, corDoStatus } from '../lib/estilo';
+import { cores, corDoStatus, fundoDe } from '../lib/estilo';
 import { aoMudarFila, itensPendentes } from '../lib/fila';
 import { dataCurta, diaSemana, hora, textoSla } from '../lib/formato';
 import {
@@ -164,32 +165,45 @@ export default function Atividades({ nome, abrirOS }: Props) {
   const desde = emExpediente && jornada?.inicioExpediente ? hora(new Date(jornada.inicioRefeicao ?? jornada.inicioExpediente)) : null;
   const hoje = new Date();
 
+  const sincronizando = semRede || pendentes > 0;
   const topo = (
     <View>
-      <Cabecalho titulo="Atividades" subtitulo={`${diaSemana(hoje)}, ${dataCurta(hoje)} · ${nome}`} />
+      <Cabecalho titulo="Atividades" subtitulo={`${diaSemana(hoje)}, ${dataCurta(hoje)}${nome ? ` · ${nome}` : ''}`}
+        acoes={[
+          { icone: semRede ? 'cloud-off-outline' : pendentes > 0 ? 'cloud-upload-outline' : 'cloud-check-outline', rotulo: 'Sincronização',
+            selo: pendentes, cor: sincronizando ? '#F5C26B' : undefined,
+            aoTocar: () => Alert.alert('Sincronização', semRede ? `Sem internet. ${pendentes} registro(s) salvos no celular.` : pendentes ? `${pendentes} registro(s) enviando.` : 'Tudo enviado.') },
+          { icone: 'refresh', rotulo: 'Atualizar', aoTocar: carregar },
+        ]} />
 
       {novaVersao ? (
         <Pressable style={[s.faixa, { backgroundColor: cores.primaria }]} onPress={() => Linking.openURL(LINK_APK)}>
-          <Text style={[s.faixaTexto, { color: '#fff' }]}>Nova versão do app ({novaVersao}). Toque para atualizar. Seus dados continuam.</Text>
+          <Icone nome="download" tamanho={18} cor="#fff" />
+          <Text style={[s.faixaTexto, { color: '#fff' }]}>Nova versão do app ({novaVersao}). Toque para atualizar.</Text>
         </Pressable>
       ) : null}
-      {semRede || pendentes > 0 ? (
+      {semRede ? (
         <View style={s.faixa}>
-          <Text style={s.faixaTexto}>
-            {semRede ? 'Sem internet. Tudo que você registrar fica salvo no celular. ' : ''}
-            {pendentes > 0 ? `${pendentes} registro(s) aguardando envio.` : ''}
-          </Text>
+          <Icone nome="wifi-off" tamanho={18} cor="#7A4B00" />
+          <Text style={s.faixaTexto}>Sem internet. Tudo que você registrar fica salvo no celular.</Text>
         </View>
       ) : null}
 
       <View style={s.jornada}>
         <View style={s.jornadaLinha}>
-          <View style={[s.ponto, { backgroundColor: corSituacao }]} />
-          <Text style={s.jornadaTexto}>{situacao}</Text>
-          {desde ? <Text style={s.jornadaDesde}>desde {desde}</Text> : null}
+          <View style={[s.jornadaIcone, { backgroundColor: fundoDe(corSituacao) }]}>
+            <Icone nome={!emExpediente ? 'truck-outline' : emRefeicao ? 'silverware-fork-knife' : 'truck-fast'} tamanho={22} cor={corSituacao} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.jornadaTexto}>{situacao}</Text>
+            <Text style={s.jornadaDesde}>
+              {desde ? `desde ${desde}` : 'Inicie o expediente para receber e executar atividades'}
+              {emExpediente && jornada?.kmInicial != null ? ` · km inicial ${jornada.kmInicial.toLocaleString('pt-BR')}` : ''}
+            </Text>
+          </View>
         </View>
         {pedindoKm ? (
-          <View style={{ marginTop: 10 }}>
+          <View style={{ marginTop: 12 }}>
             <TextInput style={s.campo} keyboardType="numeric" value={km} onChangeText={setKm} autoFocus
               placeholder={emExpediente ? 'Km final do odômetro' : 'Km inicial do odômetro'} />
             <View style={s.botoes}>
@@ -197,6 +211,7 @@ export default function Atividades({ nome, abrirOS }: Props) {
                 <Text style={[s.botaoTexto, { color: cores.texto }]}>Cancelar</Text>
               </Pressable>
               <Pressable style={[s.botao, { backgroundColor: emExpediente ? cores.perigo : cores.sucesso }]} onPress={confirmarKm}>
+                <Icone nome={emExpediente ? 'stop-circle-outline' : 'play-circle-outline'} tamanho={20} cor="#fff" />
                 <Text style={s.botaoTexto}>{emExpediente ? 'Encerrar' : 'Iniciar'}</Text>
               </Pressable>
             </View>
@@ -204,12 +219,14 @@ export default function Atividades({ nome, abrirOS }: Props) {
         ) : (
           <View style={s.botoes}>
             {!emRefeicao ? (
-              <Pressable style={[s.botao, { backgroundColor: emExpediente ? cores.perigo : cores.sucesso }]} onPress={pedirExpediente}>
-                <Text style={s.botaoTexto}>{emExpediente ? 'Encerrar expediente' : 'Iniciar expediente'}</Text>
+              <Pressable style={[s.botao, emExpediente ? s.botaoContorno : { backgroundColor: cores.sucesso }]} onPress={pedirExpediente}>
+                <Icone nome={emExpediente ? 'stop-circle-outline' : 'play-circle-outline'} tamanho={20} cor={emExpediente ? cores.perigo : '#fff'} />
+                <Text style={[s.botaoTexto, emExpediente && { color: cores.perigo }]} numberOfLines={1}>{emExpediente ? 'Encerrar expediente' : 'Iniciar expediente'}</Text>
               </Pressable>
             ) : null}
             {emExpediente ? (
               <Pressable style={[s.botao, { backgroundColor: emRefeicao ? cores.sucesso : cores.alerta }]} onPress={alternarRefeicao}>
+                <Icone nome={emRefeicao ? 'play-circle-outline' : 'silverware-fork-knife'} tamanho={20} cor="#fff" />
                 <Text style={s.botaoTexto}>{emRefeicao ? 'Encerrar refeição' : 'Refeição'}</Text>
               </Pressable>
             ) : null}
@@ -218,12 +235,12 @@ export default function Atividades({ nome, abrirOS }: Props) {
       </View>
 
       <View style={s.resumo}>
-        <Resumo numero={contagem.novas} rotulo="Novas" cor={corDoStatus.enviada} />
-        <Resumo numero={contagem.andamento} rotulo="Em andamento" cor={corDoStatus.em_execucao} />
-        <Resumo numero={contagem.concluidas} rotulo="Encerradas (7 dias)" cor={corDoStatus.concluida} />
+        <Resumo numero={contagem.novas} rotulo="Novas" cor={corDoStatus.enviada} icone="bell-ring-outline" />
+        <Resumo numero={contagem.andamento} rotulo="Em andamento" cor={corDoStatus.em_execucao} icone="progress-wrench" />
+        <Resumo numero={contagem.concluidas} rotulo="Encerradas (7d)" cor={corDoStatus.concluida} icone="check-circle-outline" />
       </View>
 
-      <Text style={s.secao}>EM ABERTO ({abertas.length})</Text>
+      <Text style={s.secao}>EM ABERTO · {abertas.length}</Text>
     </View>
   );
 
@@ -259,10 +276,13 @@ export default function Atividades({ nome, abrirOS }: Props) {
   );
 }
 
-function Resumo({ numero, rotulo, cor }: { numero: number; rotulo: string; cor: string }) {
+function Resumo({ numero, rotulo, cor, icone }: { numero: number; rotulo: string; cor: string; icone: NomeIcone }) {
   return (
     <View style={s.resumoItem}>
-      <Text style={[s.resumoNumero, { color: cor }]}>{numero}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Icone nome={icone} tamanho={18} cor={cor} />
+        <Text style={[s.resumoNumero, { color: cor }]}>{numero}</Text>
+      </View>
       <Text style={s.resumoRotulo}>{rotulo}</Text>
     </View>
   );
@@ -273,67 +293,87 @@ const Cartao = memo(function Cartao({ os, abrir }: { os: OrdemServico; abrir: (o
   const sla = os.sla_limite && emAberto ? textoSla(os.sla_limite) : null;
   const corSla = !sla ? cores.suave : sla.nivel === 'ok' ? cores.sucesso : sla.nivel === 'alerta' ? cores.alerta : cores.perigo;
   const cor = corDoStatus[os.status] ?? cores.suave;
+  const urgente = os.prioridade === 'emergencia' || os.prioridade === 'alta';
   return (
     <Pressable style={({ pressed }) => [s.cartao, pressed && { backgroundColor: cores.selecionado }]} onPress={() => abrir(os)}>
-      <View style={[s.cartaoFaixa, { backgroundColor: cor }]} />
       <View style={s.cartaoHora}>
         {sla ? (
           <>
             <Text style={[s.cartaoHoraValor, { color: corSla }]}>
               {new Date(os.sla_limite!).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
             </Text>
-            <Text style={s.cartaoHoraRotulo}>SLA</Text>
+            <Text style={s.cartaoHoraRotulo}>limite</Text>
           </>
         ) : (
-          <Text style={s.cartaoHoraRotulo}>#{os.numero || '—'}</Text>
+          <Text style={[s.cartaoHoraValor, { color: '#B9B4AF' }]}>—</Text>
         )}
       </View>
-      <View style={{ flex: 1, paddingVertical: 10, paddingRight: 12 }}>
-        <Text style={s.cartaoTitulo} numberOfLines={1}>{os.titulo}</Text>
+      <View style={[s.cartaoFaixa, { backgroundColor: cor }]} />
+      <View style={[s.cartaoIcone, { backgroundColor: fundoDe(cor) }]}>
+        <Icone nome={iconeDoTipo(os.tipo)} tamanho={22} cor={cor} />
+      </View>
+      <View style={{ flex: 1, paddingVertical: 12, paddingRight: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {urgente ? <Icone nome="alert" tamanho={16} cor={cores.perigo} /> : null}
+          <Text style={s.cartaoTitulo} numberOfLines={1}>{os.titulo}</Text>
+        </View>
         <Text style={s.cartaoLinha} numberOfLines={1}>
-          {os.numero ? `#${os.numero} · ` : ''}{os.tipo}{os.endereco ? ` · ${os.endereco}` : ''}
+          {os.tipo}{os.numero ? ` · O.S. ${os.numero}` : ''}{os.ticket_acionamento ? ` · ${os.ticket_acionamento}` : ''}
         </Text>
+        {os.endereco ? (
+          <View style={s.cartaoMeta}>
+            <Icone nome="map-marker-outline" tamanho={14} cor={cores.suave} />
+            <Text style={s.cartaoLinha} numberOfLines={1}>{os.endereco}</Text>
+          </View>
+        ) : null}
         <View style={s.selos}>
-          <Text style={[s.selo, { color: cor, borderColor: cor }]}>{rotuloStatus[os.status]}</Text>
-          {os.prioridade === 'emergencia' || os.prioridade === 'alta' ? (
-            <Text style={[s.selo, { color: cores.perigo, borderColor: cores.perigo }]}>{os.prioridade === 'alta' ? 'Alta' : 'Emergência'}</Text>
+          <View style={[s.selo, { backgroundColor: fundoDe(cor) }]}>
+            <Text style={[s.seloTexto, { color: cor }]}>{rotuloStatus[os.status]}</Text>
+          </View>
+          {sla ? (
+            <View style={s.cartaoMeta}>
+              <Icone nome={sla.nivel === 'vencido' ? 'clock-alert-outline' : 'clock-outline'} tamanho={14} cor={corSla} />
+              <Text style={[s.slaTexto, { color: corSla }]}>{sla.texto.replace('SLA ', '')}</Text>
+            </View>
           ) : null}
-          {sla ? <Text style={[s.seloTexto, { color: corSla }]}>{sla.texto}</Text> : null}
         </View>
       </View>
-      <Text style={s.seta}>›</Text>
+      <Icone nome="chevron-right" tamanho={22} cor="#B9B4AF" style={{ marginRight: 6 }} />
     </Pressable>
   );
 });
 
 const s = StyleSheet.create({
-  faixa: { backgroundColor: '#FCEFD9', paddingHorizontal: 16, paddingVertical: 8 },
-  faixaTexto: { color: '#7A4B00', fontSize: 13 },
+  faixa: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FCEFD9', paddingHorizontal: 16, paddingVertical: 8 },
+  faixaTexto: { flex: 1, color: '#7A4B00', fontSize: 13 },
   jornada: { backgroundColor: cores.cartao, padding: 14, borderBottomWidth: 1, borderBottomColor: cores.borda },
-  jornadaLinha: { flexDirection: 'row', alignItems: 'center' },
-  ponto: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
-  jornadaTexto: { fontSize: 15, fontWeight: '600', color: cores.texto },
-  jornadaDesde: { fontSize: 13, color: cores.suave, marginLeft: 6 },
+  jornadaLinha: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  jornadaIcone: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  jornadaTexto: { fontSize: 16, fontWeight: '700', color: cores.texto },
+  jornadaDesde: { fontSize: 13, color: cores.suave, marginTop: 1 },
   campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 6, padding: 10, fontSize: 16, backgroundColor: '#fff' },
-  botoes: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  botao: { flex: 1, borderRadius: 6, paddingVertical: 12, alignItems: 'center' },
+  botoes: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  botao: { flex: 1, flexDirection: 'row', gap: 8, justifyContent: 'center', borderRadius: 6, paddingVertical: 11, alignItems: 'center' },
   botaoSecundario: { backgroundColor: cores.cartao, borderWidth: 1, borderColor: cores.borda },
-  botaoTexto: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  botaoContorno: { backgroundColor: cores.cartao, borderWidth: 1.5, borderColor: cores.perigo },
+  botaoTexto: { color: '#fff', fontSize: 14, fontWeight: '700' },
   resumo: { flexDirection: 'row', backgroundColor: cores.cartao, borderBottomWidth: 1, borderBottomColor: cores.borda },
   resumoItem: { flex: 1, alignItems: 'center', paddingVertical: 10 },
-  resumoNumero: { fontSize: 22, fontWeight: '700' },
+  resumoNumero: { fontSize: 20, fontWeight: '700' },
   resumoRotulo: { fontSize: 11, color: cores.suave, marginTop: 2 },
-  secao: { color: cores.suave, fontSize: 12, fontWeight: '700', letterSpacing: 0.5, marginHorizontal: 16, marginTop: 16, marginBottom: 6 },
+  secao: { color: cores.suave, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginHorizontal: 16, marginTop: 16, marginBottom: 6 },
   vazio: { color: cores.suave, margin: 16, textAlign: 'center' },
-  cartao: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.cartao, borderBottomWidth: 1, borderBottomColor: cores.borda },
-  cartaoFaixa: { width: 5, alignSelf: 'stretch' },
-  cartaoHora: { width: 62, alignItems: 'center' },
+  cartao: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.cartao, borderBottomWidth: 1, borderBottomColor: cores.linha },
+  cartaoHora: { width: 58, alignItems: 'center' },
   cartaoHoraValor: { fontSize: 15, fontWeight: '700' },
-  cartaoHoraRotulo: { fontSize: 11, color: cores.suave },
-  cartaoTitulo: { fontSize: 16, fontWeight: '600', color: cores.texto },
-  cartaoLinha: { fontSize: 13, color: cores.suave, marginTop: 2 },
-  selos: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' },
-  selo: { fontSize: 11, fontWeight: '700', borderWidth: 1, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
-  seloTexto: { fontSize: 12, fontWeight: '600' },
-  seta: { fontSize: 24, color: cores.borda, paddingRight: 10 },
+  cartaoHoraRotulo: { fontSize: 10, color: cores.suave, textTransform: 'uppercase', letterSpacing: 0.4 },
+  cartaoFaixa: { width: 3, alignSelf: 'stretch', marginVertical: 10, borderRadius: 2 },
+  cartaoIcone: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginHorizontal: 10 },
+  cartaoTitulo: { flex: 1, fontSize: 16, fontWeight: '600', color: cores.texto },
+  cartaoLinha: { flexShrink: 1, fontSize: 13, color: cores.suave, marginTop: 2 },
+  cartaoMeta: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 },
+  selos: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap' },
+  selo: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+  seloTexto: { fontSize: 11, fontWeight: '700' },
+  slaTexto: { fontSize: 12, fontWeight: '600' },
 });

@@ -1,34 +1,47 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
+import Icone, { NomeIcone } from '../componentes/Icone';
 import { VERSAO_APP } from '../lib/atualizacao';
-import { cores } from '../lib/estilo';
+import { cores, fundoDe } from '../lib/estilo';
 
 type Destino = 'preventiva' | 'escala' | 'rotas' | 'despesas';
 type Props = { nome: string; cargo: string | null; pendentes: number; abrir: (d: Destino) => void; sair: () => void };
 
+const iniciais = (nome: string) => nome.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'T';
+
 export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
-  const item = (rotulo: string, detalhe: string, acao: () => void, cor: string = cores.texto) => (
+  const item = (icone: NomeIcone, rotulo: string, detalhe: string, acao: () => void, cor: string = cores.primaria) => (
     <Pressable style={({ pressed }) => [s.item, pressed && { backgroundColor: cores.selecionado }]} onPress={acao}>
+      <View style={[s.itemIcone, { backgroundColor: fundoDe(cor) }]}>
+        <Icone nome={icone} tamanho={22} cor={cor} />
+      </View>
       <View style={{ flex: 1 }}>
-        <Text style={[s.rotulo, { color: cor }]}>{rotulo}</Text>
+        <Text style={[s.rotulo, cor === cores.perigo && { color: cor }]}>{rotulo}</Text>
         {detalhe ? <Text style={s.detalhe}>{detalhe}</Text> : null}
       </View>
-      <Text style={s.seta}>›</Text>
+      <Icone nome="chevron-right" tamanho={22} cor="#B9B4AF" />
     </Pressable>
   );
 
   return (
     <View style={{ flex: 1, backgroundColor: cores.fundo }}>
-      <Cabecalho titulo={nome || 'Técnico Plus'} subtitulo={cargo ?? undefined} />
+      <Cabecalho titulo="Menu" />
       <ScrollView>
+        <View style={s.perfil}>
+          <View style={s.avatar}><Text style={s.avatarTexto}>{iniciais(nome)}</Text></View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.nome} numberOfLines={1}>{nome || 'Técnico'}</Text>
+            <Text style={s.detalhe}>{cargo ?? 'Técnico de campo'} · Multivale Backbone</Text>
+          </View>
+        </View>
         <Text style={s.secao}>CAMPO</Text>
-        {item('Iniciar preventiva', 'Abrir uma preventiva no local, com o expediente iniciado', () => abrir('preventiva'))}
-        {item('Despesas', 'Combustível, pedágio, ferramentas: foto do comprovante e valores', () => abrir('despesas'))}
-        {item('Minha escala', 'Jornada, plantão e folgas do mês', () => abrir('escala'))}
-        {item('Rotas KMZ', 'Trechos do backbone para abrir no Google Earth', () => abrir('rotas'))}
+        {item('shield-plus-outline', 'Iniciar preventiva', 'Abrir uma preventiva no local, com o expediente iniciado', () => abrir('preventiva'), cores.sucesso)}
+        {item('receipt-text-outline', 'Despesas', 'Combustível, pedágio, ferramentas: foto do comprovante e valores', () => abrir('despesas'), cores.alerta)}
+        {item('calendar-month-outline', 'Minha escala', 'Jornada, plantão e folgas do mês', () => abrir('escala'))}
+        {item('map-outline', 'Rotas KMZ', 'Trechos do backbone para abrir no Google Earth', () => abrir('rotas'), '#227E9E')}
         <Text style={s.secao}>CONTA</Text>
-        {item('Sair', pendentes > 0 ? `${pendentes} registro(s) ainda não enviados` : '', sair, cores.perigo)}
+        {item('logout', 'Sair', pendentes > 0 ? `${pendentes} registro(s) ainda não enviados` : '', sair, cores.perigo)}
         <Text style={s.versao}>Técnico Plus · versão {VERSAO_APP || 'desenvolvimento'}</Text>
       </ScrollView>
     </View>
@@ -36,11 +49,15 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
 }
 
 const s = StyleSheet.create({
-  secao: { color: cores.suave, fontSize: 12, fontWeight: '700', letterSpacing: 0.5, marginHorizontal: 16, marginTop: 18, marginBottom: 6 },
-  item: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.cartao, paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: cores.borda },
-  rotulo: { fontSize: 16, fontWeight: '600' },
+  perfil: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: cores.cartao, padding: 16, borderBottomWidth: 1, borderBottomColor: cores.borda },
+  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: cores.primaria, alignItems: 'center', justifyContent: 'center' },
+  avatarTexto: { color: '#fff', fontSize: 19, fontWeight: '700' },
+  nome: { fontSize: 17, fontWeight: '700', color: cores.texto },
+  secao: { color: cores.suave, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginHorizontal: 16, marginTop: 18, marginBottom: 6 },
+  item: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: cores.cartao, paddingHorizontal: 16, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: cores.linha },
+  itemIcone: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  rotulo: { fontSize: 16, fontWeight: '600', color: cores.texto },
   detalhe: { fontSize: 13, color: cores.suave, marginTop: 2 },
-  seta: { fontSize: 24, color: cores.borda },
   versao: { textAlign: 'center', color: cores.suave, fontSize: 12, marginVertical: 24 },
 });

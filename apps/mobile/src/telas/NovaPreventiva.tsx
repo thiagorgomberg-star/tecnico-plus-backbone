@@ -3,6 +3,7 @@ import { randomUUID } from 'expo-crypto';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import Cabecalho from '../componentes/Cabecalho';
 import { cores, estilo } from '../lib/estilo';
 import { enfileirar } from '../lib/fila';
 import { lerJornada } from '../lib/jornada';
@@ -136,11 +137,8 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
 
   return (
     <ScrollView style={estilo.tela} keyboardShouldPersistTaps="handled">
-      <Pressable onPress={voltar} style={{ padding: 16 }}>
-        <Text style={{ color: cores.primaria, fontSize: 16 }}>‹ Voltar</Text>
-      </Pressable>
-      <Text style={[estilo.titulo, { marginHorizontal: 16 }]}>Nova preventiva</Text>
-      <Text style={[estilo.suave, { marginHorizontal: 16 }]}>
+      <Cabecalho titulo="Nova preventiva" voltar={voltar} />
+      <Text style={[estilo.suave, { marginHorizontal: 16, marginTop: 12 }]}>
         A preventiva já começa em execução, com a sua localização. Depois é igual a uma O.S.: fotos (mínimo 10) e conclusão.
       </Text>
 

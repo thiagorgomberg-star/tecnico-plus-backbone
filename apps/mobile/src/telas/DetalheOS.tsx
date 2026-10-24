@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
+import Icone, { iconeDoTipo, NomeIcone } from '../componentes/Icone';
 import Assinatura from '../componentes/Assinatura';
 import CaixasOS from '../componentes/CaixasOS';
 import ExecucaoOS from '../componentes/ExecucaoOS';
 import MaterialApoio from '../componentes/MaterialApoio';
-import { cores, corDoStatus } from '../lib/estilo';
+import { cores, corDoStatus, fundoDe } from '../lib/estilo';
 import { Caixa } from '../lib/caixas';
 import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
 import { textoSla } from '../lib/formato';
@@ -167,18 +168,44 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
   return (
     <View style={{ flex: 1, backgroundColor: cores.fundo }}>
       <Cabecalho
-        titulo={os.titulo}
-        subtitulo={`${os.numero ? `O.S. #${os.numero}` : 'O.S. nova'} · ${os.tipo}${os.ticket_acionamento ? ` · ${os.ticket_acionamento}` : ''}`}
+        titulo={os.numero ? `O.S. ${os.numero}` : 'O.S. nova'}
+        subtitulo={`${os.tipo}${os.ticket_acionamento ? ` · ${os.ticket_acionamento}` : ''}`}
         voltar={voltar}
+        acoes={['concluida', 'baixada'].includes(os.status)
+          ? [{ icone: 'file-pdf-box', rotulo: 'Relatório PDF', aoTocar: () => enviarRelatorio() }] : undefined}
       />
-      <View style={[s.status, { borderLeftColor: corStatus }]}>
-        <Text style={[s.statusTexto, { color: corStatus }]}>{rotuloStatus[os.status]}</Text>
-        {sla ? <Text style={[s.sla, { color: corSla }]}>{sla.texto}</Text> : null}
+      <View style={s.resumo}>
+        <View style={[s.resumoIcone, { backgroundColor: fundoDe(corStatus) }]}>
+          <Icone nome={iconeDoTipo(os.tipo)} tamanho={26} cor={corStatus} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.resumoTitulo} numberOfLines={2}>{os.titulo}</Text>
+          <View style={s.resumoSelos}>
+            <View style={[s.selo, { backgroundColor: fundoDe(corStatus) }]}>
+              <Text style={[s.seloTexto, { color: corStatus }]}>{rotuloStatus[os.status]}</Text>
+            </View>
+            {os.prioridade === 'alta' || os.prioridade === 'emergencia' ? (
+              <View style={[s.selo, { backgroundColor: fundoDe(cores.perigo) }]}>
+                <Text style={[s.seloTexto, { color: cores.perigo }]}>{os.prioridade === 'alta' ? 'Prioridade alta' : 'Emergência'}</Text>
+              </View>
+            ) : null}
+            {sla ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                <Icone nome={sla.nivel === 'vencido' ? 'clock-alert-outline' : 'clock-outline'} tamanho={15} cor={corSla} />
+                <Text style={[s.sla, { color: corSla }]}>{sla.texto.replace('SLA ', '')}</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
       </View>
 
       <View style={s.abas}>
-        {([['detalhes', 'Detalhes'], ['execucao', 'Execução'], ['caixas', 'Caixas'], ['fotos', `Fotos ${totalFotos}/${MINIMO_FOTOS}`], ['historico', 'Histórico']] as [Aba, string][]).map(([valor, rotulo]) => (
+        {([
+          ['detalhes', 'Detalhes', 'information-outline'], ['execucao', 'Execução', 'wrench-outline'], ['caixas', 'Caixas', 'package-variant'],
+          ['fotos', `Fotos ${totalFotos}/${MINIMO_FOTOS}`, 'camera-outline'], ['historico', 'Histórico', 'history'],
+        ] as [Aba, string, NomeIcone][]).map(([valor, rotulo, icone]) => (
           <Pressable key={valor} style={[s.aba, aba === valor && s.abaAtiva]} onPress={() => setAba(valor)}>
+            <Icone nome={icone} tamanho={20} cor={aba === valor ? cores.primaria : cores.suave} />
             <Text style={[s.abaTexto, aba === valor && s.abaTextoAtivo]} numberOfLines={1}>{rotulo}</Text>
           </Pressable>
         ))}
@@ -195,50 +222,49 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
               <Aviso cor={cores.alerta} texto={`Pausa solicitada (${os.pausa_motivo ?? ''}). Aguardando o supervisor autorizar.`} />
             ) : null}
 
-            <Campo rotulo="Endereço / referência" valor={os.endereco}>
+            <View style={s.grade}>
               {os.endereco ? (
-                <View style={{ flexDirection: 'row', gap: 20 }}>
+                <>
                   {/* Rota até o local da O.S. no navegador do celular (Google Maps ou Waze). */}
-                  <Pressable onPress={() => Linking.openURL(`https://www.google.com/maps/dir/?api=1&travelmode=driving&dir_action=navigate&destination=${encodeURIComponent(os.endereco!)}`)}>
-                    <Text style={s.link}>Rota no Google Maps ›</Text>
-                  </Pressable>
-                  <Pressable onPress={() => Linking.openURL(`https://waze.com/ul?q=${encodeURIComponent(os.endereco!)}&navigate=yes`)}>
-                    <Text style={s.link}>Waze ›</Text>
-                  </Pressable>
-                </View>
+                  <Acao icone="navigation-variant" rotulo="Rota" cor={cores.primaria}
+                    aoTocar={() => Linking.openURL(`https://www.google.com/maps/dir/?api=1&travelmode=driving&dir_action=navigate&destination=${encodeURIComponent(os.endereco!)}`)} />
+                  <Acao icone="waze" rotulo="Waze" cor="#2BB7E8"
+                    aoTocar={() => Linking.openURL(`https://waze.com/ul?q=${encodeURIComponent(os.endereco!)}&navigate=yes`)} />
+                </>
               ) : null}
-            </Campo>
-            <Campo rotulo="Descrição" valor={os.descricao} />
-            <Campo rotulo="Prioridade" valor={{ baixa: 'Baixa', media: 'Média', alta: 'Alta', emergencia: 'Emergência' }[os.prioridade]} />
-            {os.sla_limite ? (
-              <Campo rotulo="Limite do SLA (4h)" valor={new Date(os.sla_limite).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} />
-            ) : null}
+              {ehCorretiva(os.tipo) && os.status !== 'baixada' && os.status !== 'cancelada' ? (
+                <Acao icone="crosshairs-gps" rotulo={os.evento_localizado_em ? 'Evento localizado' : 'Localizei o evento'} cor={cores.perigo}
+                  feito={!!os.evento_localizado_em} aoTocar={localizarEvento} />
+              ) : null}
+              <Acao icone="camera-outline" rotulo={`Fotos ${totalFotos}/${MINIMO_FOTOS}`} cor={cores.primaria} feito={totalFotos >= MINIMO_FOTOS}
+                aoTocar={podeFotografar ? () => abrirCamera(totalFotos) : () => setAba('fotos')} />
+              <Acao icone="draw-pen" rotulo={assinadoPor ? 'Assinado' : 'Assinatura'} cor={cores.texto2} feito={!!assinadoPor}
+                aoTocar={podeEditar ? () => setAssinando(true) : undefined} />
+              <Acao icone="package-variant" rotulo="Caixas" cor={cores.texto2} aoTocar={() => setAba('caixas')} />
+              <Acao icone="wrench-outline" rotulo="Execução" cor={cores.texto2} aoTocar={() => setAba('execucao')} />
+              {['concluida', 'baixada'].includes(os.status) ? (
+                <Acao icone="whatsapp" rotulo="Relatório" cor="#25D366" aoTocar={() => enviarRelatorio()} />
+              ) : null}
+            </View>
 
-            {ehCorretiva(os.tipo) && os.status !== 'baixada' && os.status !== 'cancelada' ? (
-              <View style={s.bloco}>
-                <Text style={s.rotulo}>LOCAL DO EVENTO</Text>
-                <Text style={s.valor}>
-                  {os.evento_localizado_em
-                    ? `Registrado às ${new Date(os.evento_localizado_em).toLocaleTimeString('pt-BR')}`
-                    : 'Ainda não registrado. Funciona mesmo sem internet.'}
-                </Text>
-                <Pressable style={[s.botaoBloco, { backgroundColor: cores.perigo }]} onPress={localizarEvento}>
-                  <Text style={s.botaoTexto}>{os.evento_localizado_em ? 'Registrar de novo' : 'Localizei o evento'}</Text>
-                </Pressable>
-              </View>
+            <Text style={s.secao}>INFORMAÇÕES</Text>
+            <Info icone="map-marker-outline" rotulo="Endereço / referência" valor={os.endereco} />
+            <Info icone="text-box-outline" rotulo="Descrição" valor={os.descricao} />
+            <Info icone="ticket-confirmation-outline" rotulo="Ticket de acionamento" valor={os.ticket_acionamento} />
+            <Info icone="flag-outline" rotulo="Prioridade" valor={{ baixa: 'Baixa', media: 'Média', alta: 'Alta', emergencia: 'Emergência' }[os.prioridade]} />
+            {os.sla_limite ? (
+              <Info icone="timer-outline" rotulo="Limite do SLA (4h)" valor={new Date(os.sla_limite).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} />
             ) : null}
+            {ehCorretiva(os.tipo) && os.status !== 'baixada' && os.status !== 'cancelada' ? (
+              <Info icone="crosshairs-gps" rotulo="Local do evento"
+                valor={os.evento_localizado_em
+                  ? `Registrado às ${new Date(os.evento_localizado_em).toLocaleTimeString('pt-BR')}`
+                  : 'Ainda não registrado. Toque em "Localizei o evento" (funciona sem internet).'} />
+            ) : null}
+            <Info icone="draw-pen" rotulo="Assinatura do responsável no local" valor={assinadoPor ? `Assinado por ${assinadoPor}` : 'Ainda não colhida.'} />
 
             <MaterialApoio osId={os.id} />
 
-            <View style={s.bloco}>
-              <Text style={s.rotulo}>ASSINATURA DO RESPONSÁVEL NO LOCAL</Text>
-              <Text style={s.valor}>{assinadoPor ? `Assinado por ${assinadoPor}` : 'Ainda não colhida.'}</Text>
-              {podeEditar ? (
-                <Pressable style={[s.botaoBloco, { backgroundColor: cores.primaria }]} onPress={() => setAssinando(true)}>
-                  <Text style={s.botaoTexto}>{assinadoPor ? 'Colher de novo' : 'Colher assinatura'}</Text>
-                </Pressable>
-              ) : null}
-            </View>
             <Assinatura osId={os.id} aberta={assinando} fechar={() => setAssinando(false)} aoSalvar={setAssinadoPor} />
 
             {acao ? (
@@ -303,20 +329,49 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
         <View style={[s.rodape, { flexDirection: 'row', gap: 8 }]}>
           {os.status === 'em_execucao' && !os.pausa_solicitada_em ? (
             <Pressable style={[s.botaoRodape, s.botaoSecundario, { flex: 0.6 }]} onPress={() => setPedindoPausa(true)}>
-              <Text style={[s.botaoTexto, { color: cores.texto }]}>Pedir pausa</Text>
+              <Icone nome="pause-circle-outline" tamanho={20} cor={cores.texto} />
+              <Text style={[s.botaoTexto, { color: cores.texto }]}>Pausa</Text>
             </Pressable>
           ) : null}
           <Pressable style={[s.botaoRodape, { backgroundColor: acao.status === 'concluida' ? cores.sucesso : cores.primaria }]} onPress={avancar}>
+            <Icone nome={acao.status === 'concluida' ? 'check-circle-outline' : acao.status === 'em_execucao' ? 'play-circle-outline' : 'eye-check-outline'}
+              tamanho={20} cor="#fff" />
             <Text style={s.botaoTexto}>{acao.rotulo}</Text>
           </Pressable>
         </View>
       ) : ['concluida', 'baixada'].includes(os.status) ? (
         <View style={s.rodape}>
           <Pressable style={[s.botaoRodape, { backgroundColor: '#25D366' }]} onPress={() => enviarRelatorio()} disabled={gerandoPdf}>
-            {gerandoPdf ? <ActivityIndicator color="#fff" /> : <Text style={s.botaoTexto}>Enviar relatório (PDF) pelo WhatsApp</Text>}
+            {gerandoPdf ? <ActivityIndicator color="#fff" /> : <><Icone nome="whatsapp" tamanho={20} cor="#fff" /><Text style={s.botaoTexto}>Enviar relatório (PDF) pelo WhatsApp</Text></>}
           </Pressable>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+function Acao({ icone, rotulo, cor, aoTocar, feito }: { icone: NomeIcone; rotulo: string; cor: string; aoTocar?: () => void; feito?: boolean }) {
+  return (
+    <Pressable style={({ pressed }) => [s.acao, pressed && { backgroundColor: cores.selecionado }, !aoTocar && { opacity: 0.45 }]}
+      onPress={aoTocar} disabled={!aoTocar}>
+      <View style={[s.acaoIcone, { backgroundColor: fundoDe(cor) }]}>
+        <Icone nome={icone} tamanho={24} cor={cor} />
+        {feito ? <View style={s.acaoFeito}><Icone nome="check" tamanho={11} cor="#fff" /></View> : null}
+      </View>
+      <Text style={s.acaoRotulo} numberOfLines={2}>{rotulo}</Text>
+    </Pressable>
+  );
+}
+
+function Info({ icone, rotulo, valor }: { icone: NomeIcone; rotulo: string; valor: string | null | undefined }) {
+  if (!valor) return null;
+  return (
+    <View style={s.info}>
+      <Icone nome={icone} tamanho={20} cor={cores.suave} style={{ marginTop: 1 }} />
+      <View style={{ flex: 1 }}>
+        <Text style={s.infoRotulo}>{rotulo}</Text>
+        <Text style={s.valor}>{valor}</Text>
+      </View>
     </View>
   );
 }
@@ -341,14 +396,32 @@ function Aviso({ cor, texto }: { cor: string; texto: string }) {
 }
 
 const s = StyleSheet.create({
+  resumo: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: cores.cartao, padding: 14,
+    borderBottomWidth: 1, borderBottomColor: cores.borda },
+  resumoIcone: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  resumoTitulo: { fontSize: 17, fontWeight: '700', color: cores.texto },
+  resumoSelos: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 6 },
+  selo: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+  seloTexto: { fontSize: 12, fontWeight: '700' },
+  grade: { flexDirection: 'row', flexWrap: 'wrap', backgroundColor: cores.cartao, paddingVertical: 8, paddingHorizontal: 4,
+    borderBottomWidth: 1, borderBottomColor: cores.borda },
+  acao: { width: '25%', alignItems: 'center', paddingVertical: 8, borderRadius: 8 },
+  acaoIcone: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  acaoFeito: { position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 9, backgroundColor: cores.sucesso,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
+  acaoRotulo: { fontSize: 12, color: cores.texto, marginTop: 6, textAlign: 'center', paddingHorizontal: 2 },
+  secao: { color: cores.suave, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginHorizontal: 16, marginTop: 16, marginBottom: 6 },
+  info: { flexDirection: 'row', gap: 14, backgroundColor: cores.cartao, paddingHorizontal: 16, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: cores.linha },
+  infoRotulo: { fontSize: 12, color: cores.suave, marginBottom: 2 },
   status: { backgroundColor: cores.cartao, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 14, paddingVertical: 10, borderLeftWidth: 5, borderBottomWidth: 1, borderBottomColor: cores.borda },
   statusTexto: { fontSize: 15, fontWeight: '700' },
   sla: { fontSize: 14, fontWeight: '600' },
   abas: { flexDirection: 'row', backgroundColor: cores.cartao, borderBottomWidth: 1, borderBottomColor: cores.borda },
-  aba: { flex: 1, alignItems: 'center', paddingVertical: 12, borderBottomWidth: 3, borderBottomColor: 'transparent' },
+  aba: { flex: 1, alignItems: 'center', paddingTop: 8, paddingBottom: 6, borderBottomWidth: 3, borderBottomColor: 'transparent' },
   abaAtiva: { borderBottomColor: cores.primaria },
-  abaTexto: { fontSize: 13, color: cores.suave, fontWeight: '600' },
+  abaTexto: { fontSize: 11, color: cores.suave, fontWeight: '600', marginTop: 2 },
   abaTextoAtivo: { color: cores.primaria },
   bloco: { backgroundColor: cores.cartao, borderBottomWidth: 1, borderBottomColor: cores.borda, padding: 14 },
   rotulo: { fontSize: 12, fontWeight: '700', color: cores.suave, letterSpacing: 0.5, marginBottom: 4 },
@@ -361,7 +434,7 @@ const s = StyleSheet.create({
   evento: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   eventoPonto: { width: 10, height: 10, borderRadius: 5, marginRight: 10 },
   rodape: { backgroundColor: cores.cartao, borderTopWidth: 1, borderTopColor: cores.borda, padding: 12 },
-  botaoRodape: { flex: 1, borderRadius: 6, paddingVertical: 14, alignItems: 'center' },
+  botaoRodape: { flex: 1, flexDirection: 'row', gap: 8, justifyContent: 'center', borderRadius: 6, paddingVertical: 14, alignItems: 'center' },
   botaoSecundario: { backgroundColor: cores.cartao, borderWidth: 1, borderColor: cores.borda },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

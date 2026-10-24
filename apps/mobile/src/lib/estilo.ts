@@ -16,7 +16,12 @@ export const cores = {
   cabecalhoSuave: '#D5D1CD',
   barra: '#3A3631',
   selecionado: '#E6F0FA',
+  linha: '#EDEAE7',
+  texto2: '#3D3935',
 };
+
+// Fundo claro do selo de cada cor (status, SLA).
+export const fundoDe = (cor: string) => `${cor}1F`;
 
 export const corDoStatus: Record<string, string> = {
   enviada: '#0572CE',

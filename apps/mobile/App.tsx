@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { Alert, AppState, BackHandler, SafeAreaView, View } from 'react-native';
 
 import AbasInferiores, { Aba } from './src/componentes/AbasInferiores';
+import { fonteIcones } from './src/componentes/Icone';
 import { cores, estilo } from './src/lib/estilo';
 import { aoMudarFila, itensPendentes, sincronizar } from './src/lib/fila';
 import { limparJornadaLocal } from './src/lib/jornada';
@@ -29,7 +30,7 @@ export type Perfil = { nome: string; cargo: string | null };
 type Camera = { osId: string; fotosJaFeitas: number };
 
 export default function App() {
-  const [fontesProntas] = useFonts({ RobotoCondensed_400Regular, RobotoCondensed_700Bold });
+  const [fontesProntas] = useFonts({ RobotoCondensed_400Regular, RobotoCondensed_700Bold, ...fonteIcones });
   const [sessao, setSessao] = useState<Session | null>(null);
   const [perfil, setPerfil] = useState<Perfil>({ nome: '', cargo: null });
   const [osAberta, setOsAberta] = useState<OrdemServico | null>(null);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 
 import { carregarEscala, corEscala, hojeLocal, ItemEscala, rotuloEscala } from '../lib/escala';
+import Cabecalho from '../componentes/Cabecalho';
 import { cores, estilo } from '../lib/estilo';
 
 const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -22,11 +23,8 @@ export default function MinhaEscala({ voltar }: { voltar: () => void }) {
 
   return (
     <View style={estilo.tela}>
-      <Pressable onPress={voltar} style={{ padding: 16 }}>
-        <Text style={{ color: cores.primaria, fontSize: 16 }}>‹ Voltar</Text>
-      </Pressable>
-      <Text style={[estilo.titulo, { marginHorizontal: 16 }]}>Minha escala</Text>
-      <Text style={[estilo.suave, { marginHorizontal: 16 }]}>Próximos 60 dias, definidos pelo supervisor.</Text>
+      <Cabecalho titulo="Minha escala" voltar={voltar} />
+      <Text style={[estilo.suave, { marginHorizontal: 16, marginTop: 12 }]}>Próximos 60 dias, definidos pelo supervisor.</Text>
       <FlatList
         data={itens}
         keyExtractor={(i) => i.id}

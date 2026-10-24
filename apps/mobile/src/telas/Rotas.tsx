@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { Alert, FlatList, Linking, Pressable, Text, View } from 'react-native';
 
+import Cabecalho from '../componentes/Cabecalho';
 import { cores, estilo } from '../lib/estilo';
 import { supabase } from '../lib/supabase';
 
@@ -31,11 +32,8 @@ export default function Rotas({ voltar }: { voltar: () => void }) {
 
   return (
     <View style={estilo.tela}>
-      <Pressable onPress={voltar} style={{ padding: 16 }}>
-        <Text style={{ color: cores.primaria, fontSize: 16 }}>‹ Voltar</Text>
-      </Pressable>
-      <Text style={[estilo.titulo, { marginHorizontal: 16 }]}>Rotas do backbone</Text>
-      <Text style={[estilo.suave, { marginHorizontal: 16 }]}>Toque no trecho para baixar o KMZ e abrir no Google Earth.</Text>
+      <Cabecalho titulo="Rotas do backbone" voltar={voltar} />
+      <Text style={[estilo.suave, { marginHorizontal: 16, marginTop: 12 }]}>Toque no trecho para baixar o KMZ e abrir no Google Earth.</Text>
       <FlatList
         data={rotas}
         keyExtractor={(r) => r.id}
