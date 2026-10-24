@@ -19,7 +19,7 @@ function grausMinutosSegundos(valor: number, positivo: string, negativo: string)
 export const latLong = (latitude: number, longitude: number) =>
   `${grausMinutosSegundos(latitude, 'N', 'S')}, ${grausMinutosSegundos(longitude, 'E', 'W')}`;
 
-// SLA de 4h a partir do envio: "SLA 2h15 restantes" ou "SLA vencido há 30 min".
+// SLA de 4h a partir do cadastro da O.S.: "SLA 2h15 restantes" ou "SLA vencido há 30 min".
 export function textoSla(limite: string, agora = new Date()) {
   const minutos = Math.round((new Date(limite).getTime() - agora.getTime()) / 60000);
   const duracao = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}` : `${m} min`);

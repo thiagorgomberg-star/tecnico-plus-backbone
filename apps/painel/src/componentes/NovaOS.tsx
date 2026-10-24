@@ -15,7 +15,6 @@ export default function NovaOS({ tecnicos, fechar, criada }: Props) {
   const [tecnicoId, setTecnicoId] = useState("");
   const [endereco, setEndereco] = useState("");
   const [descricao, setDescricao] = useState("");
-  const [prazo, setPrazo] = useState("");
   const [erro, setErro] = useState("");
 
   async function salvar(enviar: boolean) {
@@ -30,7 +29,6 @@ export default function NovaOS({ tecnicos, fechar, criada }: Props) {
       tecnico_id: tecnicoId || null,
       endereco: endereco || null,
       descricao: descricao || null,
-      prazo: prazo ? new Date(prazo).toISOString() : null,
       status: enviar ? "enviada" : "rascunho",
     });
     if (error) return setErro(error.message);
@@ -45,8 +43,8 @@ export default function NovaOS({ tecnicos, fechar, criada }: Props) {
       <div className="mt-10 w-full max-w-lg rounded-xl bg-white p-6 shadow-lg">
         <h2 className="mb-4 text-lg font-semibold">Nova ordem de serviço</h2>
         <div className="grid gap-3">
-          <label className="text-sm">Ticket de acionamento
-            <input className={campo} value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="Número do ticket do cliente" />
+          <label className="text-sm">Ticket de acionamento (opcional)
+            <input className={campo} value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="Em branco: o sistema gera um token de 16 dígitos" />
           </label>
           <label className="text-sm">Título
             <input className={campo} value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ex.: Rompimento de fibra no km 12" />
@@ -72,9 +70,6 @@ export default function NovaOS({ tecnicos, fechar, criada }: Props) {
                 <option value="">Escolher depois</option>
                 {tecnicos.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
               </select>
-            </label>
-            <label className="text-sm">Prazo
-              <input className={campo} type="datetime-local" value={prazo} onChange={(e) => setPrazo(e.target.value)} />
             </label>
           </div>
           <label className="text-sm">Endereço ou referência
