@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import ExcluirDados from "@/componentes/ExcluirDados";
 import { supabase } from "@/lib/supabase";
 
 type Membro = {
@@ -15,10 +16,11 @@ export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState("");
   const [versao, setVersao] = useState(0);
+  const [excluir, setExcluir] = useState<Membro | null>(null);
   const recarregar = useCallback(() => { setVersao((v) => v + 1); aoMudar(); }, [aoMudar]);
 
   useEffect(() => {
-    supabase.from("usuarios").select("id, nome, cargo, matricula, papel, ativo, inicio_jornada, fim_jornada, fim_jornada_sexta, regime_horas").order("nome")
+    supabase.from("usuarios").select("id, nome, cargo, matricula, papel, ativo, inicio_jornada, fim_jornada, fim_jornada_sexta, regime_horas").is("excluido_em", null).order("nome")
       .then(({ data }) => setMembros(data ?? []));
   }, [versao]);
 
@@ -92,9 +94,13 @@ export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
                 {m.ativo ? "Desativar" : "Reativar"}
               </button>
             )}
+            {m.papel === "tecnico" && (
+              <button className="text-red-700 hover:underline" onClick={() => setExcluir(m)}>Excluir</button>
+            )}
           </li>
         ))}
       </ul>
+      {excluir && <ExcluirDados tipo="tecnico" id={excluir.id} nome={excluir.nome} fechar={() => setExcluir(null)} aoExcluir={recarregar} />}
     </section>
   );
 }

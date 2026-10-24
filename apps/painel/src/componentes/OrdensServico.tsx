@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import AutorizarPausa from "@/componentes/AutorizarPausa";
 import DetalheOS from "@/componentes/DetalheOS";
+import ExcluirDados from "@/componentes/ExcluirDados";
 import MaterialApoio from "@/componentes/MaterialApoio";
 import NovaOS from "@/componentes/NovaOS";
 import { supabase } from "@/lib/supabase";
@@ -28,6 +29,7 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
   const [apoio, setApoio] = useState<OrdemServico | null>(null);
   const [detalhe, setDetalhe] = useState<OrdemServico | null>(null);
   const [pausa, setPausa] = useState<OrdemServico | null>(null);
+  const [excluir, setExcluir] = useState<OrdemServico | null>(null);
 
   const [versao, setVersao] = useState(0);
   const carregar = useCallback(() => setVersao((v) => v + 1), []);
@@ -166,6 +168,8 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
                         <button className={`${botao} text-red-700 hover:bg-red-50`}
                           onClick={() => confirm(`Cancelar a O.S. #${os.numero}?`) && mudarStatus(os, "cancelada")}>Cancelar</button>
                       )}
+                      <button className={`${botao} text-red-700 hover:bg-red-50`} title="Apagar a O.S. de vez"
+                        onClick={() => setExcluir(os)}>Excluir</button>
                     </div>
                   </td>
                 </tr>
@@ -175,6 +179,7 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
         </table>
       </div>
 
+      {excluir && <ExcluirDados tipo="os" id={excluir.id} nome={`O.S. #${excluir.numero}`} fechar={() => setExcluir(null)} aoExcluir={carregar} />}
       {pausa && <AutorizarPausa os={pausa} tecnicos={tecnicos} fechar={() => setPausa(null)} />}
       {detalhe && <DetalheOS os={detalhe} fechar={() => setDetalhe(null)} />}
       {apoio && <MaterialApoio osId={apoio.id} numero={apoio.numero} fechar={() => setApoio(null)} />}
