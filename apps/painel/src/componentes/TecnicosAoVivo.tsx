@@ -28,6 +28,8 @@ export default function TecnicosAoVivo() {
   const [trajeto, setTrajeto] = useState<Ponto[]>([]);
   const [agora, setAgora] = useState(0);
   const [selecionado, setSelecionado] = useState<string | null>(null);
+  const [intervalo, setIntervalo] = useState(30);
+  const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null);
   const divMapa = useRef<HTMLDivElement>(null);
   const mapa = useRef<Mapa | null>(null);
   const [mapaPronto, setMapaPronto] = useState(false);
@@ -40,23 +42,33 @@ export default function TecnicosAoVivo() {
     });
     supabase.from("trajeto_do_dia").select("tecnico_id, registrado_em, latitude, longitude")
       .order("registrado_em").limit(20000)
-      .then(({ data }) => setTrajeto(data ?? []));
+      .then(({ data }) => {
+        setTrajeto(data ?? []);
+        setAtualizadoEm(new Date());
+      });
   }, []);
 
+  // Atualização programada do mapa e da lista (sem recarregar a página),
+  // mais tempo real: posição nova chegando dispara uma atualização (agrupada a cada 3 s).
   useEffect(() => {
     carregar();
-    // Atualiza o "há X min" mesmo sem posição nova.
-    const relogio = setInterval(carregar, 60_000);
+    const relogio = setInterval(carregar, intervalo * 1000);
+    let agrupador: ReturnType<typeof setTimeout> | null = null;
+    const emBreve = () => {
+      if (agrupador) return;
+      agrupador = setTimeout(() => { agrupador = null; carregar(); }, 3000);
+    };
     const canal = supabase
       .channel("painel-gps")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posicoes_gps" }, carregar)
-      .on("postgres_changes", { event: "*", schema: "public", table: "expedientes" }, carregar)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posicoes_gps" }, emBreve)
+      .on("postgres_changes", { event: "*", schema: "public", table: "expedientes" }, emBreve)
       .subscribe();
     return () => {
       clearInterval(relogio);
+      if (agrupador) clearTimeout(agrupador);
       supabase.removeChannel(canal);
     };
-  }, [carregar]);
+  }, [carregar, intervalo]);
 
   // Cor fixa por técnico (pela ordem do nome).
   const corDe = useMemo(() => {
@@ -153,6 +165,18 @@ export default function TecnicosAoVivo() {
   return (
     <section className="grid overflow-hidden rounded-xl border border-gray-200 bg-white lg:grid-cols-[320px_1fr]">
       <div className="border-b border-gray-200 lg:border-b-0 lg:border-r">
+        <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-2 text-xs text-gray-500">
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-green-600" />
+          {atualizadoEm ? `Atualizado às ${atualizadoEm.toLocaleTimeString("pt-BR")}` : "Carregando..."}
+          <select className="ml-auto rounded border border-gray-200 px-1 py-0.5" value={intervalo} onChange={(e) => setIntervalo(Number(e.target.value))}
+            title="Intervalo de atualização">
+            <option value={15}>a cada 15 s</option>
+            <option value={30}>a cada 30 s</option>
+            <option value={60}>a cada 1 min</option>
+            <option value={300}>a cada 5 min</option>
+          </select>
+          <button className="rounded px-1.5 py-0.5 text-blue-700 hover:bg-blue-50" onClick={carregar} title="Atualizar agora">↻</button>
+        </div>
         <h2 className="flex items-center border-b border-gray-200 p-4 font-semibold">
           Em expediente ({posicoes.length})
           {selecionado && (
