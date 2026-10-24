@@ -4,7 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 
 import { supabase } from "@/lib/supabase";
 
-type Membro = { id: string; nome: string; cargo: string | null; matricula: string | null; papel: string; ativo: boolean };
+type Membro = {
+  id: string; nome: string; cargo: string | null; matricula: string | null; papel: string; ativo: boolean;
+  inicio_jornada: string; fim_jornada: string; regime_horas: "hora_extra" | "banco_horas";
+};
 
 export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
   const [membros, setMembros] = useState<Membro[]>([]);
@@ -15,7 +18,7 @@ export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
   const recarregar = useCallback(() => { setVersao((v) => v + 1); aoMudar(); }, [aoMudar]);
 
   useEffect(() => {
-    supabase.from("usuarios").select("id, nome, cargo, matricula, papel, ativo").order("nome")
+    supabase.from("usuarios").select("id, nome, cargo, matricula, papel, ativo, inicio_jornada, fim_jornada, regime_horas").order("nome")
       .then(({ data }) => setMembros(data ?? []));
   }, [versao]);
 
@@ -64,6 +67,23 @@ export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs">{m.papel}</span>
             <input className="rounded border border-gray-200 px-2 py-1" defaultValue={m.cargo ?? ""} placeholder="Cargo"
               onBlur={(e) => e.target.value !== (m.cargo ?? "") && atualizar(m, { cargo: e.target.value || null })} />
+            {m.papel === "tecnico" && (
+              <label className="flex items-center gap-1 text-gray-600">
+                Jornada
+                <input type="time" className="rounded border border-gray-200 px-1 py-1" defaultValue={m.inicio_jornada.slice(0, 5)}
+                  onBlur={(e) => e.target.value && e.target.value !== m.inicio_jornada.slice(0, 5) && atualizar(m, { inicio_jornada: e.target.value })} />
+                às
+                <input type="time" className="rounded border border-gray-200 px-1 py-1" defaultValue={m.fim_jornada.slice(0, 5)}
+                  onBlur={(e) => e.target.value && e.target.value !== m.fim_jornada.slice(0, 5) && atualizar(m, { fim_jornada: e.target.value })} />
+              </label>
+            )}
+            {m.papel === "tecnico" && (
+              <select className="rounded border border-gray-200 px-2 py-1" value={m.regime_horas}
+                onChange={(e) => atualizar(m, { regime_horas: e.target.value as Membro["regime_horas"] })}>
+                <option value="hora_extra">Hora extra</option>
+                <option value="banco_horas">Banco de horas</option>
+              </select>
+            )}
             {m.papel === "tecnico" && (
               <button className="ml-auto text-gray-600 hover:underline" onClick={() => atualizar(m, { ativo: !m.ativo })}>
                 {m.ativo ? "Desativar" : "Reativar"}
