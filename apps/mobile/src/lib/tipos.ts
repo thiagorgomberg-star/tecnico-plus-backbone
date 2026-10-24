@@ -36,7 +36,7 @@ export type Expediente = {
 export const rotuloStatus: Record<StatusOS, string> = {
   rascunho: 'Rascunho',
   enviada: 'Nova',
-  aceita: 'Aceita',
+  aceita: 'Visualizada',
   em_execucao: 'Em execução',
   pausada: 'Pausada (refeição)',
   concluida: 'Concluída',
@@ -47,7 +47,7 @@ export const rotuloStatus: Record<StatusOS, string> = {
 
 // Próxima ação do técnico para cada status.
 export const proximaAcao: Partial<Record<StatusOS, { status: StatusOS; rotulo: string }>> = {
-  enviada: { status: 'aceita', rotulo: 'Aceitar O.S.' },
+  enviada: { status: 'aceita', rotulo: 'Visualizei a O.S.' },
   aceita: { status: 'em_execucao', rotulo: 'Iniciar atendimento' },
   devolvida: { status: 'em_execucao', rotulo: 'Retomar atendimento' },
   em_execucao: { status: 'concluida', rotulo: 'Concluir O.S.' },

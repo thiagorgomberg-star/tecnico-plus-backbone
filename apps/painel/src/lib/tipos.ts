@@ -40,7 +40,7 @@ export type Tecnico = { id: string; nome: string };
 export const rotuloStatus: Record<StatusOS, string> = {
   rascunho: "Backlog",
   enviada: "Enviada",
-  aceita: "Aceita",
+  aceita: "Visualizada",
   em_execucao: "Em execução",
   pausada: "Pausada (refeição)",
   concluida: "Aguardando baixa",

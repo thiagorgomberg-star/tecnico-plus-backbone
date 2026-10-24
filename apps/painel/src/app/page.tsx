@@ -3,6 +3,7 @@
 import type { Session } from "@supabase/supabase-js";
 import { useCallback, useEffect, useState } from "react";
 
+import Avisos from "@/componentes/Avisos";
 import Equipe from "@/componentes/Equipe";
 import Escala from "@/componentes/Escala";
 import Login from "@/componentes/Login";
@@ -66,6 +67,7 @@ export default function Painel() {
             className={`rounded-md px-3 py-1.5 text-sm ${aba === "rotas" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Rotas e eventos</button>
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm text-gray-600">
+          {sessao && <Avisos usuarioId={sessao.user.id} />}
           {perfil?.nome}
           <button className="text-blue-700 hover:underline" onClick={() => supabase.auth.signOut()}>Sair</button>
         </div>
