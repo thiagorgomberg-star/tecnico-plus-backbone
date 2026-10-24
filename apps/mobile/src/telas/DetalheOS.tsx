@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
 import ExecucaoOS from '../componentes/ExecucaoOS';
@@ -8,6 +8,7 @@ import { cores, corDoStatus } from '../lib/estilo';
 import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
 import { textoSla } from '../lib/formato';
 import { posicaoAtual } from '../lib/localizacao';
+import { compartilharRelatorio } from '../lib/relatorioPdf';
 import { ponto, supabase } from '../lib/supabase';
 import { OrdemServico, proximaAcao, rotuloStatus, StatusOS } from '../lib/tipos';
 
@@ -35,6 +36,7 @@ export default function DetalheOS({ os: inicial, euId, voltar, abrirCamera }: Pr
   const [fotosNaFila, setFotosNaFila] = useState(0);
   const [pedindoPausa, setPedindoPausa] = useState(false);
   const [motivoPausa, setMotivoPausa] = useState('');
+  const [gerandoPdf, setGerandoPdf] = useState(false);
 
   const contarFotos = useCallback(async () => {
     const pendentes = await itensPendentes();
@@ -79,6 +81,25 @@ export default function DetalheOS({ os: inicial, euId, voltar, abrirCamera }: Pr
     await enfileirar({ tipo: 'os', osId: os.id, campos });
     setOs({ ...os, status: acao.status, observacao_tecnico: observacao || null });
     setEventos((e) => [...e, { id: -e.length - 1, status_novo: acao.status, criado_em: agora }]);
+    if (acao.status === 'concluida') {
+      const concluida = { ...os, status: acao.status, observacao_tecnico: observacao || null };
+      Alert.alert('O.S. concluída', 'Enviar o relatório em PDF ao supervisor pelo WhatsApp?', [
+        { text: 'Depois', style: 'cancel' },
+        { text: 'Enviar', onPress: () => enviarRelatorio(concluida) },
+      ]);
+    }
+  }
+
+  async function enviarRelatorio(alvo: OrdemServico = os) {
+    if (gerandoPdf) return;
+    setGerandoPdf(true);
+    try {
+      await compartilharRelatorio(alvo);
+    } catch (e) {
+      Alert.alert('Não foi possível gerar o relatório', String(e));
+    } finally {
+      setGerandoPdf(false);
+    }
   }
 
   async function pedirPausa() {
@@ -231,6 +252,12 @@ export default function DetalheOS({ os: inicial, euId, voltar, abrirCamera }: Pr
           ) : null}
           <Pressable style={[s.botaoRodape, { backgroundColor: acao.status === 'concluida' ? cores.sucesso : cores.primaria }]} onPress={avancar}>
             <Text style={s.botaoTexto}>{acao.rotulo}</Text>
+          </Pressable>
+        </View>
+      ) : ['concluida', 'baixada'].includes(os.status) ? (
+        <View style={s.rodape}>
+          <Pressable style={[s.botaoRodape, { backgroundColor: '#25D366' }]} onPress={() => enviarRelatorio()} disabled={gerandoPdf}>
+            {gerandoPdf ? <ActivityIndicator color="#fff" /> : <Text style={s.botaoTexto}>Enviar relatório (PDF) pelo WhatsApp</Text>}
           </Pressable>
         </View>
       ) : null}
