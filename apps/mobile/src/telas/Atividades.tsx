@@ -38,7 +38,8 @@ export default function Atividades({ nome, abrirOS, abrirInventario }: Props) {
   const [carregando, setCarregando] = useState(false);
   const [semRede, setSemRede] = useState(false);
   const [novaVersao, setNovaVersao] = useState<number | null>(null);
-  const [verEncerradas, setVerEncerradas] = useState(false);
+  // Grupos recolhíveis do lobby (padrão Claro): Fechada começa recolhida.
+  const [recolhidos, setRecolhidos] = useState<Record<string, boolean>>({ fechada: true });
   const [inventarioFaltam, setInventarioFaltam] = useState(0);
 
   useEffect(() => {
@@ -112,7 +113,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario }: Props) {
       encerradas: en,
       contagem: {
         novas: ab.filter((o) => o.status === 'enviada').length,
-        andamento: ab.filter((o) => ['em_execucao', 'pausada', 'aceita', 'devolvida'].includes(o.status)).length,
+        andamento: ab.filter((o) => ['em_execucao', 'pausada'].includes(o.status)).length,
         concluidas: en.length,
       },
     };
@@ -265,35 +266,36 @@ export default function Atividades({ nome, abrirOS, abrirInventario }: Props) {
         <Resumo numero={contagem.concluidas} rotulo="Encerradas (7d)" cor={corDoStatus.concluida} icone="check-circle-outline" />
       </View>
 
-      <Text style={s.secao}>EM ABERTO · {abertas.length}</Text>
     </View>
   );
 
-  const lista = verEncerradas ? [...abertas, ...encerradas] : abertas;
+  const grupos = [
+    { chave: 'andamento', rotulo: 'Em andamento', cor: corDoStatus.em_execucao, ordens: abertas.filter((o) => ['em_execucao', 'pausada'].includes(o.status)) },
+    { chave: 'pendente', rotulo: 'Pendente', cor: corDoStatus.enviada, ordens: abertas.filter((o) => !['em_execucao', 'pausada'].includes(o.status)) },
+    { chave: 'fechada', rotulo: 'Fechada (7 dias)', cor: corDoStatus.concluida, ordens: encerradas },
+  ];
+  type Linha = { tipo: 'grupo'; chave: string; rotulo: string; cor: string; n: number } | { tipo: 'os'; os: OrdemServico };
+  const lista: Linha[] = grupos.filter((g) => g.ordens.length > 0).flatMap((g) => [
+    { tipo: 'grupo' as const, chave: g.chave, rotulo: g.rotulo, cor: g.cor, n: g.ordens.length },
+    ...(recolhidos[g.chave] ? [] : g.ordens.map((os) => ({ tipo: 'os' as const, os }))),
+  ]);
 
   return (
     <FlatList
       style={{ flex: 1, backgroundColor: cores.fundo }}
       data={lista}
-      keyExtractor={(os) => os.id}
+      keyExtractor={(l) => (l.tipo === 'grupo' ? `g-${l.chave}` : l.os.id)}
       ListHeaderComponent={topo}
-      ListEmptyComponent={<Text style={s.vazio}>Nenhuma atividade em aberto.</Text>}
-      ListFooterComponent={
-        encerradas.length > 0 ? (
-          <Pressable onPress={() => setVerEncerradas(!verEncerradas)} style={{ padding: 16, alignItems: 'center' }}>
-            <Text style={{ color: cores.primaria, fontWeight: '600' }}>
-              {verEncerradas ? 'Ocultar encerradas' : `Ver encerradas da semana (${encerradas.length})`}
-            </Text>
-          </Pressable>
-        ) : undefined
-      }
+      ListEmptyComponent={<Text style={s.vazio}>Nenhuma atividade.</Text>}
       refreshControl={<RefreshControl refreshing={carregando} onRefresh={carregar} />}
-      renderItem={({ item, index }) => (
-        <>
-          {verEncerradas && index === abertas.length ? <Text style={s.secao}>ENCERRADAS NA SEMANA</Text> : null}
-          <Cartao os={item} abrir={abrirOS} />
-        </>
-      )}
+      renderItem={({ item }) => (item.tipo === 'grupo' ? (
+        <Pressable style={s.grupo} onPress={() => setRecolhidos((r) => ({ ...r, [item.chave]: !r[item.chave] }))}>
+          <View style={[s.grupoCor, { backgroundColor: item.cor }]} />
+          <Text style={s.grupoTexto}>{item.rotulo}</Text>
+          <Text style={s.grupoNumero}>{item.n}</Text>
+          <Icone nome={recolhidos[item.chave] ? 'chevron-down' : 'chevron-up'} tamanho={22} cor={cores.suave} style={{ marginLeft: 'auto' }} />
+        </Pressable>
+      ) : <Cartao os={item.os} abrir={abrirOS} />)}
       contentContainerStyle={{ paddingBottom: 16 }}
       initialNumToRender={12}
       windowSize={7}
@@ -369,6 +371,11 @@ const Cartao = memo(function Cartao({ os, abrir }: { os: OrdemServico; abrir: (o
 });
 
 const s = StyleSheet.create({
+  grupo: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 12, marginTop: 8,
+    backgroundColor: cores.cartao, borderBottomWidth: 1, borderBottomColor: cores.borda },
+  grupoCor: { width: 14, height: 14, borderRadius: 2 },
+  grupoTexto: { fontSize: 15, fontWeight: '700', color: cores.texto },
+  grupoNumero: { fontSize: 15, color: cores.suave },
   faixa: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FCEFD9', paddingHorizontal: 16, paddingVertical: 8 },
   faixaTexto: { flex: 1, color: '#7A4B00', fontSize: 13 },
   jornada: { backgroundColor: cores.cartao, padding: 14, borderBottomWidth: 1, borderBottomColor: cores.borda },
@@ -386,7 +393,6 @@ const s = StyleSheet.create({
   resumoItem: { flex: 1, alignItems: 'center', paddingVertical: 10 },
   resumoNumero: { fontSize: 20, fontWeight: '700' },
   resumoRotulo: { fontSize: 11, color: cores.suave, marginTop: 2 },
-  secao: { color: cores.suave, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginHorizontal: 16, marginTop: 16, marginBottom: 6 },
   vazio: { color: cores.suave, margin: 16, textAlign: 'center' },
   cartao: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.cartao, borderBottomWidth: 1, borderBottomColor: cores.linha },
   cartaoHora: { width: 58, alignItems: 'center' },
