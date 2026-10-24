@@ -1,10 +1,11 @@
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import JSZip from 'jszip';
+import { Alert } from 'react-native';
 
 import { Caixa } from './caixas';
 import { itensPendentes } from './fila';
-import { descreverFibra, faixasDaBandeja, FotoKmz, htmlFotosKmz, htmlPreviaPlano, rotuloInstalacao, rotuloPonto, separarBandejas } from './fusao';
+import { descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, midiasKmz, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from './fusao';
 import { supabase } from './supabase';
 import { OrdemServico } from './tipos';
 
@@ -32,7 +33,8 @@ export function kmlDasCaixas(os: Pick<OrdemServico, 'numero' | 'titulo' | 'tipo'
     return `      <Placemark>
         <name>${esc(c.identificacao)}</name>
         <styleUrl>#${c.tipo}</styleUrl>
-        <description><![CDATA[${linhas.map(esc).join('<br>')}${htmlPreviaPlano(c)}${htmlFotosKmz(fotos[c.id] ?? [])}]]></description>
+        <description><![CDATA[${linhas.map(esc).join('<br>')}${htmlPreviaPlano(c)}]]></description>
+        ${midiasKmz(fotos[c.id] ?? [])}
         <Point><coordinates>${c.longitude},${c.latitude},0</coordinates></Point>
       </Placemark>`;
   });
@@ -56,52 +58,41 @@ ${pins.join('\n')}
 `;
 }
 
-const arquivoSeguro = (t: string) => t.replace(/[^A-Za-z0-9_-]+/g, '_');
-
-// Fotos da acomodação da caixa e das bandejas, para irem dentro do KMZ: as que ainda estão no celular (fila)
-// e, com internet, as que já subiram. Sem internet vão só as do celular.
-async function fotosDasCaixas(osId: string, caixas: Caixa[], zip: JSZip) {
+// Fotos da acomodação da caixa / DGO e das bandejas, como links longos do servidor (o Google Earth só aceita link).
+// As que ainda estão na fila do celular não têm link: só entram depois de sincronizar.
+async function fotosDasCaixas(osId: string, caixas: Caixa[]) {
   const porCaixa: Record<string, FotoKmz[]> = {};
-  const tag = new Map(caixas.map((c) => [c.id, c.identificacao]));
   const tipoDe = new Map(caixas.map((c) => [c.id, c.tipo]));
-  const legenda = (caixaId: string, tipo: string, bandeja: number | null | undefined) =>
-    tipo === 'foto_bandeja' ? `Bandeja ${bandeja ?? '?'} · fibras acomodadas` : tipoDe.get(caixaId) === 'dgo' ? 'DGO' : 'Acomodação da caixa';
-  const incluir = (caixaId: string, tipo: string, bandeja: number | null | undefined, bytes: ArrayBuffer) => {
-    const lista = (porCaixa[caixaId] ??= []);
-    const nome = `files/${arquivoSeguro(tag.get(caixaId) ?? caixaId)}-${tipo === 'foto_bandeja' ? `B${bandeja ?? 0}` : 'caixa'}-${lista.length + 1}.jpg`;
-    zip.file(nome, bytes);
-    lista.push({ arquivo: nome, legenda: legenda(caixaId, tipo, bandeja) });
-  };
   const ids = caixas.map((c) => c.id);
   try {
     const { data: anexos } = await supabase.from('os_anexos').select('caminho_arquivo, tipo, caixa_id, bandeja')
       .in('caixa_id', ids).in('tipo', ['foto_caixa', 'foto_bandeja']).order('tipo').order('bandeja').order('criado_em');
     if (anexos?.length) {
-      const { data: urls } = await supabase.storage.from('os-anexos').createSignedUrls(anexos.map((a) => a.caminho_arquivo), 600);
-      const baixadas = await Promise.all((urls ?? []).map((u) => (u.signedUrl
-        ? fetch(u.signedUrl).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null) : null)));
-      baixadas.forEach((b, i) => b && incluir(anexos[i].caixa_id, anexos[i].tipo, anexos[i].bandeja, b));
+      const { data: urls } = await supabase.storage.from('os-anexos')
+        .createSignedUrls(anexos.map((a) => a.caminho_arquivo), VALIDADE_LINK_FOTO_KMZ);
+      anexos.forEach((a, i) => {
+        const url = urls?.[i]?.signedUrl;
+        if (!url) return;
+        (porCaixa[a.caixa_id] ??= []).push({ url, legenda: a.tipo === 'foto_bandeja'
+          ? `Bandeja ${a.bandeja ?? '?'} · fibras acomodadas` : tipoDe.get(a.caixa_id) === 'dgo' ? 'DGO' : 'Acomodação da caixa' });
+      });
     }
   } catch {
-    // sem internet: segue com as fotos do celular
+    // sem internet: o KMZ sai sem fotos
   }
-  for (const p of await itensPendentes()) {
-    if (p.tipo !== 'foto' || p.osId !== osId || !p.caixaId || !ids.includes(p.caixaId)) continue;
-    if (p.tipoAnexo !== 'foto_caixa' && p.tipoAnexo !== 'foto_bandeja') continue;
-    try {
-      incluir(p.caixaId, p.tipoAnexo, p.bandeja, await new File(p.arquivo).arrayBuffer());
-    } catch {
-      // arquivo não está mais no celular
-    }
-  }
-  return porCaixa;
+  const naFila = (await itensPendentes()).filter((p) => p.tipo === 'foto' && p.osId === osId && p.caixaId
+    && (p.tipoAnexo === 'foto_caixa' || p.tipoAnexo === 'foto_bandeja')).length;
+  return { porCaixa, naFila };
 }
 
 // Gera o KMZ no celular (funciona sem internet) e abre o compartilhamento do Android.
 export async function compartilharKmz(os: Pick<OrdemServico, 'id' | 'numero' | 'titulo' | 'tipo'>, caixas: Caixa[]) {
+  const { porCaixa, naFila } = await fotosDasCaixas(os.id, caixas);
+  if (naFila && !(await new Promise<boolean>((ok) => Alert.alert('Fotos ainda no celular',
+    `${naFila} foto(s) das caixas ainda não subiram e não vão aparecer no KMZ. Gere de novo depois de sincronizar.`,
+    [{ text: 'Cancelar', style: 'cancel', onPress: () => ok(false) }, { text: 'Gerar assim', onPress: () => ok(true) }])))) return;
   const zip = new JSZip();
-  const fotos = await fotosDasCaixas(os.id, caixas, zip);
-  zip.file('doc.kml', kmlDasCaixas(os, caixas, fotos));
+  zip.file('doc.kml', kmlDasCaixas(os, caixas, porCaixa));
   const bytes = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
   const destino = new File(Paths.cache, `Caixas-OS-${os.numero}.kmz`);
   if (destino.exists) destino.delete();

@@ -3,31 +3,26 @@
 import { useEffect, useMemo, useState } from "react";
 
 import CaixaDetalhe, { CaixaPainel, ehPonta, origemDe } from "@/componentes/CaixaDetalhe";
-import { clienteDoCaminho, descreverFibra, faixasDaBandeja, FotoKmz, htmlFotosKmz, htmlPreviaPlano, rastrearFibra, rotuloInstalacao, rotuloPonto, separarBandejas } from "@/lib/fusao";
+import { clienteDoCaminho, descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, midiasKmz, rastrearFibra, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from "@/lib/fusao";
 import { supabase } from "@/lib/supabase";
 
 const esc = (t: unknown) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-// Fotos da acomodação e das bandejas de cada caixa, copiadas para dentro do KMZ (pasta files/).
-async function fotosParaKmz(caixas: CaixaPainel[], zip: { file: (nome: string, dados: Blob) => unknown }) {
+// Fotos da acomodação / DGO e das bandejas de cada caixa, como links longos (o Google Earth só aceita foto por link).
+async function fotosParaKmz(caixas: CaixaPainel[]) {
   const porCaixa: Record<string, FotoKmz[]> = {};
-  const tag = new Map(caixas.map((c) => [c.id, c.identificacao.replace(/[^A-Za-z0-9_-]+/g, "_")]));
-  const ids = [...tag.keys()];
+  const ids = caixas.map((c) => c.id);
   const tipoDe = new Map(caixas.map((c) => [c.id, c.tipo]));
   for (let i = 0; i < ids.length; i += 100) {
     const { data: anexos } = await supabase.from("os_anexos").select("caminho_arquivo, tipo, caixa_id, bandeja")
       .in("caixa_id", ids.slice(i, i + 100)).in("tipo", ["foto_caixa", "foto_bandeja"]).order("tipo").order("bandeja").order("criado_em");
     if (!anexos?.length) continue;
-    const { data: urls } = await supabase.storage.from("os-anexos").createSignedUrls(anexos.map((a) => a.caminho_arquivo), 600);
-    const blobs = await Promise.all((urls ?? []).map((u) => (u.signedUrl
-      ? fetch(u.signedUrl).then((r) => (r.ok ? r.blob() : null)).catch(() => null) : null)));
-    blobs.forEach((b, j) => {
-      if (!b) return;
-      const a = anexos[j];
-      const lista = (porCaixa[a.caixa_id] ??= []);
-      const nome = `files/${tag.get(a.caixa_id)}-${a.tipo === "foto_bandeja" ? `B${a.bandeja ?? 0}` : "caixa"}-${lista.length + 1}.jpg`;
-      zip.file(nome, b);
-      lista.push({ arquivo: nome, legenda: a.tipo === "foto_bandeja" ? `Bandeja ${a.bandeja ?? "?"} · fibras acomodadas` : tipoDe.get(a.caixa_id) === "dgo" ? "DGO" : "Acomodação da caixa" });
+    const { data: urls } = await supabase.storage.from("os-anexos").createSignedUrls(anexos.map((a) => a.caminho_arquivo), VALIDADE_LINK_FOTO_KMZ);
+    anexos.forEach((a, j) => {
+      const url = urls?.[j]?.signedUrl;
+      if (!url) return;
+      (porCaixa[a.caixa_id] ??= []).push({ url, legenda: a.tipo === "foto_bandeja"
+        ? `Bandeja ${a.bandeja ?? "?"} · fibras acomodadas` : tipoDe.get(a.caixa_id) === "dgo" ? "DGO" : "Acomodação da caixa" });
     });
   }
   return porCaixa;
@@ -35,9 +30,7 @@ async function fotosParaKmz(caixas: CaixaPainel[], zip: { file: (nome: string, d
 
 // KMZ com um pin por caixa / DGO / site de parceiro e, na descrição, a prévia do plano de fusão com os clientes.
 export async function baixarKmz(caixas: CaixaPainel[], arquivo = `caixas-emenda-${new Date().toISOString().slice(0, 10)}`) {
-  const JSZip = (await import("jszip")).default;
-  const zip = new JSZip();
-  const fotos = await fotosParaKmz(caixas.filter((c) => c.latitude != null), zip);
+  const fotos = await fotosParaKmz(caixas.filter((c) => c.latitude != null));
   const estilos = { emenda: "ff00a5ff", entroncamento: "ff0000ff", dgo: "ffff0000", site: "ff00b000" } as Record<string, string>;
   const pins = caixas.filter((c) => c.latitude != null).map((c) => {
     const linhas = [
@@ -55,7 +48,8 @@ export async function baixarKmz(caixas: CaixaPainel[], arquivo = `caixas-emenda-
     return `    <Placemark>
       <name>${esc(c.identificacao)}</name>
       <styleUrl>#${c.tipo}</styleUrl>
-      <description><![CDATA[${linhas.map(esc).join("<br>")}${htmlPreviaPlano(c)}${htmlFotosKmz(fotos[c.id] ?? [])}]]></description>
+      <description><![CDATA[${linhas.map(esc).join("<br>")}${htmlPreviaPlano(c)}]]></description>
+      ${midiasKmz(fotos[c.id] ?? [])}
       <Point><coordinates>${c.longitude},${c.latitude},0</coordinates></Point>
     </Placemark>`;
   });
@@ -68,6 +62,8 @@ ${pins.join("\n")}
   </Document>
 </kml>
 `;
+  const JSZip = (await import("jszip")).default;
+  const zip = new JSZip();
   zip.file("doc.kml", kml);
   const blob = await zip.generateAsync({ type: "blob", mimeType: "application/vnd.google-earth.kmz" });
   const url = URL.createObjectURL(blob);

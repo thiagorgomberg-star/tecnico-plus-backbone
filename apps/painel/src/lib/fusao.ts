@@ -171,15 +171,14 @@ export function htmlPreviaPlano(caixa: PlanoCaixa) {
     + linhas.join('') + '</table>';
 }
 
-// Fotos da caixa no balão do pin: os arquivos vão dentro do KMZ (pasta files/), então abrem sem internet no Google Earth.
-export type FotoKmz = { arquivo: string; legenda: string };
-export function htmlFotosKmz(fotos: FotoKmz[]) {
-  if (!fotos.length) return '';
-  const celulas = fotos.map((f) => `<td valign="top" style="padding:0 6px 6px 0"><a href="${f.arquivo}"><img src="${f.arquivo}" width="220"></a><br><small>${esc(f.legenda)}</small></td>`);
-  const linhas: string[] = [];
-  for (let i = 0; i < celulas.length; i += 2) linhas.push(`<tr>${celulas.slice(i, i + 2).join('')}</tr>`);
-  return `<p style="margin:8px 0 2px"><b>Fotos (${fotos.length})</b></p><table cellpadding="0" cellspacing="0" border="0">${linhas.join('')}</table>`;
-}
+// Fotos da caixa no pin: o Google Earth só mostra imagem por link (não aceita arquivo dentro do KMZ),
+// então vão como link longo do servidor nas mídias do pin (gx_media_links); o balão fica só com os dados.
+export type FotoKmz = { url: string; legenda: string };
+export const midiasKmz = (fotos: FotoKmz[]) => (fotos.length
+  ? `<ExtendedData><Data name="gx_media_links"><value>${fotos.map((f) => f.url.replace(/&/g, '&amp;')).join(' ')}</value></Data></ExtendedData>`
+  : '');
+// Validade dos links das fotos no KMZ (10 anos): o arquivo pode ser compartilhado e aberto muito depois.
+export const VALIDADE_LINK_FOTO_KMZ = 10 * 365 * 24 * 3600;
 
 // Desenho no estilo do mapa de fusão: entrada à esquerda, saídas à direita, só os tubos com fusão.
 export function svgMapaFusao(caixa: PlanoCaixa) {
