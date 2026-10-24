@@ -72,6 +72,18 @@ export default function Escala({ tecnicos }: { tecnicos: Tecnico[] }) {
     recarregar();
   }
 
+  // Apaga todos os lançamentos do técnico no mês exibido.
+  async function limparMes() {
+    const nome = tecnicos.find((t) => t.id === tecnicoAtual)?.nome ?? "o técnico";
+    const nomeDoMes = mes.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    if (!confirm(`Apagar toda a escala de ${nome} em ${nomeDoMes} (${itens.length} lançamentos)?`)) return;
+    const { error } = await supabase.from("escala").delete().eq("tecnico_id", tecnicoAtual)
+      .gte("data", iso(dias[0])).lte("data", iso(dias[dias.length - 1]));
+    if (error) return alert(error.message);
+    setEditando(null);
+    recarregar();
+  }
+
   // Ajusta entrada, saída e observação de um dia específico.
   async function salvarDia(e: React.FormEvent) {
     e.preventDefault();
@@ -120,6 +132,10 @@ export default function Escala({ tecnicos }: { tecnicos: Tecnico[] }) {
         <button className="ml-auto rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-40"
           disabled={!tecnicoAtual} onClick={preencherMes}>
           Preencher dias úteis do mês (jornada do técnico)
+        </button>
+        <button className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-40"
+          disabled={!tecnicoAtual || itens.length === 0} onClick={limparMes}>
+          Limpar mês
         </button>
       </div>
 
