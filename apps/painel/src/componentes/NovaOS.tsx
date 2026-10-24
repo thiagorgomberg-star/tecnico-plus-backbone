@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { enviarMaterialApoio } from "@/componentes/MaterialApoio";
 import { supabase } from "@/lib/supabase";
 import { Prioridade, Tecnico, TIPOS_OS } from "@/lib/tipos";
 
@@ -15,13 +16,18 @@ export default function NovaOS({ tecnicos, fechar, criada }: Props) {
   const [tecnicoId, setTecnicoId] = useState("");
   const [endereco, setEndereco] = useState("");
   const [descricao, setDescricao] = useState("");
+  const [arquivos, setArquivos] = useState<File[]>([]);
+  const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
 
   async function salvar(enviar: boolean) {
     setErro("");
     if (!titulo.trim()) return setErro("Informe o título.");
     if (enviar && !tecnicoId) return setErro("Escolha o técnico para despachar, ou salve no backlog.");
+    setSalvando(true);
+    const id = crypto.randomUUID();
     const { error } = await supabase.from("ordens_servico").insert({
+      id,
       titulo: titulo.trim(),
       ticket_acionamento: ticket.trim() || null,
       tipo,
@@ -31,7 +37,16 @@ export default function NovaOS({ tecnicos, fechar, criada }: Props) {
       descricao: descricao || null,
       status: enviar ? "enviada" : "rascunho",
     });
-    if (error) return setErro(error.message);
+    if (error) {
+      setSalvando(false);
+      return setErro(error.message);
+    }
+    try {
+      await enviarMaterialApoio(id, arquivos);
+    } catch (e) {
+      alert(`A O.S. foi criada, mas um arquivo de apoio falhou: ${(e as Error).message}`);
+    }
+    setSalvando(false);
     criada();
     fechar();
   }
@@ -78,12 +93,16 @@ export default function NovaOS({ tecnicos, fechar, criada }: Props) {
           <label className="text-sm">Descrição
             <textarea className={campo} rows={3} value={descricao} onChange={(e) => setDescricao(e.target.value)} />
           </label>
+          <label className="text-sm">Material de apoio para o técnico (fotos, prints, PDF, KMZ)
+            <input type="file" multiple className="mt-1 block w-full text-sm" accept="image/*,.pdf,.kmz,.kml,.xlsx,.docx,.zip,.txt"
+              onChange={(e) => setArquivos(Array.from(e.target.files ?? []))} />
+          </label>
         </div>
         {erro && <p className="mt-3 text-sm text-red-700">{erro}</p>}
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           <button className="rounded-lg px-4 py-2 text-gray-700 hover:bg-gray-100" onClick={fechar}>Cancelar</button>
-          <button className="rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50" onClick={() => salvar(false)}>Salvar no backlog</button>
-          <button className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800" onClick={() => salvar(true)}>Despachar ao técnico</button>
+          <button className="rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50" disabled={salvando} onClick={() => salvar(false)}>Salvar no backlog</button>
+          <button className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800" disabled={salvando} onClick={() => salvar(true)}>{salvando ? "Salvando..." : "Despachar ao técnico"}</button>
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import MaterialApoio from "@/componentes/MaterialApoio";
 import NovaOS from "@/componentes/NovaOS";
 import { supabase } from "@/lib/supabase";
 import { corStatus, OrdemServico, rotuloStatus, StatusOS, Tecnico } from "@/lib/tipos";
@@ -22,6 +23,7 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
   const [filtro, setFiltro] = useState(0);
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
   const [novaAberta, setNovaAberta] = useState(false);
+  const [apoio, setApoio] = useState<OrdemServico | null>(null);
 
   const [versao, setVersao] = useState(0);
   const carregar = useCallback(() => setVersao((v) => v + 1), []);
@@ -136,6 +138,7 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
                   </td>
                   <td className="p-3">
                     <div className="flex flex-wrap gap-1.5">
+                      <button className={`${botao} border border-gray-300`} onClick={() => setApoio(os)}>Apoio</button>
                       {os.status === "rascunho" && (
                         <button className={`${botao} bg-blue-700 text-white disabled:opacity-40`} disabled={!os.tecnico_id}
                           title={os.tecnico_id ? "" : "Escolha o técnico na coluna ao lado"}
@@ -160,6 +163,7 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
         </table>
       </div>
 
+      {apoio && <MaterialApoio osId={apoio.id} numero={apoio.numero} fechar={() => setApoio(null)} />}
       {novaAberta && <NovaOS tecnicos={tecnicos} fechar={() => setNovaAberta(false)} criada={carregar} />}
     </section>
   );

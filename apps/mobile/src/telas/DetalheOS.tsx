@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
+import MaterialApoio from '../componentes/MaterialApoio';
 import { cores, estilo } from '../lib/estilo';
 import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
 import { textoSla } from '../lib/formato';
@@ -117,6 +118,8 @@ export default function DetalheOS({ os: inicial, voltar, abrirCamera }: Props) {
           <Text style={[estilo.texto, { marginTop: 8, color: cores.suave }]}>Pausada pela refeição. Retoma ao encerrar a refeição.</Text>
         ) : null}
       </View>
+
+      <MaterialApoio osId={os.id} />
 
       {ehCorretiva(os.tipo) && os.status !== 'baixada' && os.status !== 'cancelada' ? (
         <View style={estilo.cartao}>
