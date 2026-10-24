@@ -1,0 +1,57 @@
+export type StatusOS =
+  | "rascunho"
+  | "enviada"
+  | "aceita"
+  | "em_execucao"
+  | "concluida"
+  | "devolvida"
+  | "baixada"
+  | "cancelada";
+
+export type Prioridade = "baixa" | "media" | "alta" | "emergencia";
+
+export type OrdemServico = {
+  id: string;
+  numero: number;
+  tipo: string;
+  prioridade: Prioridade;
+  status: StatusOS;
+  titulo: string;
+  descricao: string | null;
+  endereco: string | null;
+  tecnico_id: string | null;
+  prazo: string | null;
+  enviada_em: string | null;
+  concluida_em: string | null;
+  baixada_em: string | null;
+  observacao_tecnico: string | null;
+  observacao_supervisor: string | null;
+  criado_em: string;
+  tecnico?: { nome: string } | null;
+};
+
+export type Tecnico = { id: string; nome: string };
+
+export const rotuloStatus: Record<StatusOS, string> = {
+  rascunho: "Rascunho",
+  enviada: "Enviada",
+  aceita: "Aceita",
+  em_execucao: "Em execução",
+  concluida: "Aguardando baixa",
+  devolvida: "Devolvida",
+  baixada: "Baixada",
+  cancelada: "Cancelada",
+};
+
+export const corStatus: Record<StatusOS, string> = {
+  rascunho: "bg-gray-100 text-gray-700",
+  enviada: "bg-blue-100 text-blue-800",
+  aceita: "bg-indigo-100 text-indigo-800",
+  em_execucao: "bg-amber-100 text-amber-800",
+  concluida: "bg-purple-100 text-purple-800",
+  devolvida: "bg-red-100 text-red-800",
+  baixada: "bg-green-100 text-green-800",
+  cancelada: "bg-gray-100 text-gray-500",
+};
+
+export const TIPOS_OS = ["Corretiva", "Preventiva", "Rompimento", "Vistoria", "Instalação"];
