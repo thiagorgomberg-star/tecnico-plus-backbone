@@ -2,19 +2,25 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
+import CaixasOS from '../componentes/CaixasOS';
 import ExecucaoOS from '../componentes/ExecucaoOS';
 import MaterialApoio from '../componentes/MaterialApoio';
 import { cores, corDoStatus } from '../lib/estilo';
+import { Caixa } from '../lib/caixas';
 import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
 import { textoSla } from '../lib/formato';
 import { posicaoAtual } from '../lib/localizacao';
 import { compartilharRelatorio } from '../lib/relatorioPdf';
 import { ponto, supabase } from '../lib/supabase';
 import { OrdemServico, proximaAcao, rotuloStatus, StatusOS } from '../lib/tipos';
+import CaixaEmenda from './CaixaEmenda';
 
 type Evento = { id: number; status_novo: StatusOS; criado_em: string };
-type Props = { os: OrdemServico; euId: string | null; voltar: () => void; abrirCamera: (fotosJaFeitas: number) => void };
-type Aba = 'detalhes' | 'execucao' | 'fotos' | 'historico';
+type Props = {
+  os: OrdemServico; euId: string | null; usuario: { nome: string; cargo: string | null };
+  voltar: () => void; abrirCamera: (fotosJaFeitas: number) => void;
+};
+type Aba = 'detalhes' | 'execucao' | 'caixas' | 'fotos' | 'historico';
 
 const MINIMO_FOTOS = 10;
 // Campo que guarda a hora real de cada etapa (enviada mesmo se a ação foi offline).
@@ -27,7 +33,7 @@ const ehCorretiva = (tipo: string) => /corretiva/i.test(tipo);
 const EM_CAMPO: StatusOS[] = ['aceita', 'em_execucao', 'pausada', 'devolvida'];
 
 // Detalhe da atividade em abas, com a ação principal fixa no rodapé (padrão Oracle Field Service).
-export default function DetalheOS({ os: inicial, euId, voltar, abrirCamera }: Props) {
+export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCamera }: Props) {
   const [os, setOs] = useState(inicial);
   const [aba, setAba] = useState<Aba>('detalhes');
   const [eventos, setEventos] = useState<Evento[]>([]);
@@ -37,10 +43,12 @@ export default function DetalheOS({ os: inicial, euId, voltar, abrirCamera }: Pr
   const [pedindoPausa, setPedindoPausa] = useState(false);
   const [motivoPausa, setMotivoPausa] = useState('');
   const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [caixaAberta, setCaixaAberta] = useState<{ caixa: Caixa | null; daOs: Caixa[] } | null>(null);
+  const [versaoCaixas, setVersaoCaixas] = useState(0);
 
   const contarFotos = useCallback(async () => {
     const pendentes = await itensPendentes();
-    setFotosNaFila(pendentes.filter((i) => i.tipo === 'foto' && i.osId === os.id).length);
+    setFotosNaFila(pendentes.filter((i) => i.tipo === 'foto' && i.osId === os.id && (i.tipoAnexo === 'foto_antes' || i.tipoAnexo === 'foto_depois')).length);
     const { count } = await supabase
       .from('os_anexos')
       .select('id', { count: 'exact', head: true })
@@ -125,6 +133,13 @@ export default function DetalheOS({ os: inicial, euId, voltar, abrirCamera }: Pr
     Alert.alert('Evento localizado', `Posição registrada com precisão de ${Math.round(pos.accuracy ?? 0)} m.`);
   }
 
+  if (caixaAberta) {
+    return (
+      <CaixaEmenda osId={os.id} caixa={caixaAberta.caixa} daOs={caixaAberta.daOs} podeEditar={podeEditar} usuario={usuario}
+        voltar={() => { setCaixaAberta(null); setVersaoCaixas((v) => v + 1); }} />
+    );
+  }
+
   const sla = os.sla_limite && !['concluida', 'baixada', 'cancelada'].includes(os.status) ? textoSla(os.sla_limite) : null;
   const corSla = !sla ? cores.suave : sla.nivel === 'ok' ? cores.sucesso : sla.nivel === 'alerta' ? cores.alerta : cores.perigo;
   const corStatus = corDoStatus[os.status] ?? cores.suave;
@@ -142,7 +157,7 @@ export default function DetalheOS({ os: inicial, euId, voltar, abrirCamera }: Pr
       </View>
 
       <View style={s.abas}>
-        {([['detalhes', 'Detalhes'], ['execucao', 'Execução'], ['fotos', `Fotos ${totalFotos}/${MINIMO_FOTOS}`], ['historico', 'Histórico']] as [Aba, string][]).map(([valor, rotulo]) => (
+        {([['detalhes', 'Detalhes'], ['execucao', 'Execução'], ['caixas', 'Caixas'], ['fotos', `Fotos ${totalFotos}/${MINIMO_FOTOS}`], ['historico', 'Histórico']] as [Aba, string][]).map(([valor, rotulo]) => (
           <Pressable key={valor} style={[s.aba, aba === valor && s.abaAtiva]} onPress={() => setAba(valor)}>
             <Text style={[s.abaTexto, aba === valor && s.abaTextoAtivo]} numberOfLines={1}>{rotulo}</Text>
           </Pressable>
@@ -197,6 +212,10 @@ export default function DetalheOS({ os: inicial, euId, voltar, abrirCamera }: Pr
               </View>
             ) : null}
           </>
+        ) : null}
+
+        {aba === 'caixas' ? (
+          <CaixasOS osId={os.id} podeEditar={podeEditar} versao={versaoCaixas} abrir={(caixa, daOs) => setCaixaAberta({ caixa, daOs })} />
         ) : null}
 
         {aba === 'execucao' ? <ExecucaoOS osId={os.id} podeEditar={podeEditar} euId={euId} /> : null}

@@ -4,14 +4,16 @@ import { File, Paths } from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
+import { Caixa } from './caixas';
 import { itensPendentes } from './fila';
+import { calcularPlano, descreverFibra, rotuloPonto, svgMapaFusao } from './fusao';
 import { supabase } from './supabase';
 import { OrdemServico, rotuloStatus } from './tipos';
 
 type Item = { id: string; nome: string; unidade: string; categoria: 'servico' | 'material' };
 type Lancamento = { item_id: string; quantidade: number; observacao: string | null };
 type Pessoa = { id: string; nome: string };
-type Foto = { src: string; tiradaEm: string | null };
+type Foto = { src: string; tiradaEm: string | null; tipo: string; caixaId: string | null; fibra: number | null };
 
 const esc = (t: unknown) =>
   String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -46,11 +48,12 @@ async function lerCache<T>(chave: string, padrao: T): Promise<T> {
 // Monta o relatório da O.S. no próprio celular (sem internet usa o que está guardado nele)
 // e abre o compartilhamento do Android para enviar o PDF pelo WhatsApp.
 export async function compartilharRelatorio(os: OrdemServico) {
-  const [catalogo, tecnicos, execucao, pendentes] = await Promise.all([
+  const [catalogo, tecnicos, execucao, pendentes, caixas] = await Promise.all([
     lerCache<Item[]>('catalogo-execucao', []),
     lerCache<Pessoa[]>('tecnicos-ativos', []),
     lerCache<{ lancamentos: Lancamento[]; apoio: string[] }>(`execucao-${os.id}`, { lancamentos: [], apoio: [] }),
     itensPendentes(),
+    lerCache<Caixa[]>(`caixas-os-${os.id}`, []),
   ]);
   const nomeDe = (id: string | null | undefined) => tecnicos.find((t) => t.id === id)?.nome ?? '';
   const itemDe = new Map(catalogo.map((c) => [c.id, c]));
@@ -60,8 +63,8 @@ export async function compartilharRelatorio(os: OrdemServico) {
     supabase.from('ordens_servico')
       .select('criado_em, enviada_em, iniciada_em, concluida_em, tecnico:usuarios!ordens_servico_tecnico_id_fkey(nome, cargo), rota:rotas(trecho)')
       .eq('id', os.id).maybeSingle(),
-    supabase.from('os_anexos').select('caminho_arquivo, tirada_em').eq('os_id', os.id)
-      .in('tipo', ['foto_antes', 'foto_depois']).order('criado_em'),
+    supabase.from('os_anexos').select('caminho_arquivo, tirada_em, tipo, caixa_id, fibra').eq('os_id', os.id)
+      .in('tipo', ['foto_antes', 'foto_depois', 'foto_caixa', 'foto_otdr']).order('criado_em'),
   ]);
   const extra = completa as unknown as {
     criado_em: string; enviada_em: string | null; iniciada_em: string | null; concluida_em: string | null;
@@ -72,12 +75,14 @@ export async function compartilharRelatorio(os: OrdemServico) {
   if (anexos?.length) {
     const { data: urls } = await supabase.storage.from('os-anexos').createSignedUrls(anexos.map((a) => a.caminho_arquivo), 600);
     const imagens = await Promise.all((urls ?? []).map((u) => (u.signedUrl ? dataUrl(u.signedUrl) : null)));
-    imagens.forEach((src, i) => src && fotos.push({ src, tiradaEm: anexos[i].tirada_em }));
+    imagens.forEach((src, i) => src && fotos.push({
+      src, tiradaEm: anexos[i].tirada_em, tipo: anexos[i].tipo, caixaId: anexos[i].caixa_id, fibra: anexos[i].fibra,
+    }));
   }
   for (const p of pendentes) {
     if (p.tipo !== 'foto' || p.osId !== os.id) continue;
     const src = await dataUrl(p.arquivo);
-    if (src) fotos.push({ src, tiradaEm: p.tiradaEm });
+    if (src) fotos.push({ src, tiradaEm: p.tiradaEm, tipo: p.tipoAnexo, caixaId: p.caixaId ?? null, fibra: p.fibra ?? null });
   }
 
   const logo = await Asset.fromModule(require('../../assets/mascara/logo-multivale.png')).downloadAsync()
@@ -94,6 +99,35 @@ export async function compartilharRelatorio(os: OrdemServico) {
         `<td class="d">${fmt(l.quantidade)} ${esc(item.unidade)}</td></tr>`;
     }).join('')}</table>`;
   };
+
+  const fotosOs = fotos.filter((f) => f.tipo === 'foto_antes' || f.tipo === 'foto_depois');
+  const secaoCaixas = caixas.map((c) => {
+    const plano = calcularPlano(c);
+    const ponta = c.tipo === 'dgo' || c.tipo === 'entroncamento';
+    const daCaixa = fotos.filter((f) => f.caixaId === c.id);
+    const manobras = c.manobras.map((m) =>
+      `<tr><td>${esc(descreverFibra(m.fibra_entrada, c.capacidade_fibras))}</td><td>Saída ${m.saida}: ${esc(descreverFibra(m.fibra_saida, c.saidas[m.saida - 1] ?? c.capacidade_fibras))}</td><td>${esc(m.motivo ?? '—')}</td></tr>`).join('');
+    const fibras = c.fibras.map((f) =>
+      `<tr><td>${esc(descreverFibra(f.fibra, c.capacidade_fibras))}</td><td>${esc(f.cliente ?? '—')}</td>` +
+      (ponta ? `<td>${f.potencia_dbm ?? '—'}</td><td>${f.reflexao_db ?? '—'}</td><td>${f.perda_db_km ?? '—'}</td>` : '') +
+      `<td>${f.sem_potencia ? '<b style="color:#dc2626">SEM POTÊNCIA</b>' : 'OK'}</td></tr>`).join('');
+    return `<div style="break-inside:avoid-page">
+      <h2>${esc(rotuloPonto(c.tipo))} ${esc(c.identificacao)}</h2>
+      <div class="g">
+        <div><div class="l">Vem de</div>${esc(c.origem ?? '—')}</div>
+        <div><div class="l">Localização</div>${c.latitude != null ? `${c.latitude.toFixed(6)}, ${c.longitude!.toFixed(6)}` : '—'}</div>
+        <div style="grid-column: span 2"><div class="l">Endereço</div>${esc(c.endereco ?? '—')}</div>
+        <div><div class="l">Plano de fusão</div>${c.capacidade_fibras} FO → ${c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO`).join(', ') || '—'}</div>
+        <div><div class="l">Grupos</div>${c.grupos_fusionados} fusionados · ${c.grupos_vagos} vagos · ${plano.param} fibras param aqui</div>
+      </div>
+      ${c.observacao ? `<p><span class="l">Observação:</span> ${esc(c.observacao)}</p>` : ''}
+      ${manobras ? `<p class="l" style="margin-top:8px">Manobras</p><table><tr class="l"><td>Fibra de entrada</td><td>Ligada a</td><td>Motivo</td></tr>${manobras}</table>` : ''}
+      ${fibras ? `<p class="l" style="margin-top:8px">Fibras</p><table><tr class="l"><td>Fibra</td><td>Cliente</td>${ponta ? '<td>Sinal dBm</td><td>Reflexão dB</td><td>Perda dB/km</td>' : ''}<td>Situação</td></tr>${fibras}</table>` : ''}
+      ${c.saidas.length ? `<div style="margin-top:8px">${svgMapaFusao(c)}</div>` : ''}
+      ${daCaixa.length ? `<div class="fotos" style="margin-top:8px">${daCaixa.map((f) =>
+        `<figure><img src="${f.src}"><figcaption>${f.tipo === 'foto_otdr' ? `OTDR · fibra ${f.fibra}` : 'Caixa'} · ${quando(f.tiradaEm)}</figcaption></figure>`).join('')}</div>` : ''}
+    </div>`;
+  }).join('');
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     @page { size: A4; margin: 12mm; }
@@ -129,8 +163,9 @@ export async function compartilharRelatorio(os: OrdemServico) {
   ${tabela('servico', 'Serviços executados')}
   ${tabela('material', 'Materiais utilizados')}
   ${os.observacao_tecnico ? `<h2>Observações do técnico</h2><pre>${esc(os.observacao_tecnico)}</pre>` : ''}
-  <h2>Registro fotográfico (${fotos.length})</h2>
-  <div class="fotos">${fotos.map((f, i) => `<figure><img src="${f.src}"><figcaption>Foto ${i + 1} · ${quando(f.tiradaEm)}</figcaption></figure>`).join('')}</div>
+  ${secaoCaixas}
+  <h2>Registro fotográfico (${fotosOs.length})</h2>
+  <div class="fotos">${fotosOs.map((f, i) => `<figure><img src="${f.src}"><figcaption>Foto ${i + 1} · ${quando(f.tiradaEm)}</figcaption></figure>`).join('')}</div>
   <p class="s" style="font-size:8pt;margin-top:16px;border-top:1px solid #ccc;padding-top:4px">Multivale Engenharia · Backbone · gerado pelo Técnico Plus</p>
   </body></html>`;
 

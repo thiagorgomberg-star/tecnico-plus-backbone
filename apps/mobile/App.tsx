@@ -127,6 +127,7 @@ export default function App() {
   if (osAberta) {
     conteudo = (
       <DetalheOS os={osAberta} euId={euId} voltar={() => setOsAberta(null)}
+        usuario={perfil}
         abrirCamera={(fotosJaFeitas) => setCamera({ osId: osAberta.id, fotosJaFeitas })} />
     );
   } else if (tela === 'rotas') {

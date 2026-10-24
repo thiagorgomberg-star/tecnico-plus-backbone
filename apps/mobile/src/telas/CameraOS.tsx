@@ -18,6 +18,8 @@ type Props = {
   minimo: number;
   usuario: { nome: string; cargo: string | null };
   fechar: () => void;
+  // Fotos de uma caixa (ou da tela do OTDR de uma fibra) em vez das fotos antes/depois da O.S.
+  caixa?: { id: string; tipo: 'foto_caixa' | 'foto_otdr'; fibra?: number; titulo: string };
 };
 
 const LARGURA_FINAL = 1600;
@@ -38,7 +40,7 @@ function distancia(a: { latitude: number; longitude: number }, b: { latitude: nu
   return Math.hypot(dx, dy);
 }
 
-export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar }: Props) {
+export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar, caixa }: Props) {
   const [permissao, pedirPermissao] = useCameraPermissions();
   const camera = useRef<CameraView>(null);
   const mascara = useRef<RefMascara>(null);
@@ -144,7 +146,9 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar 
       await enfileirar({
         tipo: 'foto',
         osId,
-        tipoAnexo: tipo,
+        tipoAnexo: caixa?.tipo ?? tipo,
+        caixaId: caixa?.id,
+        fibra: caixa?.fibra,
         arquivo: destino.uri,
         largura: LARGURA_FINAL,
         altura: alturaFinal,
@@ -188,6 +192,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar 
         <Text style={[estilos.texto, { color: total >= minimo ? '#8BE28F' : '#FFD54F' }]}>
           {total}/{minimo} fotos{fila.length ? ` · gravando ${fila.length}` : ''}
         </Text>
+        {caixa ? <Text style={estilos.texto}>{caixa.titulo}</Text> : (
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {(['foto_antes', 'foto_depois'] as const).map((t) => (
             <Pressable key={t} onPress={() => setTipo(t)} style={[estilos.chip, tipo === t && { backgroundColor: cores.primaria }]}>
@@ -195,6 +200,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar 
             </Pressable>
           ))}
         </View>
+        )}
       </View>
 
       <ScrollView horizontal style={estilos.miniaturas}>
