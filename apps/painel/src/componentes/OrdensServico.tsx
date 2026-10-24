@@ -108,7 +108,8 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
                 <tr key={os.id} className="border-b border-gray-100 align-top last:border-0">
                   <td className="p-3">
                     <div className="font-mono">#{os.numero}</div>
-                    {os.ticket_acionamento && <div className="text-xs text-gray-500">Ticket {os.ticket_acionamento}</div>}
+                    {os.ticket_acionamento && <div className="font-mono text-xs text-gray-500">{os.ticket_interno ? "Token" : "Ticket"} {os.ticket_acionamento}</div>}
+                    {os.criada_por === os.tecnico_id && <div className="text-xs font-medium text-green-700">Aberta pelo técnico em campo</div>}
                   </td>
                   <td className="p-3">
                     <div className="font-medium">{os.titulo}</div>

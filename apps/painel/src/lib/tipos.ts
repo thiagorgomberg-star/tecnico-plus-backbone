@@ -18,6 +18,8 @@ export type OrdemServico = {
   status: StatusOS;
   titulo: string;
   ticket_acionamento: string | null;
+  ticket_interno: boolean;
+  criada_por: string;
   sla_limite: string | null;
   descricao: string | null;
   endereco: string | null;

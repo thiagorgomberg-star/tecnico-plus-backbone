@@ -96,7 +96,7 @@ export default function DetalheOS({ os: inicial, voltar, abrirCamera }: Props) {
       </Pressable>
       <View style={[estilo.cartao, { marginTop: 0 }]}>
         <Text style={estilo.suave}>
-          O.S. #{os.numero} · {os.tipo} · {rotuloStatus[os.status]}
+          {os.numero ? `O.S. #${os.numero}` : 'O.S. nova'} · {os.tipo} · {rotuloStatus[os.status]}
           {os.ticket_acionamento ? ` · Ticket ${os.ticket_acionamento}` : ''}
         </Text>
         <Text style={estilo.titulo}>{os.titulo}</Text>

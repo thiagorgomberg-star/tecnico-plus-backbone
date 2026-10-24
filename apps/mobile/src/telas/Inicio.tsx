@@ -17,7 +17,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { OrdemServico, rotuloStatus } from '../lib/tipos';
 
-type Props = { nome: string; abrirOS: (os: OrdemServico) => void; sair: () => void; abrir: (tela: 'rotas' | 'escala') => void };
+type Props = { nome: string; abrirOS: (os: OrdemServico) => void; sair: () => void; abrir: (tela: 'rotas' | 'escala' | 'preventiva') => void };
 
 const CACHE_OS = 'ordens-cache';
 const ORDEM_PRIORIDADE = { emergencia: 0, alta: 1, media: 2, baixa: 3 };
@@ -152,6 +152,11 @@ export default function Inicio({ nome, abrirOS, sair, abrir }: Props) {
         <Pressable style={s.atalho} onPress={() => abrir('escala')}><Text style={s.atalhoTexto}>Minha escala</Text></Pressable>
         <Pressable style={s.atalho} onPress={() => abrir('rotas')}><Text style={s.atalhoTexto}>Rotas KMZ</Text></Pressable>
       </View>
+      {emExpediente && (
+        <Pressable style={[s.atalho, { marginHorizontal: 12, marginTop: 8, flex: 0 }]} onPress={() => abrir('preventiva')}>
+          <Text style={s.atalhoTexto}>+ Iniciar preventiva</Text>
+        </Pressable>
+      )}
 
       <Text style={s.secao}>ATIVIDADES ({abertas.length})</Text>
     </View>
