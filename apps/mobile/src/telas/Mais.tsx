@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -6,6 +7,7 @@ import Icone, { NomeIcone } from '../componentes/Icone';
 import { VERSAO_APP } from '../lib/atualizacao';
 import { cores, fundoDe } from '../lib/estilo';
 import { Tema, TEMAS, temaAtual, trocarTema } from '../lib/tema';
+import { supabase } from '../lib/supabase';
 import { descreverVeiculo, MeuVeiculo, meuVeiculo } from '../lib/veiculo';
 
 type Destino = 'preventiva' | 'escala' | 'rotas' | 'despesas' | 'frota' | 'inventario';
@@ -15,7 +17,14 @@ const iniciais = (nome: string) => nome.split(/\s+/).filter(Boolean).slice(0, 2)
 
 export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
   const [veiculo, setVeiculo] = useState<MeuVeiculo | null>(null);
+  const [auxiliares, setAuxiliares] = useState<string[]>([]);
   useEffect(() => {
+    AsyncStorage.getItem('meus-auxiliares').then((c) => c && setAuxiliares(JSON.parse(c).map((a: { nome: string }) => a.nome)));
+    supabase.rpc('meus_auxiliares').then(({ data, error }) => {
+      if (error || !data) return;
+      setAuxiliares(data.map((a: { nome: string }) => a.nome));
+      AsyncStorage.setItem('meus-auxiliares', JSON.stringify(data));
+    });
     meuVeiculo(false).then(setVeiculo);
     meuVeiculo().then(setVeiculo).catch(() => undefined);
   }, []);
@@ -42,6 +51,7 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
             <Text style={s.nome} numberOfLines={1}>{nome || 'Técnico'}</Text>
             <Text style={s.detalhe}>{cargo ?? 'Técnico de campo'} · Multivale Backbone</Text>
             {veiculo ? <Text style={[s.detalhe, { color: cores.texto, fontWeight: '600' }]}>Veículo: {descreverVeiculo(veiculo)}</Text> : null}
+            {auxiliares.length ? <Text style={[s.detalhe, { color: cores.texto, fontWeight: '600' }]}>Auxiliar: {auxiliares.join(', ')}</Text> : null}
           </View>
         </View>
         <Text style={s.secao}>CAMPO</Text>

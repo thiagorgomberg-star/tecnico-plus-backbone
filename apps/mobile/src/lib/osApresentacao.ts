@@ -13,7 +13,8 @@ import { descreverVeiculo, meuVeiculo } from './veiculo';
 // Empresa, técnico (documento), veículo e o serviço que ele está indo fazer. Funciona sem internet (usa o que ficou guardado).
 
 type Empresa = { razao_social: string | null; cnpj: string | null; endereco: string | null; telefone: string | null; responsavel: string | null; contratante: string | null };
-type Tecnico = { nome: string; cargo: string | null; matricula: string | null; documento: string | null };
+type Tecnico = { nome: string; cargo: string | null; matricula: string | null; documento: string | null; cpf: string | null; rg: string | null };
+type Auxiliar = { nome: string; cargo: string | null; cpf: string | null; rg: string | null };
 
 async function comCache<T>(chave: string, buscar: () => PromiseLike<{ data: T | null; error: unknown }>): Promise<T | null> {
   try {
@@ -38,11 +39,14 @@ const TIPOS: Record<string, string> = {
 export async function compartilharOsApresentacao(os: Pick<OrdemServico, 'id' | 'numero' | 'tipo' | 'titulo' | 'endereco' | 'ticket_acionamento'>) {
   const { data: sessao } = await supabase.auth.getSession();
   const uid = sessao.session?.user.id ?? '';
-  const [empresa, tecnico, veiculo] = await Promise.all([
+  const [empresa, tecnico, veiculo, auxiliares] = await Promise.all([
     comCache<Empresa>('config-empresa', () => supabase.from('config_empresa').select('razao_social, cnpj, endereco, telefone, responsavel, contratante').maybeSingle()),
-    comCache<Tecnico>('meu-perfil-documento', () => supabase.from('usuarios').select('nome, cargo, matricula, documento').eq('id', uid).maybeSingle()),
+    comCache<Tecnico>('meu-perfil-documento', () => supabase.from('usuarios').select('nome, cargo, matricula, documento, cpf, rg').eq('id', uid).maybeSingle()),
     meuVeiculo().catch(() => meuVeiculo(false)),
+    comCache<Auxiliar[]>('meus-auxiliares', () => supabase.rpc('meus_auxiliares')),
   ]);
+  const documentos = (p: { cpf: string | null; rg: string | null; documento?: string | null } | null) =>
+    [p?.cpf ? `CPF ${p.cpf}` : null, p?.rg ? `RG ${p.rg}` : null].filter(Boolean).join(' · ') || p?.documento || null;
   const logo = await Asset.fromModule(require('../../assets/mascara/logo-multivale.png')).downloadAsync()
     .then((a) => (a.localUri ? dataUrl(a.localUri) : null)).catch(() => null);
   const agora = new Date();
@@ -75,8 +79,9 @@ export async function compartilharOsApresentacao(os: Pick<OrdemServico, 'id' | '
   ${linha('Nome', tecnico?.nome)}
   ${linha('Cargo', tecnico?.cargo)}
   ${tecnico?.matricula ? linha('Matrícula', tecnico.matricula) : ''}
-  ${linha('Documento (CPF/RG)', tecnico?.documento)}
+  ${linha('Documento', documentos(tecnico))}
   </table>
+  ${(auxiliares ?? []).map((a) => `<h2>Auxiliar</h2><table>${linha('Nome', a.nome)}${linha('Cargo', a.cargo)}${linha('Documento', documentos(a))}</table>`).join('')}
 
   <h2>Veículo</h2><table>
   ${veiculo ? `<tr><th>Placa</th><td class="placa">${esc(veiculo.placa)}</td></tr>

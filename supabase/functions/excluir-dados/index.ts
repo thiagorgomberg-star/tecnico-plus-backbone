@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
 
   const { data: usuario } = await admin.from("usuarios").select("papel").eq("id", id).maybeSingle();
   if (!usuario) return responder({ erro: "Técnico não encontrado." }, 404);
-  if (usuario.papel !== "tecnico") return responder({ erro: "Só é possível excluir técnicos." }, 400);
+  if (!["tecnico", "auxiliar"].includes(usuario.papel)) return responder({ erro: "Só é possível excluir técnicos e auxiliares." }, 400);
   const vinculos = await vinculosTecnico(admin, id);
   const temHistorico = Object.keys(vinculos).length > 0;
   if (acao === "resumo") return responder({ vinculos, temHistorico });
