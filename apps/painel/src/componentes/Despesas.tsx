@@ -12,12 +12,17 @@ type Despesa = {
   odometro_km: number | null; combustivel: string | null; comprovante: string | null; status: string; motivo_recusa: string | null;
   conferida_por_nome: string | null; conferida_em: string | null; criado_em: string; latitude: number | null; longitude: number | null;
   km_rodados: number | null; km_por_litro: number | null; preco_litro: number | null;
-  reembolso: string | null; reembolso_pago_em: string | null;
+  reembolso: string | null; reembolso_pago_em: string | null; tipo_manutencao: string | null;
 };
 
 const CATEGORIAS: Record<string, string> = {
   combustivel: "Combustível", pedagio: "Pedágio", estacionamento: "Estacionamento", alimentacao: "Alimentação",
   hospedagem: "Hospedagem", ferramenta: "Ferramenta", material: "Material", manutencao_veiculo: "Manutenção do veículo", outros: "Outros",
+};
+// Gastos do veículo ficam na aba Frota; o resto na aba Despesas.
+export const CATEGORIAS_FROTA = ["combustivel", "pedagio", "estacionamento", "manutencao_veiculo"];
+const MANUTENCOES: Record<string, string> = {
+  troca_oleo: "Troca de óleo", pneu: "Pneu", revisao: "Revisão", freios: "Freios", bateria: "Bateria", funilaria: "Funilaria", lavagem: "Lavagem", outro: "Outro",
 };
 const PAGAMENTOS: Record<string, string> = { cartao_empresa: "Cartão da empresa", reembolso: "Reembolso ao técnico", adiantamento: "Adiantamento" };
 const STATUS: Record<string, { rotulo: string; cor: string }> = {
@@ -31,7 +36,8 @@ const br = (iso: string) => iso.slice(0, 10).split("-").reverse().join("/");
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 
 // Conferência das despesas lançadas no app: comprovante ao lado dos dados, aprovação e planilha para o financeiro.
-export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
+export default function Despesas({ tecnicos, frota = false, placa }: { tecnicos: Tecnico[]; frota?: boolean; placa?: string }) {
+  const doModo = Object.fromEntries(Object.entries(CATEGORIAS).filter(([k]) => CATEGORIAS_FROTA.includes(k) === frota));
   const [mes, setMes] = useState(mesAtual());
   const [tecnico, setTecnico] = useState("");
   const [status, setStatus] = useState("");
@@ -51,6 +57,8 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
     if (tecnico) q = q.eq("tecnico_id", tecnico);
     if (status) q = q.eq("status", status);
     if (categoria) q = q.eq("categoria", categoria);
+    else q = q.in("categoria", Object.keys(doModo));
+    if (placa) q = q.ilike("placa", placa);
     if (reembolso === "todos") q = q.not("reembolso", "is", null);
     else if (reembolso) q = q.eq("reembolso", reembolso);
     q.order("data", { ascending: false }).order("criado_em", { ascending: false }).then(async ({ data }) => {
@@ -63,7 +71,8 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
       const { data: assinados } = await supabase.storage.from("despesas").createSignedUrls(caminhos, 7 * 86400);
       setLinks(Object.fromEntries((assinados ?? []).filter((s) => s.path && s.signedUrl).map((s) => [s.path as string, s.signedUrl as string])));
     });
-  }, [mes, tecnico, status, categoria, reembolso, versao]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mes, tecnico, status, categoria, reembolso, versao, frota, placa]);
 
   useEffect(() => {
     const canal = supabase.channel("despesas")
@@ -158,7 +167,7 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="mr-auto text-lg font-semibold">Despesas</h2>
+        <h2 className="mr-auto text-lg font-semibold">{frota ? "Gastos da frota" : "Despesas"}</h2>
         <input type="month" className={campo} value={mes} onChange={(e) => setMes(e.target.value || mesAtual())} />
         <select className={campo} value={tecnico} onChange={(e) => setTecnico(e.target.value)}>
           <option value="">Todos os técnicos</option>
@@ -166,7 +175,7 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
         </select>
         <select className={campo} value={categoria} onChange={(e) => setCategoria(e.target.value)}>
           <option value="">Todos os tipos</option>
-          {Object.entries(CATEGORIAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {Object.entries(doModo).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <select className={campo} value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">Todas as situações</option>
@@ -254,7 +263,7 @@ export default function Despesas({ tecnicos }: { tecnicos: Tecnico[] }) {
                   </td>
                   <td className="p-3 whitespace-nowrap">{br(d.data)}</td>
                   <td className="p-3">{d.tecnico}</td>
-                  <td className="p-3">{CATEGORIAS[d.categoria] ?? d.categoria}</td>
+                  <td className="p-3">{CATEGORIAS[d.categoria] ?? d.categoria}{d.tipo_manutencao ? ` · ${MANUTENCOES[d.tipo_manutencao] ?? d.tipo_manutencao}` : ""}{frota && d.placa && d.categoria !== "combustivel" ? <div className="text-xs text-gray-500">{d.placa}</div> : null}</td>
                   <td className="p-3">
                     <div>{[d.fornecedor, d.os_numero ? `O.S. ${d.os_numero}` : null].filter(Boolean).join(" · ")}</div>
                     {d.categoria === "combustivel" && (
