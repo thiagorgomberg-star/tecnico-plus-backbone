@@ -90,7 +90,7 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
               <th className="p-3">Título</th>
               <th className="p-3">Técnico</th>
               <th className="p-3">Status</th>
-              <th className="p-3">Prazo</th>
+              <th className="p-3">SLA (4h)</th>
               <th className="p-3">Ações</th>
             </tr>
           </thead>
@@ -99,7 +99,11 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
               <tr><td colSpan={6} className="p-6 text-center text-gray-500">Nenhuma O.S. neste filtro.</td></tr>
             )}
             {ordens.map((os) => {
-              const atrasada = os.prazo && new Date(os.prazo) < agora && !["concluida", "baixada", "cancelada"].includes(os.status);
+              const emAberto = !["concluida", "baixada", "cancelada", "rascunho"].includes(os.status);
+              const limite = os.sla_limite ?? os.prazo;
+              const restante = limite ? Math.round((new Date(limite).getTime() - agora.getTime()) / 60000) : null;
+              const atrasada = emAberto && restante != null && restante < 0;
+              const perto = emAberto && restante != null && restante >= 0 && restante <= 60;
               return (
                 <tr key={os.id} className="border-b border-gray-100 align-top last:border-0">
                   <td className="p-3">
@@ -122,8 +126,11 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
                   <td className="p-3">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${corStatus[os.status]}`}>{rotuloStatus[os.status]}</span>
                   </td>
-                  <td className={`p-3 ${atrasada ? "font-semibold text-red-700" : ""}`}>
-                    {data(os.prazo)}{atrasada ? " · atrasada" : ""}
+                  <td className={`p-3 ${atrasada ? "font-semibold text-red-700" : perto ? "font-semibold text-amber-700" : ""}`}>
+                    {data(limite)}
+                    {emAberto && restante != null && (
+                      <div className="text-xs">{restante < 0 ? `vencido há ${-restante} min` : `${Math.floor(restante / 60)}h${String(restante % 60).padStart(2, "0")} restantes`}</div>
+                    )}
                   </td>
                   <td className="p-3">
                     <div className="flex flex-wrap gap-1.5">

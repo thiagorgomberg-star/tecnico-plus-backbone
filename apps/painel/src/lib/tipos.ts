@@ -18,6 +18,7 @@ export type OrdemServico = {
   status: StatusOS;
   titulo: string;
   ticket_acionamento: string | null;
+  sla_limite: string | null;
   descricao: string | null;
   endereco: string | null;
   tecnico_id: string | null;
@@ -55,4 +56,4 @@ export const corStatus: Record<StatusOS, string> = {
   cancelada: "bg-gray-100 text-gray-500",
 };
 
-export const TIPOS_OS = ["Corretiva", "Preventiva", "Rompimento", "Vistoria", "Instalação"];
+export const TIPOS_OS = ["Corretiva", "Preventiva", "Preventiva site", "Roteamento de fibras", "Vistoria de rota"];

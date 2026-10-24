@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-nativ
 
 import { cores, estilo } from '../lib/estilo';
 import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
+import { textoSla } from '../lib/formato';
 import { posicaoAtual } from '../lib/localizacao';
 import { ponto, supabase } from '../lib/supabase';
 import { OrdemServico, proximaAcao, rotuloStatus, StatusOS } from '../lib/tipos';
@@ -17,7 +18,7 @@ const campoHora: Partial<Record<StatusOS, string>> = {
   em_execucao: 'iniciada_em',
   concluida: 'concluida_em',
 };
-const ehCorretiva = (tipo: string) => /corretiva|rompimento/i.test(tipo);
+const ehCorretiva = (tipo: string) => /corretiva/i.test(tipo);
 
 export default function DetalheOS({ os: inicial, voltar, abrirCamera }: Props) {
   const [os, setOs] = useState(inicial);
@@ -101,6 +102,11 @@ export default function DetalheOS({ os: inicial, voltar, abrirCamera }: Props) {
         <Text style={estilo.titulo}>{os.titulo}</Text>
         {os.endereco ? <Text style={[estilo.texto, { marginTop: 8 }]}>{os.endereco}</Text> : null}
         {os.descricao ? <Text style={[estilo.texto, { marginTop: 8 }]}>{os.descricao}</Text> : null}
+        {os.sla_limite && !['concluida', 'baixada', 'cancelada'].includes(os.status) ? (
+          <Text style={[estilo.texto, { marginTop: 8, fontWeight: '600', color: textoSla(os.sla_limite).nivel === 'vencido' ? cores.perigo : cores.texto }]}>
+            {textoSla(os.sla_limite).texto} (limite {new Date(os.sla_limite).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})
+          </Text>
+        ) : null}
         {os.prazo ? <Text style={[estilo.suave, { marginTop: 8 }]}>Prazo {new Date(os.prazo).toLocaleString('pt-BR')}</Text> : null}
         {os.status === 'devolvida' && os.observacao_supervisor ? (
           <Text style={[estilo.texto, { marginTop: 8, color: cores.perigo }]}>

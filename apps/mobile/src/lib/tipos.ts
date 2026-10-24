@@ -23,6 +23,7 @@ export type OrdemServico = {
   observacao_supervisor: string | null;
   evento_localizado_em: string | null;
   ticket_acionamento: string | null;
+  sla_limite: string | null;
 };
 
 export type Expediente = {

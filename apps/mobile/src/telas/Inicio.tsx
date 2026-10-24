@@ -4,7 +4,7 @@ import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput
 
 import { cores, corDoStatus, estilo } from '../lib/estilo';
 import { aoMudarFila, itensPendentes } from '../lib/fila';
-import { hora } from '../lib/formato';
+import { hora, textoSla } from '../lib/formato';
 import {
   encerrarExpediente,
   encerrarRefeicao,
@@ -139,7 +139,9 @@ export default function Inicio({ nome, abrirOS, sair }: Props) {
   );
 
   const cartao = (os: OrdemServico) => {
-    const atrasada = os.prazo != null && new Date(os.prazo) < new Date() && !['concluida', 'baixada', 'cancelada'].includes(os.status);
+    const emAberto = !['concluida', 'baixada', 'cancelada'].includes(os.status);
+    const atrasada = os.prazo != null && new Date(os.prazo) < new Date() && emAberto;
+    const sla = os.sla_limite && emAberto ? textoSla(os.sla_limite) : null;
     return (
       <Pressable style={s.cartao} onPress={() => abrirOS(os)}>
         <View style={[s.faixaStatus, { backgroundColor: corDoStatus[os.status] }]} />
@@ -153,6 +155,11 @@ export default function Inicio({ nome, abrirOS, sair }: Props) {
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
             {os.prioridade === 'emergencia' || os.prioridade === 'alta' ? (
               <Text style={[s.linha, { color: cores.perigo, fontWeight: '600' }]}>Prioridade {os.prioridade}</Text>
+            ) : null}
+            {sla ? (
+              <Text style={[s.linha, { fontWeight: '600', color: sla.nivel === 'ok' ? cores.sucesso : sla.nivel === 'alerta' ? cores.alerta : cores.perigo }]}>
+                {sla.texto}
+              </Text>
             ) : null}
             {os.prazo ? (
               <Text style={[s.linha, atrasada && { color: cores.perigo, fontWeight: '600' }]}>
