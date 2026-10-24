@@ -7,7 +7,7 @@ import { Caixa, caixasDaRede, proximaTag, salvarCaixa } from '../lib/caixas';
 import { cores } from '../lib/estilo';
 import {
   calcularPlano, CAPACIDADES, CaixaRede, descreverFibra, faixasDaBandeja, FUSOES_POR_BANDEJA, herdarDaAnterior, Manobra, PADROES_CORES, rotuloPonto,
-  descreverOlt, ehPonta, INSTALACOES, MODELOS_OLT, TIPOS_SFP, TIPOS_CORDAO, separarBandejas, SituacaoFibra, TIPOS_PONTO,
+  descreverOlt, ehPonta, instalacoesDoTipo, MODELOS_OLT, TIPOS_SFP, TIPOS_CORDAO, separarBandejas, SituacaoFibra, TIPOS_PONTO,
 } from '../lib/fusao';
 import { aoMudarFila, itensPendentes } from '../lib/fila';
 import { enderecoDe, posicaoAtual } from '../lib/localizacao';
@@ -190,6 +190,8 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
     if (c.tipo === 'site' && !c.parceiro?.trim()) return Alert.alert('Informe o parceiro do site');
     if (dgo && !c.bastidor?.trim()) return Alert.alert('Informe o bastidor do DGO');
     if ((c.tipo === 'emenda' || c.tipo === 'entroncamento') && !c.instalacao) return Alert.alert('Informe se a caixa é aérea ou subterrânea');
+    if (dgo && !c.instalacao) return Alert.alert('Informe onde o DGO está instalado', 'Container, rooftop ou site de outro parceiro.');
+    if (dgo && c.instalacao === 'site_parceiro' && !c.parceiro?.trim()) return Alert.alert('Informe de qual parceiro é o site');
     if (c.latitude == null && !(await new Promise<boolean>((ok) => Alert.alert('Sem localização', 'Salvar mesmo assim?', [
       { text: 'Capturar', onPress: () => ok(false) }, { text: 'Salvar', onPress: () => ok(true) }])))) return;
     setSalvando(true);
@@ -251,11 +253,11 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
             <TextInput style={s.campo} value={c.identificacao} onChangeText={(t) => mudar({ identificacao: t })}
               autoCapitalize="characters" placeholder="Ex.: CE-BKB-0006" />
           )}
-          {c.tipo === 'emenda' || c.tipo === 'entroncamento' ? (
+          {instalacoesDoTipo(c.tipo).length ? (
             <>
-              <Text style={s.rotulo}>INSTALAÇÃO</Text>
+              <Text style={s.rotulo}>{dgo ? 'INSTALAÇÃO DO DGO *' : 'INSTALAÇÃO *'}</Text>
               <View style={s.chips}>
-                {INSTALACOES.map((t) => (
+                {instalacoesDoTipo(c.tipo).map((t) => (
                   <Pressable key={t.valor} style={chip(c.instalacao === t.valor)} onPress={() => mudar({ instalacao: t.valor })}>
                     <Text style={textoChip(c.instalacao === t.valor)}>{t.rotulo}</Text>
                   </Pressable>
@@ -270,9 +272,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
                 placeholder="Ex.: Sala 2 · Bastidor B03" />
             </>
           ) : null}
-          {c.tipo === 'site' ? (
+          {c.tipo === 'site' || (dgo && c.instalacao === 'site_parceiro') ? (
             <>
-              <Text style={s.rotulo}>PARCEIRO *</Text>
+              <Text style={s.rotulo}>{dgo ? 'SITE DE QUAL PARCEIRO? *' : 'PARCEIRO *'}</Text>
               <TextInput style={s.campo} value={c.parceiro ?? ''} onChangeText={(t) => mudar({ parceiro: t })}
                 placeholder="Ex.: Claro, Vivo, TIM" />
             </>

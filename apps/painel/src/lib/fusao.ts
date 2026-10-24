@@ -11,8 +11,17 @@ export type TipoPonto = (typeof TIPOS_PONTO)[number]['valor'];
 export const rotuloPonto = (t: string) => TIPOS_PONTO.find((x) => x.valor === t)?.rotulo ?? 'Caixa';
 // Pontas da rede (DGO, entroncamento e site de parceiro): ali se mede sinal e OTDR por fibra.
 export const ehPonta = (t: string) => t === 'dgo' || t === 'entroncamento' || t === 'site';
+// Instalação: caixa aérea/subterrânea; DGO em container, rooftop ou em site de outro parceiro (nome em `parceiro`).
 export const INSTALACOES = [{ valor: 'aerea', rotulo: 'Aérea' }, { valor: 'subterranea', rotulo: 'Subterrânea' }] as const;
-export const rotuloInstalacao = (t: string | null | undefined) => INSTALACOES.find((x) => x.valor === t)?.rotulo ?? null;
+export const INSTALACOES_DGO = [
+  { valor: 'container', rotulo: 'Container' },
+  { valor: 'rooftop', rotulo: 'Rooftop' },
+  { valor: 'site_parceiro', rotulo: 'Site de outro parceiro' },
+] as const;
+export const instalacoesDoTipo = (tipo: string) =>
+  tipo === 'dgo' ? INSTALACOES_DGO : tipo === 'emenda' || tipo === 'entroncamento' ? INSTALACOES : [];
+export const rotuloInstalacao = (t: string | null | undefined) =>
+  [...INSTALACOES, ...INSTALACOES_DGO].find((x) => x.valor === t)?.rotulo ?? null;
 
 export const CAPACIDADES = [6, 12, 24, 36, 48, 72, 96, 144, 288];
 

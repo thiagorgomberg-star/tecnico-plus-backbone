@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { enfileirar } from './fila';
-import { CaixaRede, Manobra, SituacaoFibra } from './fusao';
+import { CaixaRede, instalacoesDoTipo, Manobra, SituacaoFibra } from './fusao';
 import { ponto, supabase } from './supabase';
 
 // Caixa de emenda / entroncamento / DGO como o app guarda (funciona offline; a fila envia depois).
@@ -95,12 +95,12 @@ export async function salvarCaixa(caixa: Caixa, nova: boolean) {
     grupos_fusionados: caixa.grupos_fusionados,
     grupos_vagos: caixa.grupos_vagos,
     fusoes_por_bandeja: caixa.fusoes_por_bandeja || null,
-    parceiro: caixa.tipo === 'site' ? caixa.parceiro?.trim() || null : null,
+    parceiro: caixa.tipo === 'site' || (caixa.tipo === 'dgo' && caixa.instalacao === 'site_parceiro') ? caixa.parceiro?.trim() || null : null,
     padrao_cores_entrada: caixa.padrao_cores_entrada || null,
     padrao_cores_saidas: caixa.saidas.some((_, i) => caixa.padrao_cores_saidas?.[i])
       ? caixa.saidas.map((_, i) => caixa.padrao_cores_saidas?.[i] || null) : null,
     bastidor: caixa.tipo === 'dgo' ? caixa.bastidor?.trim() || null : null,
-    instalacao: caixa.tipo === 'emenda' || caixa.tipo === 'entroncamento' ? caixa.instalacao ?? null : null,
+    instalacao: instalacoesDoTipo(caixa.tipo).some((x) => x.valor === caixa.instalacao) ? caixa.instalacao ?? null : null,
     observacao: caixa.observacao,
     endereco: caixa.endereco,
     posicao: caixa.latitude != null && caixa.longitude != null ? ponto(caixa.latitude, caixa.longitude) : null,
