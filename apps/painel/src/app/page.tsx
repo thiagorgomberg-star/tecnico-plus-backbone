@@ -3,8 +3,10 @@
 import type { Session } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
 
+import Escala from "@/componentes/Escala";
 import Login from "@/componentes/Login";
 import OrdensServico from "@/componentes/OrdensServico";
+import RotasEventos from "@/componentes/RotasEventos";
 import TecnicosAoVivo from "@/componentes/TecnicosAoVivo";
 import { supabase } from "@/lib/supabase";
 import { Tecnico } from "@/lib/tipos";
@@ -15,7 +17,7 @@ export default function Painel() {
   const [sessao, setSessao] = useState<Session | null | undefined>(undefined);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
-  const [aba, setAba] = useState<"os" | "campo">("os");
+  const [aba, setAba] = useState<"os" | "campo" | "escala" | "rotas">("os");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSessao(data.session));
@@ -52,6 +54,10 @@ export default function Painel() {
             className={`rounded-md px-3 py-1.5 text-sm ${aba === "os" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Ordens de serviço</button>
           <button onClick={() => setAba("campo")}
             className={`rounded-md px-3 py-1.5 text-sm ${aba === "campo" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Equipe em campo</button>
+          <button onClick={() => setAba("escala")}
+            className={`rounded-md px-3 py-1.5 text-sm ${aba === "escala" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Escala</button>
+          <button onClick={() => setAba("rotas")}
+            className={`rounded-md px-3 py-1.5 text-sm ${aba === "rotas" ? "bg-gray-100 font-medium" : "text-gray-600"}`}>Rotas e eventos</button>
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm text-gray-600">
           {perfil?.nome}
@@ -59,7 +65,7 @@ export default function Painel() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">
-        {aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : <TecnicosAoVivo />}
+        {aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : <RotasEventos />}
       </main>
     </div>
   );

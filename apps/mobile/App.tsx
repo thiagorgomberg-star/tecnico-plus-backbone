@@ -14,6 +14,8 @@ import CameraOS from './src/telas/CameraOS';
 import DetalheOS from './src/telas/DetalheOS';
 import Inicio from './src/telas/Inicio';
 import Login from './src/telas/Login';
+import MinhaEscala from './src/telas/MinhaEscala';
+import Rotas from './src/telas/Rotas';
 
 export type Perfil = { nome: string; cargo: string | null };
 type Camera = { osId: string; fotosJaFeitas: number };
@@ -24,6 +26,7 @@ export default function App() {
   const [perfil, setPerfil] = useState<Perfil>({ nome: '', cargo: null });
   const [osAberta, setOsAberta] = useState<OrdemServico | null>(null);
   const [camera, setCamera] = useState<Camera | null>(null);
+  const [tela, setTela] = useState<'inicio' | 'rotas' | 'escala'>('inicio');
 
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
@@ -72,8 +75,12 @@ export default function App() {
       ) : osAberta ? (
         <DetalheOS os={osAberta} voltar={() => setOsAberta(null)}
           abrirCamera={(fotosJaFeitas) => setCamera({ osId: osAberta.id, fotosJaFeitas })} />
+      ) : tela === 'rotas' ? (
+        <Rotas voltar={() => setTela('inicio')} />
+      ) : tela === 'escala' ? (
+        <MinhaEscala voltar={() => setTela('inicio')} />
       ) : (
-        <Inicio nome={perfil.nome} abrirOS={setOsAberta} sair={sair} />
+        <Inicio abrir={setTela} nome={perfil.nome} abrirOS={setOsAberta} sair={sair} />
       )}
     </SafeAreaView>
   );

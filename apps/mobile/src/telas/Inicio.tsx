@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { bloqueioDeHoje, rotuloEscala } from '../lib/escala';
 import { cores, corDoStatus, estilo } from '../lib/estilo';
 import { aoMudarFila, itensPendentes } from '../lib/fila';
 import { hora, textoSla } from '../lib/formato';
@@ -16,12 +17,12 @@ import {
 import { supabase } from '../lib/supabase';
 import { OrdemServico, rotuloStatus } from '../lib/tipos';
 
-type Props = { nome: string; abrirOS: (os: OrdemServico) => void; sair: () => void };
+type Props = { nome: string; abrirOS: (os: OrdemServico) => void; sair: () => void; abrir: (tela: 'rotas' | 'escala') => void };
 
 const CACHE_OS = 'ordens-cache';
 const ORDEM_PRIORIDADE = { emergencia: 0, alta: 1, media: 2, baixa: 3 };
 
-export default function Inicio({ nome, abrirOS, sair }: Props) {
+export default function Inicio({ nome, abrirOS, sair, abrir }: Props) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
   const [pendentes, setPendentes] = useState(0);
@@ -75,14 +76,19 @@ export default function Inicio({ nome, abrirOS, sair }: Props) {
     }
     if (jornada.expedienteId) {
       setJornada(await encerrarExpediente(jornada, valor));
-    } else {
-      const { jornada: nova, rastreando } = await iniciarExpediente(valor);
-      setJornada(nova);
-      if (!rastreando) {
-        Alert.alert('Localização em segundo plano', 'Para registrar o trajeto completo do dia, permita a localização "o tempo todo" nas configurações do app.');
-      }
+      setKm('');
+      return;
     }
+    const bloqueio = await bloqueioDeHoje();
+    if (bloqueio) {
+      return Alert.alert('Expediente bloqueado', `Hoje está na sua escala como ${rotuloEscala[bloqueio.tipo].toLowerCase()}.`);
+    }
+    const { jornada: nova, rastreando } = await iniciarExpediente(valor);
+    setJornada(nova);
     setKm('');
+    if (!rastreando) {
+      Alert.alert('Localização em segundo plano', 'Para registrar o trajeto completo do dia, permita a localização "o tempo todo" nas configurações do app.');
+    }
   }
 
   async function alternarRefeicao() {
@@ -140,6 +146,11 @@ export default function Inicio({ nome, abrirOS, sair }: Props) {
             </Pressable>
           )}
         </View>
+      </View>
+
+      <View style={s.atalhos}>
+        <Pressable style={s.atalho} onPress={() => abrir('escala')}><Text style={s.atalhoTexto}>Minha escala</Text></Pressable>
+        <Pressable style={s.atalho} onPress={() => abrir('rotas')}><Text style={s.atalhoTexto}>Rotas KMZ</Text></Pressable>
       </View>
 
       <Text style={s.secao}>ATIVIDADES ({abertas.length})</Text>
@@ -209,6 +220,9 @@ const s = StyleSheet.create({
   painel: { backgroundColor: cores.cartao, padding: 16, gap: 10, borderBottomWidth: 1, borderBottomColor: cores.borda },
   acao: { flex: 1, borderRadius: 6, paddingVertical: 14, alignItems: 'center' },
   acaoTexto: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  atalhos: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 12 },
+  atalho: { flex: 1, backgroundColor: cores.cartao, borderWidth: 1, borderColor: cores.borda, borderRadius: 6, paddingVertical: 12, alignItems: 'center' },
+  atalhoTexto: { color: cores.primaria, fontWeight: '600', fontSize: 14 },
   secao: { color: cores.suave, fontSize: 12, fontWeight: '700', letterSpacing: 0.5, marginHorizontal: 16, marginTop: 18, marginBottom: 6 },
   cartao: { flexDirection: 'row', backgroundColor: cores.cartao, marginHorizontal: 12, marginTop: 8, borderRadius: 6, overflow: 'hidden',
     borderWidth: 1, borderColor: cores.borda },
