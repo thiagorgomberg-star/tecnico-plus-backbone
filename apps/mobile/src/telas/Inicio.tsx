@@ -83,6 +83,17 @@ export default function Inicio({ nome, abrirOS, sair, abrir }: Props) {
       return Alert.alert('Km final menor que o inicial', `O expediente começou com ${jornada.kmInicial} km.`);
     }
     if (jornada.expedienteId) {
+      // Status mais recente de cada O.S.: o que ainda está na fila (offline) vale mais que o do servidor.
+      const status = new Map(ordens.map((o) => [o.id, o.status as string]));
+      for (const item of await itensPendentes()) {
+        if (item.tipo === 'os' && typeof item.campos.status === 'string') status.set(item.osId, item.campos.status);
+        if (item.tipo === 'inserir' && item.tabela === 'ordens_servico') status.set(String(item.linha.id), String(item.linha.status));
+      }
+      const emAndamento = [...status].filter(([, st]) => st === 'em_execucao' || st === 'pausada');
+      if (emAndamento.length > 0) {
+        const os = ordens.find((o) => o.id === emAndamento[0][0]);
+        return Alert.alert('O.S. em andamento', `Conclua ${os ? `a O.S. #${os.numero} (${os.titulo})` : 'a O.S. em execução'} antes de encerrar o expediente.`);
+      }
       setJornada(await encerrarExpediente(jornada, valor));
       setKm('');
       return;
