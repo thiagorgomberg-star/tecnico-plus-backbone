@@ -33,7 +33,7 @@ async function ler<T>(chave: string, padrao: T): Promise<T> {
 }
 
 const CAMPOS = 'id, os_id, tipo, identificacao, capacidade_fibras, saidas, grupos_fusionados, grupos_vagos, observacao, endereco, ' +
-  'latitude, longitude, precisao_m, localizada_em, origem_caixa_id, origem_saida, origem_dgo, origem_identificacao, manobras, fibras';
+  'latitude, longitude, precisao_m, localizada_em, origem_caixa_id, origem_saida, origem_dgo, origem_identificacao, manobras, fibras, fusoes_por_bandeja';
 
 // Caixas da O.S.: na hora vem do celular; com internet atualiza do servidor (sem perder o que ainda está na fila).
 export async function caixasDaOs(osId: string, aoAtualizar: (c: Caixa[]) => void) {
@@ -71,6 +71,7 @@ export async function salvarCaixa(caixa: Caixa, nova: boolean) {
     saidas: caixa.saidas,
     grupos_fusionados: caixa.grupos_fusionados,
     grupos_vagos: caixa.grupos_vagos,
+    fusoes_por_bandeja: caixa.fusoes_por_bandeja || 12,
     observacao: caixa.observacao,
     endereco: caixa.endereco,
     posicao: caixa.latitude != null && caixa.longitude != null ? ponto(caixa.latitude, caixa.longitude) : null,

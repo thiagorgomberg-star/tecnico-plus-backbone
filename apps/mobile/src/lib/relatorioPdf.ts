@@ -6,14 +6,14 @@ import * as Sharing from 'expo-sharing';
 
 import { Caixa } from './caixas';
 import { itensPendentes } from './fila';
-import { calcularPlano, descreverFibra, rotuloPonto, svgMapaFusao } from './fusao';
+import { calcularPlano, descreverFibra, faixasDaBandeja, rotuloPonto, separarBandejas, svgMapaFusao } from './fusao';
 import { supabase } from './supabase';
 import { OrdemServico, rotuloStatus } from './tipos';
 
 type Item = { id: string; nome: string; unidade: string; categoria: 'servico' | 'material' };
 type Lancamento = { item_id: string; quantidade: number; observacao: string | null };
 type Pessoa = { id: string; nome: string };
-type Foto = { src: string; tiradaEm: string | null; tipo: string; caixaId: string | null; fibra: number | null; descricao?: string | null };
+type Foto = { src: string; tiradaEm: string | null; tipo: string; caixaId: string | null; fibra: number | null; bandeja?: number | null; descricao?: string | null };
 
 const esc = (t: unknown) =>
   String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -63,8 +63,8 @@ export async function compartilharRelatorio(os: OrdemServico) {
     supabase.from('ordens_servico')
       .select('criado_em, enviada_em, iniciada_em, concluida_em, tecnico:usuarios!ordens_servico_tecnico_id_fkey(nome, cargo), rota:rotas(trecho)')
       .eq('id', os.id).maybeSingle(),
-    supabase.from('os_anexos').select('caminho_arquivo, tirada_em, tipo, caixa_id, fibra, descricao').eq('os_id', os.id)
-      .in('tipo', ['foto_antes', 'foto_depois', 'foto_caixa', 'foto_otdr', 'assinatura']).order('criado_em'),
+    supabase.from('os_anexos').select('caminho_arquivo, tirada_em, tipo, caixa_id, fibra, bandeja, descricao').eq('os_id', os.id)
+      .in('tipo', ['foto_antes', 'foto_depois', 'foto_caixa', 'foto_otdr', 'foto_bandeja', 'assinatura']).order('criado_em'),
   ]);
   const extra = completa as unknown as {
     criado_em: string; enviada_em: string | null; iniciada_em: string | null; concluida_em: string | null;
@@ -76,13 +76,13 @@ export async function compartilharRelatorio(os: OrdemServico) {
     const { data: urls } = await supabase.storage.from('os-anexos').createSignedUrls(anexos.map((a) => a.caminho_arquivo), 600);
     const imagens = await Promise.all((urls ?? []).map((u) => (u.signedUrl ? dataUrl(u.signedUrl) : null)));
     imagens.forEach((src, i) => src && fotos.push({
-      src, tiradaEm: anexos[i].tirada_em, tipo: anexos[i].tipo, caixaId: anexos[i].caixa_id, fibra: anexos[i].fibra, descricao: anexos[i].descricao,
+      src, tiradaEm: anexos[i].tirada_em, tipo: anexos[i].tipo, caixaId: anexos[i].caixa_id, fibra: anexos[i].fibra, bandeja: anexos[i].bandeja, descricao: anexos[i].descricao,
     }));
   }
   for (const p of pendentes) {
     if (p.tipo !== 'foto' || p.osId !== os.id) continue;
     const src = await dataUrl(p.arquivo);
-    if (src) fotos.push({ src, tiradaEm: p.tiradaEm, tipo: p.tipoAnexo, caixaId: p.caixaId ?? null, fibra: p.fibra ?? null, descricao: p.descricao ?? null });
+    if (src) fotos.push({ src, tiradaEm: p.tiradaEm, tipo: p.tipoAnexo, caixaId: p.caixaId ?? null, fibra: p.fibra ?? null, bandeja: p.bandeja ?? null, descricao: p.descricao ?? null });
   }
 
   const logo = await Asset.fromModule(require('../../assets/mascara/logo-multivale.png')).downloadAsync()
@@ -125,8 +125,10 @@ export async function compartilharRelatorio(os: OrdemServico) {
       ${manobras ? `<p class="l" style="margin-top:8px">Manobras</p><table><tr class="l"><td>Fibra de entrada</td><td>Ligada a</td><td>Motivo</td></tr>${manobras}</table>` : ''}
       ${fibras ? `<p class="l" style="margin-top:8px">Fibras</p><table><tr class="l"><td>Fibra</td><td>Cliente</td>${ponta ? '<td>Sinal dBm</td><td>Reflexão dB</td><td>Perda dB/km</td>' : ''}<td>Situação</td></tr>${fibras}</table>` : ''}
       ${c.saidas.length ? `<div style="margin-top:8px">${svgMapaFusao(c)}</div>` : ''}
+      ${separarBandejas(c).length ? `<p class="l" style="margin-top:8px">Bandejas (${c.fusoes_por_bandeja || 12} fusões por bandeja)</p><table><tr class="l"><td>Bandeja</td><td>Fusões</td><td>Fibras de entrada</td></tr>${
+        separarBandejas(c).map((b) => `<tr><td>Bandeja ${b.numero}</td><td>${b.ligacoes.length}</td><td>${esc(faixasDaBandeja(b))}</td></tr>`).join('')}</table>` : ''}
       ${daCaixa.length ? `<div class="fotos" style="margin-top:8px">${daCaixa.map((f) =>
-        `<figure><img src="${f.src}"><figcaption>${f.tipo === 'foto_otdr' ? `OTDR · fibra ${f.fibra}` : 'Caixa'} · ${quando(f.tiradaEm)}</figcaption></figure>`).join('')}</div>` : ''}
+        `<figure><img src="${f.src}"><figcaption>${f.tipo === 'foto_otdr' ? `OTDR · fibra ${f.fibra}` : f.tipo === 'foto_bandeja' ? `Bandeja ${f.bandeja} · fibras acomodadas` : 'Caixa'} · ${quando(f.tiradaEm)}</figcaption></figure>`).join('')}</div>` : ''}
     </div>`;
   }).join('');
 

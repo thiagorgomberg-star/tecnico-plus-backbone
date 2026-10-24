@@ -5,7 +5,10 @@ import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, ScrollView, St
 import Cabecalho from '../componentes/Cabecalho';
 import { Caixa, caixasDaRede, salvarCaixa } from '../lib/caixas';
 import { cores } from '../lib/estilo';
-import { calcularPlano, CAPACIDADES, CaixaRede, descreverFibra, herdarDaAnterior, Manobra, rotuloPonto, SituacaoFibra, TIPOS_PONTO } from '../lib/fusao';
+import {
+  calcularPlano, CAPACIDADES, CaixaRede, descreverFibra, faixasDaBandeja, FUSOES_POR_BANDEJA, herdarDaAnterior, Manobra, rotuloPonto,
+  separarBandejas, SituacaoFibra, TIPOS_PONTO,
+} from '../lib/fusao';
 import { aoMudarFila, itensPendentes } from '../lib/fila';
 import { enderecoDe, posicaoAtual } from '../lib/localizacao';
 import { supabase } from '../lib/supabase';
@@ -20,7 +23,7 @@ type Props = {
   voltar: () => void;
 };
 
-type Camera = { tipo: 'foto_caixa' | 'foto_otdr'; fibra?: number; titulo: string; feitas: number };
+type Camera = { tipo: 'foto_caixa' | 'foto_otdr' | 'foto_bandeja'; fibra?: number; bandeja?: number; titulo: string; feitas: number };
 
 const numero = (t: string) => {
   const n = Number(t.replace(',', '.'));
@@ -36,7 +39,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
     id: randomUUID(), os_id: osId, tipo: 'emenda', identificacao: '', capacidade_fibras: 72, saidas: [],
     grupos_fusionados: 0, grupos_vagos: 0, observacao: null, endereco: null, latitude: null, longitude: null,
     precisao_m: null, localizada_em: null, origem_caixa_id: null, origem_saida: null, origem_dgo: null, origem: null,
-    manobras: [], fibras: [],
+    manobras: [], fibras: [], fusoes_por_bandeja: 12,
   });
   const [origemTipo, setOrigemTipo] = useState<'caixa' | 'dgo' | 'nenhuma'>(
     inicial ? (inicial.origem_caixa_id ? 'caixa' : inicial.origem_dgo ? 'dgo' : 'nenhuma') : ultima ? 'caixa' : 'nenhuma');
@@ -46,8 +49,8 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const [manobra, setManobra] = useState({ entrada: '', saida: 1, fibra: '', motivo: '' });
   const [fibra, setFibra] = useState({ numero: '', cliente: '', semPotencia: false, potencia: '', reflexao: '', perda: '' });
   const [camera, setCamera] = useState<Camera | null>(null);
-  // Fotos já tiradas: da caixa e da tela do OTDR por fibra (enviadas + na fila).
-  const [fotos, setFotos] = useState<{ caixa: number; otdr: Record<number, number> }>({ caixa: 0, otdr: {} });
+  // Fotos já tiradas: da caixa, da tela do OTDR por fibra e de cada bandeja (enviadas + na fila).
+  const [fotos, setFotos] = useState<{ caixa: number; otdr: Record<number, number>; bandeja: Record<number, number> }>({ caixa: 0, otdr: {}, bandeja: {} });
   const [salvando, setSalvando] = useState(false);
   const enderecoAuto = useRef('');
   const ehPonta = c.tipo === 'dgo' || c.tipo === 'entroncamento';
@@ -57,15 +60,17 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   useEffect(() => {
     const contar = async () => {
       const otdr: Record<number, number> = {};
+      const bandeja: Record<number, number> = {};
       let total = 0;
-      const somar = (tipo: string, fibraN: number | null | undefined) => {
+      const somar = (tipo: string, fibraN: number | null | undefined, bandejaN: number | null | undefined) => {
         if (tipo === 'foto_caixa') total++;
         if (tipo === 'foto_otdr' && fibraN) otdr[fibraN] = (otdr[fibraN] ?? 0) + 1;
+        if (tipo === 'foto_bandeja' && bandejaN) bandeja[bandejaN] = (bandeja[bandejaN] ?? 0) + 1;
       };
-      for (const i of await itensPendentes()) if (i.tipo === 'foto' && i.caixaId === c.id) somar(i.tipoAnexo, i.fibra);
-      const { data } = await supabase.from('os_anexos').select('tipo, fibra').eq('caixa_id', c.id);
-      for (const a of data ?? []) somar(a.tipo, a.fibra);
-      setFotos({ caixa: total, otdr });
+      for (const i of await itensPendentes()) if (i.tipo === 'foto' && i.caixaId === c.id) somar(i.tipoAnexo, i.fibra, i.bandeja);
+      const { data } = await supabase.from('os_anexos').select('tipo, fibra, bandeja').eq('caixa_id', c.id);
+      for (const a of data ?? []) somar(a.tipo, a.fibra, a.bandeja);
+      setFotos({ caixa: total, otdr, bandeja });
     };
     contar();
     return aoMudarFila(contar);
@@ -124,6 +129,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   }
 
   const plano = calcularPlano(c);
+  const bandejas = separarBandejas(c);
   const grupos = gruposEditados ? { f: c.grupos_fusionados, v: c.grupos_vagos } : { f: plano.gruposFusionados, v: plano.gruposVagos };
 
   function adicionarManobra() {
@@ -178,8 +184,8 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
     if (nova) {
       setNova(false);
       Alert.alert('Caixa salva', ehPonta
-        ? 'Agora tire as fotos da caixa e a foto da tela do OTDR de cada fibra medida.'
-        : 'Agora tire as fotos da caixa.');
+        ? 'Agora tire as fotos da caixa, de cada bandeja e a foto da tela do OTDR de cada fibra medida.'
+        : 'Agora tire as fotos da caixa e de cada bandeja com as fibras acomodadas.');
     } else voltar();
   }
 
@@ -310,6 +316,34 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
         </View>
 
         <View style={s.bloco}>
+          <Text style={s.rotulo}>BANDEJAS · FUSÕES POR BANDEJA</Text>
+          <View style={s.chips}>
+            {FUSOES_POR_BANDEJA.map((n) => (
+              <Pressable key={n} style={chip((c.fusoes_por_bandeja || 12) === n)} onPress={() => mudar({ fusoes_por_bandeja: n })}>
+                <Text style={textoChip((c.fusoes_por_bandeja || 12) === n)}>{n}</Text>
+              </Pressable>
+            ))}
+          </View>
+          {bandejas.length === 0 ? <Text style={s.suave}>Cadastre as saídas para separar as fusões nas bandejas.</Text> : null}
+          {bandejas.map((b) => {
+            const feitas = fotos.bandeja[b.numero] ?? 0;
+            return (
+              <View key={b.numero} style={s.linha}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.texto, { fontWeight: '700' }]}>Bandeja {b.numero} · {b.ligacoes.length} fusões</Text>
+                  <Text style={s.suave}>{faixasDaBandeja(b)}{b.ligacoes.some((l) => l.manobra) ? ' · com manobra' : ''}</Text>
+                </View>
+                <Pressable disabled={nova} onPress={() => setCamera({ tipo: 'foto_bandeja', bandeja: b.numero, titulo: `${c.identificacao} · Bandeja ${b.numero}`, feitas })}>
+                  <Text style={{ color: feitas ? cores.sucesso : nova ? cores.suave : cores.perigo, fontWeight: '700' }}>
+                    {feitas ? `✓ Foto (${feitas})` : nova ? 'Salve p/ fotografar' : '📷 Falta foto'}
+                  </Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+
+        <View style={s.bloco}>
           <Text style={s.rotulo}>MANOBRAS ({c.manobras.length})</Text>
           {c.manobras.map((m) => (
             <View key={m.fibra_entrada} style={s.linha}>
@@ -410,8 +444,8 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
       </ScrollView>
       <Modal visible={!!camera} onRequestClose={() => setCamera(null)} animationType="fade" supportedOrientations={['landscape', 'portrait']}>
         {camera ? (
-          <CameraOS osId={osId} fotosJaFeitas={camera.feitas} minimo={camera.tipo === 'foto_otdr' ? 1 : 2} usuario={usuario}
-            caixa={{ id: c.id, tipo: camera.tipo, fibra: camera.fibra, titulo: camera.titulo }} fechar={() => setCamera(null)} />
+          <CameraOS osId={osId} fotosJaFeitas={camera.feitas} minimo={camera.tipo === 'foto_caixa' ? 2 : 1} usuario={usuario}
+            caixa={{ id: c.id, tipo: camera.tipo, fibra: camera.fibra, bandeja: camera.bandeja, titulo: camera.titulo }} fechar={() => setCamera(null)} />
         ) : null}
       </Modal>
       {podeEditar ? (

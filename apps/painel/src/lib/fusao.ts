@@ -35,7 +35,7 @@ export type SituacaoFibra = {
 };
 export type PlanoCaixa = {
   identificacao: string; capacidade_fibras: number; saidas: number[]; manobras: Manobra[];
-  fibras?: SituacaoFibra[]; origem?: string | null;
+  fibras?: SituacaoFibra[]; origem?: string | null; fusoes_por_bandeja?: number | null;
 };
 export type Ligacao = { entrada: number; saida: number; fibraSaida: number; manobra: boolean };
 
@@ -88,6 +88,34 @@ export function calcularPlano(caixa: PlanoCaixa) {
   };
 }
 
+// Bandejas: as fusões (em ordem de fibra de entrada) ocupam as bandejas em sequência.
+export const FUSOES_POR_BANDEJA = [6, 8, 12, 16, 24];
+export type Bandeja = { numero: number; ligacoes: Ligacao[] };
+
+export function separarBandejas(caixa: PlanoCaixa): Bandeja[] {
+  const porBandeja = caixa.fusoes_por_bandeja || 12;
+  const bandejas: Bandeja[] = [];
+  calcularPlano(caixa).ligacoes.forEach((l, i) => {
+    const b = Math.floor(i / porBandeja);
+    if (!bandejas[b]) bandejas[b] = { numero: b + 1, ligacoes: [] };
+    bandejas[b].ligacoes.push(l);
+  });
+  return bandejas;
+}
+
+// Ex.: "FO 1–12, 37" (fibras de entrada da bandeja, em faixas).
+export function faixasDaBandeja(b: Bandeja) {
+  const nums = b.ligacoes.map((l) => l.entrada);
+  const faixas: string[] = [];
+  for (let i = 0; i < nums.length; i++) {
+    let j = i;
+    while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++;
+    faixas.push(i === j ? `${nums[i]}` : `${nums[i]}–${nums[j]}`);
+    i = j;
+  }
+  return `FO ${faixas.join(', ')}`;
+}
+
 // Caixa nova a partir da saída de outra: a entrada é aquele cabo, e cliente/sem potência acompanham a fibra.
 export function herdarDaAnterior(anterior: PlanoCaixa, saida: number) {
   const capacidade = anterior.saidas[saida - 1] ?? 0;
@@ -107,6 +135,8 @@ const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 // Desenho no estilo do mapa de fusão: entrada à esquerda, saídas à direita, só os tubos com fusão.
 export function svgMapaFusao(caixa: PlanoCaixa) {
   const { ligacoes, param } = calcularPlano(caixa);
+  const bandejas = separarBandejas(caixa);
+  const bandejaDe = new Map(bandejas.flatMap((b) => b.ligacoes.map((l) => [l.entrada, b.numero] as const)));
   const L = 16; // altura de cada fibra
   const W = 760;
   const cap = caixa.capacidade_fibras;
@@ -178,7 +208,14 @@ export function svgMapaFusao(caixa: PlanoCaixa) {
   const alturaDir = y - 34;
 
   // Linhas: cor com cor contínua; manobra tracejada em vermelho com "M" no meio.
-  const x1 = 224, x2 = W - 224;
+  // Etiqueta da bandeja de cada fusão (B1, B2...) logo depois da fibra de entrada; as cores alternam por bandeja.
+  const x1 = 262, x2 = W - 224;
+  for (const [entrada, b] of bandejaDe) {
+    const ya = yEntrada.get(entrada);
+    if (ya == null) continue;
+    partes.push(`<line x1="224" y1="${ya}" x2="${x1}" y2="${ya}" stroke="#4b5563"/>`);
+    partes.push(`<rect x="229" y="${ya - 6}" width="28" height="12" rx="3" fill="${b % 2 ? '#0572CE' : '#d97706'}"/><text x="243" y="${ya + 3}" font-size="8" fill="#fff" text-anchor="middle" font-weight="bold">B${b}</text>`);
+  }
   for (const l of ligacoes) {
     const ya = yEntrada.get(l.entrada);
     const yb = ySaida.get(`${l.saida}:${l.fibraSaida}`);
@@ -195,7 +232,7 @@ export function svgMapaFusao(caixa: PlanoCaixa) {
 
   const altura = Math.max(alturaEsq, alturaDir, 60);
   const semPotencia = (caixa.fibras ?? []).filter((f) => f.sem_potencia).length;
-  const legenda = `${cap} fibras · ${ligacoes.length} fusionadas · ${param} param nesta caixa (⊣) · ${caixa.manobras.length} manobra(s) (M, tracejado) ${semPotencia ? ` · ${semPotencia} sem potência` : ''} · só tubos com fusão`;
+  const legenda = `${cap} fibras · ${ligacoes.length} fusionadas · ${param} param nesta caixa (⊣) · ${caixa.manobras.length} manobra(s) (M, tracejado) ${semPotencia ? ` · ${semPotencia} sem potência` : ''} · ${bandejas.length} bandeja(s) de ${caixa.fusoes_por_bandeja || 12} fusões (B) · só tubos com fusão`;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -20 ${W} ${altura + 20}" width="100%" font-family="sans-serif">` +
     `<text x="0" y="-6" font-size="11" fill="#6b7280">${esc(`Mapa de fusão · ${caixa.identificacao} · ${legenda}`)}</text>${partes.join('')}</svg>`;
 }

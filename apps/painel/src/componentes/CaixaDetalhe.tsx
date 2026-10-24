@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { CaixaRede, calcularPlano, descreverFibra, rotuloPonto, svgMapaFusao } from "@/lib/fusao";
+import { CaixaRede, calcularPlano, descreverFibra, faixasDaBandeja, rotuloPonto, separarBandejas, svgMapaFusao } from "@/lib/fusao";
 import { supabase } from "@/lib/supabase";
 
 export type CaixaPainel = CaixaRede & {
@@ -21,7 +21,7 @@ export type CaixaPainel = CaixaRede & {
   origem_identificacao: string | null;
 };
 
-type Foto = { id: string; tipo: string; fibra: number | null; url?: string };
+type Foto = { id: string; tipo: string; fibra: number | null; bandeja: number | null; url?: string };
 
 export const ehPonta = (tipo: string) => tipo === "dgo" || tipo === "entroncamento";
 export const origemDe = (c: CaixaPainel) => c.origem_identificacao ?? (c.origem_dgo ? `DGO ${c.origem_dgo}` : null);
@@ -33,7 +33,7 @@ export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
   const plano = calcularPlano({ ...c, origem: origemDe(c) });
 
   useEffect(() => {
-    supabase.from("os_anexos").select("id, tipo, fibra, caminho_arquivo").eq("caixa_id", c.id).order("criado_em")
+    supabase.from("os_anexos").select("id, tipo, fibra, bandeja, caminho_arquivo").eq("caixa_id", c.id).order("criado_em")
       .then(async ({ data }) => {
         const lista = data ?? [];
         if (!lista.length) return setFotos([]);
@@ -121,6 +121,28 @@ export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
       {c.saidas.length > 0 && (
         <div className="mt-4 overflow-x-auto rounded-lg border border-gray-200 bg-white p-2"
           dangerouslySetInnerHTML={{ __html: svgMapaFusao({ ...c, origem: origemDe(c) }) }} />
+      )}
+
+      {separarBandejas(c).length > 0 && (
+        <>
+          <h4 className="mt-4 font-semibold">Bandejas ({c.fusoes_por_bandeja ?? 12} fusões por bandeja)</h4>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {separarBandejas(c).map((b) => {
+              const foto = [...fotos].reverse().find((f) => f.tipo === "foto_bandeja" && f.bandeja === b.numero);
+              return (
+                <figure key={b.numero} className="rounded-lg border border-gray-200 p-2">
+                  {foto?.url ? (
+                    <a href={foto.url} target="_blank" rel="noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={foto.url} alt={`Bandeja ${b.numero}`} className="aspect-[4/3] w-full rounded object-cover" />
+                    </a>
+                  ) : <div className="flex aspect-[4/3] items-center justify-center rounded bg-red-50 text-xs font-medium text-red-700">sem foto da bandeja</div>}
+                  <figcaption className="mt-1 text-xs"><b>Bandeja {b.numero}</b> · {b.ligacoes.length} fusões · {faixasDaBandeja(b)}</figcaption>
+                </figure>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {fotos.filter((f) => f.tipo === "foto_caixa").length > 0 && (

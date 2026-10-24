@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import type { CaixaPainel } from "@/componentes/CaixaDetalhe";
-import { calcularPlano, descreverFibra, rotuloPonto, svgMapaFusao } from "@/lib/fusao";
+import { calcularPlano, descreverFibra, faixasDaBandeja, rotuloPonto, separarBandejas, svgMapaFusao } from "@/lib/fusao";
 import { rotuloStatus, StatusOS } from "@/lib/tipos";
 
 // Relatório do evento aberto pelo link compartilhado com parceiros (sem login).
@@ -22,7 +22,7 @@ type Relatorio = {
   eventos: { status_novo: StatusOS; criado_em: string }[];
   servicos: { quantidade: number; observacao: string | null; item: { nome: string; unidade: string; categoria: string } | null }[];
   apoio: string[];
-  fotos: { tirada_em: string | null; url: string | null; tipo?: string; caixa_id?: string | null; fibra?: number | null; descricao?: string | null }[];
+  fotos: { tirada_em: string | null; url: string | null; tipo?: string; caixa_id?: string | null; fibra?: number | null; bandeja?: number | null; descricao?: string | null }[];
   caixas?: CaixaPainel[];
   local: { latitude: number; longitude: number; evento_localizado_em: string; evento_precisao_m: number | null } | null;
   gerado_em: string;
@@ -216,6 +216,19 @@ function Conteudo() {
             {c.saidas.length > 0 && (
               <div className="mt-3" dangerouslySetInnerHTML={{ __html: svgMapaFusao({ ...c, origem: origem(c) }) }} />
             )}
+            {separarBandejas(c).length > 0 && (
+              <table className="mt-3 w-full break-inside-avoid">
+                <thead className="text-left text-xs text-gray-500"><tr><th>Bandeja</th><th>Fusões</th><th>Fibras de entrada</th><th>Foto</th></tr></thead>
+                <tbody>
+                  {separarBandejas(c).map((b) => (
+                    <tr key={b.numero} className="border-b border-gray-100">
+                      <td className="py-1">Bandeja {b.numero}</td><td>{b.ligacoes.length}</td><td>{faixasDaBandeja(b)}</td>
+                      <td>{daCaixa.some((f) => f.tipo === "foto_bandeja" && f.bandeja === b.numero) ? "✓" : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
             {daCaixa.length > 0 && (
               <div className="mt-3 grid grid-cols-2 gap-3">
                 {daCaixa.map((f, i) => (
@@ -223,7 +236,7 @@ function Conteudo() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {f.url ? <img src={f.url} alt="" className="aspect-[4/3] w-full rounded border border-gray-200 object-cover" /> : null}
                     <figcaption className="mt-0.5 text-xs text-gray-500">
-                      {f.tipo === "foto_otdr" ? `OTDR · fibra ${f.fibra}` : "Caixa"} · {quando(f.tirada_em)}
+                      {f.tipo === "foto_otdr" ? `OTDR · fibra ${f.fibra}` : f.tipo === "foto_bandeja" ? `Bandeja ${f.bandeja}` : "Caixa"} · {quando(f.tirada_em)}
                     </figcaption>
                   </figure>
                 ))}

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import CaixaDetalhe, { CaixaPainel, ehPonta, origemDe } from "@/componentes/CaixaDetalhe";
-import { clienteDoCaminho, descreverFibra, rastrearFibra, rotuloPonto } from "@/lib/fusao";
+import { clienteDoCaminho, descreverFibra, faixasDaBandeja, rastrearFibra, rotuloPonto, separarBandejas } from "@/lib/fusao";
 import { supabase } from "@/lib/supabase";
 
 const esc = (t: unknown) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -17,6 +17,7 @@ async function baixarKmz(caixas: CaixaPainel[]) {
       origemDe(c) ? `Vem de: ${origemDe(c)}${c.origem_saida ? ` (saída ${c.origem_saida})` : ""}` : null,
       `Entrada ${c.capacidade_fibras} FO → ${c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO`).join(", ") || "sem saída"}`,
       `Grupos: ${c.grupos_fusionados} fusionados, ${c.grupos_vagos} vagos`,
+      ...separarBandejas(c).map((b) => `Bandeja ${b.numero}: ${b.ligacoes.length} fusões (${faixasDaBandeja(b)})`),
       ...c.manobras.map((m) => `Manobra: ${descreverFibra(m.fibra_entrada, c.capacidade_fibras)} → Saída ${m.saida} FO ${m.fibra_saida}${m.motivo ? ` (${m.motivo})` : ""}`),
       ...(c.fibras ?? []).map((f) => `Fibra ${f.fibra}: ${[f.cliente, f.sem_potencia ? "SEM POTÊNCIA" : null,
         f.potencia_dbm != null ? `${f.potencia_dbm} dBm` : null, f.reflexao_db != null ? `reflexão ${f.reflexao_db} dB` : null,

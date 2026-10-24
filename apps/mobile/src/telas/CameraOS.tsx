@@ -19,7 +19,7 @@ type Props = {
   usuario: { nome: string; cargo: string | null };
   fechar: () => void;
   // Fotos de uma caixa (ou da tela do OTDR de uma fibra) em vez das fotos antes/depois da O.S.
-  caixa?: { id: string; tipo: 'foto_caixa' | 'foto_otdr'; fibra?: number; titulo: string };
+  caixa?: { id: string; tipo: 'foto_caixa' | 'foto_otdr' | 'foto_bandeja'; fibra?: number; bandeja?: number; titulo: string };
   // Foto única fora da O.S. (ex.: Inventário Matinal): entrega a foto com máscara e fecha a câmera.
   unica?: { titulo: string; aoSalvar: (foto: { arquivo: string; tiradaEm: string; latitude: number | null; longitude: number | null }) => void };
 };
@@ -156,6 +156,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
         tipoAnexo: caixa?.tipo ?? tipo,
         caixaId: caixa?.id,
         fibra: caixa?.fibra,
+        bandeja: caixa?.bandeja,
         arquivo: destino.uri,
         largura: LARGURA_FINAL,
         altura: alturaFinal,
