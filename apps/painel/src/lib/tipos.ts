@@ -3,6 +3,7 @@ export type StatusOS =
   | "enviada"
   | "aceita"
   | "em_execucao"
+  | "pausada"
   | "concluida"
   | "devolvida"
   | "baixada"
@@ -37,10 +38,11 @@ export type OrdemServico = {
 export type Tecnico = { id: string; nome: string };
 
 export const rotuloStatus: Record<StatusOS, string> = {
-  rascunho: "Rascunho",
+  rascunho: "Backlog",
   enviada: "Enviada",
   aceita: "Aceita",
   em_execucao: "Em execução",
+  pausada: "Pausada (refeição)",
   concluida: "Aguardando baixa",
   devolvida: "Devolvida",
   baixada: "Baixada",
@@ -52,6 +54,7 @@ export const corStatus: Record<StatusOS, string> = {
   enviada: "bg-blue-100 text-blue-800",
   aceita: "bg-indigo-100 text-indigo-800",
   em_execucao: "bg-amber-100 text-amber-800",
+  pausada: "bg-orange-100 text-orange-800",
   concluida: "bg-purple-100 text-purple-800",
   devolvida: "bg-red-100 text-red-800",
   baixada: "bg-green-100 text-green-800",

@@ -20,7 +20,7 @@ export default function NovaOS({ tecnicos, fechar, criada }: Props) {
   async function salvar(enviar: boolean) {
     setErro("");
     if (!titulo.trim()) return setErro("Informe o título.");
-    if (enviar && !tecnicoId) return setErro("Escolha o técnico para enviar.");
+    if (enviar && !tecnicoId) return setErro("Escolha o técnico para despachar, ou salve no backlog.");
     const { error } = await supabase.from("ordens_servico").insert({
       titulo: titulo.trim(),
       ticket_acionamento: ticket.trim() || null,
@@ -82,8 +82,8 @@ export default function NovaOS({ tecnicos, fechar, criada }: Props) {
         {erro && <p className="mt-3 text-sm text-red-700">{erro}</p>}
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           <button className="rounded-lg px-4 py-2 text-gray-700 hover:bg-gray-100" onClick={fechar}>Cancelar</button>
-          <button className="rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50" onClick={() => salvar(false)}>Salvar rascunho</button>
-          <button className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800" onClick={() => salvar(true)}>Enviar ao técnico</button>
+          <button className="rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50" onClick={() => salvar(false)}>Salvar no backlog</button>
+          <button className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800" onClick={() => salvar(true)}>Despachar ao técnico</button>
         </div>
       </div>
     </div>

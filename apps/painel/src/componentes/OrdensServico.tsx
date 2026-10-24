@@ -7,7 +7,8 @@ import { supabase } from "@/lib/supabase";
 import { corStatus, OrdemServico, rotuloStatus, StatusOS, Tecnico } from "@/lib/tipos";
 
 const FILTROS: { rotulo: string; status: StatusOS[] | null }[] = [
-  { rotulo: "Em aberto", status: ["rascunho", "enviada", "aceita", "em_execucao", "devolvida"] },
+  { rotulo: "Backlog", status: ["rascunho"] },
+  { rotulo: "Em campo", status: ["enviada", "aceita", "em_execucao", "pausada", "devolvida"] },
   { rotulo: "Aguardando baixa", status: ["concluida"] },
   { rotulo: "Baixadas", status: ["baixada"] },
   { rotulo: "Todas", status: null },
@@ -99,7 +100,7 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
               <tr><td colSpan={6} className="p-6 text-center text-gray-500">Nenhuma O.S. neste filtro.</td></tr>
             )}
             {ordens.map((os) => {
-              const emAberto = !["concluida", "baixada", "cancelada", "rascunho"].includes(os.status);
+              const emAberto = !["concluida", "baixada", "cancelada"].includes(os.status);
               const limite = os.sla_limite ?? os.prazo;
               const restante = limite ? Math.round((new Date(limite).getTime() - agora.getTime()) / 60000) : null;
               const atrasada = emAberto && restante != null && restante < 0;
@@ -137,7 +138,8 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
                     <div className="flex flex-wrap gap-1.5">
                       {os.status === "rascunho" && (
                         <button className={`${botao} bg-blue-700 text-white disabled:opacity-40`} disabled={!os.tecnico_id}
-                          onClick={() => mudarStatus(os, "enviada")}>Enviar</button>
+                          title={os.tecnico_id ? "" : "Escolha o técnico na coluna ao lado"}
+                          onClick={() => mudarStatus(os, "enviada")}>Despachar</button>
                       )}
                       {os.status === "concluida" && (
                         <>
