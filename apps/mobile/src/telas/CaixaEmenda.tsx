@@ -36,10 +36,10 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const [nova, setNova] = useState(!inicial);
   const ultima = daOs[daOs.length - 1];
   const [c, setC] = useState<Caixa>(() => inicial ?? {
-    id: randomUUID(), os_id: osId, tipo: 'emenda', identificacao: '', capacidade_fibras: 72, saidas: [],
+    id: randomUUID(), os_id: osId, tipo: 'emenda', identificacao: '', capacidade_fibras: 0, saidas: [],
     grupos_fusionados: 0, grupos_vagos: 0, observacao: null, endereco: null, latitude: null, longitude: null,
     precisao_m: null, localizada_em: null, origem_caixa_id: null, origem_saida: null, origem_dgo: null, origem: null,
-    manobras: [], fibras: [], fusoes_por_bandeja: 12,
+    manobras: [], fibras: [], fusoes_por_bandeja: null,
   });
   const [origemTipo, setOrigemTipo] = useState<'caixa' | 'dgo' | 'nenhuma'>(
     inicial ? (inicial.origem_caixa_id ? 'caixa' : inicial.origem_dgo ? 'dgo' : 'nenhuma') : ultima ? 'caixa' : 'nenhuma');
@@ -47,7 +47,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const [capturando, setCapturando] = useState(false);
   const [gruposEditados, setGruposEditados] = useState(!!inicial);
   const [manobra, setManobra] = useState({ entrada: '', saida: 1, fibra: '', motivo: '' });
-  const FIBRA_VAZIA = { numero: '', cliente: '', semPotencia: false, potencia: '', reflexao: '', perda: '', posicao: '', tx: '', rx: '', olt: false, oltPosicao: '', sfp: '', sfpModelo: '', cordao: 'SC/APC', oltModelo: '' };
+  const FIBRA_VAZIA = { numero: '', cliente: '', semPotencia: false, potencia: '', reflexao: '', perda: '', posicao: '', tx: '', rx: '', olt: false, oltPosicao: '', sfp: '', sfpModelo: '', cordao: '', oltModelo: '' };
   const [fibra, setFibra] = useState(FIBRA_VAZIA);
   const [camera, setCamera] = useState<Camera | null>(null);
   // Fotos já tiradas: da caixa, da tela do OTDR por fibra e de cada bandeja (enviadas + na fila).
@@ -172,7 +172,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
       potencia_tx_dbm: dgo ? numero(fibra.tx) : null, potencia_rx_dbm: dgo ? numero(fibra.rx) : null,
       cordao_olt: dgo && fibra.olt, olt_posicao: dgo && fibra.olt ? fibra.oltPosicao.trim() : null,
       sfp_tipo: dgo && fibra.olt ? fibra.sfp.trim() || null : null,
-      cordao_tipo: dgo && fibra.olt ? fibra.cordao : null, olt_modelo: dgo && fibra.olt ? fibra.oltModelo.trim() || null : null,
+      cordao_tipo: dgo && fibra.olt ? fibra.cordao || null : null, olt_modelo: dgo && fibra.olt ? fibra.oltModelo.trim() || null : null,
       sfp_modelo: dgo && fibra.olt ? fibra.sfpModelo.trim() || null : null,
     };
     mudar({ fibras: [...c.fibras.filter((x) => x.fibra !== n), f].sort((a, b) => a.fibra - b.fibra) });
@@ -184,6 +184,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
     const identificacao = tagAuto ?? c.identificacao.trim();
     if (!identificacao) return Alert.alert('Informe a identificação', 'Ex.: CE-BKB-0006');
     if (origemTipo === 'dgo' && !c.origem_dgo?.trim()) return Alert.alert('Informe o DGO de origem');
+    if (!c.capacidade_fibras) return Alert.alert('Informe o tamanho do cabo de entrada');
+    if (c.saidas.some((q) => !q)) return Alert.alert('Informe o tamanho do cabo de cada saída');
+    if (calcularPlano(c).ligacoes.length && !c.fusoes_por_bandeja && !dgo) return Alert.alert('Informe quantas fusões cabem por bandeja');
     if (c.tipo === 'site' && !c.parceiro?.trim()) return Alert.alert('Informe o parceiro do site');
     if (dgo && !c.bastidor?.trim()) return Alert.alert('Informe o bastidor do DGO');
     if ((c.tipo === 'emenda' || c.tipo === 'entroncamento') && !c.instalacao) return Alert.alert('Informe se a caixa é aérea ou subterrânea');
@@ -214,8 +217,8 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const chip = (ativo: boolean) => [s.chip, ativo && s.chipAtivo];
   const textoChip = (ativo: boolean) => [s.chipTexto, ativo && { color: '#fff' }];
   // Padrão de cores de cada cabo (brasileiro, americano ou coroa); pode mudar de uma caixa para outra.
-  const padroesSaidas = c.saidas.map((_, i) => c.padrao_cores_saidas?.[i] || 'abnt');
-  const padroes = (atual: string, escolher: (v: string) => void) => (
+  const padroesSaidas = c.saidas.map((_, i) => c.padrao_cores_saidas?.[i] ?? null);
+  const padroes = (atual: string | null, escolher: (v: string) => void) => (
     <View style={s.chips}>
       {PADROES_CORES.map((p) => (
         <Pressable key={p.valor} style={chip(atual === p.valor)} onPress={() => escolher(p.valor)}>
@@ -337,7 +340,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           <View style={s.chips}>
             {CAPACIDADES.map((n) => (
               <Pressable key={n} style={chip(c.capacidade_fibras === n)}
-                onPress={() => mudar({ capacidade_fibras: n, ...(n === 288 ? { padrao_cores_entrada: 'coroa' } : {}) })}>
+                onPress={() => mudar({ capacidade_fibras: n })}>
                 <Text style={textoChip(c.capacidade_fibras === n)}>{n}</Text>
               </Pressable>
             ))}
@@ -346,7 +349,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           {dgo ? null : (
             <>
               <Text style={s.rotulo}>PADRÃO DE CORES DA ENTRADA</Text>
-              {padroes(c.padrao_cores_entrada || 'abnt', (v) => mudar({ padrao_cores_entrada: v }))}
+              {padroes(c.padrao_cores_entrada ?? null, (v) => mudar({ padrao_cores_entrada: v }))}
             </>
           )}
 
@@ -362,8 +365,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
               </View>
               <View style={s.chips}>
                 {CAPACIDADES.map((n) => (
-                  <Pressable key={n} style={chip(qtd === n)} onPress={() => mudar({ saidas: c.saidas.map((x, k) => (k === i ? n : x)),
-                    ...(n === 288 ? { padrao_cores_saidas: padroesSaidas.map((x, k) => (k === i ? 'coroa' : x)) } : {}) })}>
+                  <Pressable key={n} style={chip(qtd === n)} onPress={() => mudar({ saidas: c.saidas.map((x, k) => (k === i ? n : x)) })}>
                     <Text style={textoChip(qtd === n)}>{n}</Text>
                   </Pressable>
                 ))}
@@ -371,8 +373,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
               {padroes(padroesSaidas[i], (v) => mudar({ padrao_cores_saidas: padroesSaidas.map((x, k) => (k === i ? v : x)) }))}
             </View>
           ))}
-          <Pressable style={[s.botaoPequeno, { alignSelf: 'flex-start', marginTop: 6 }]} onPress={() => mudar({ saidas: [...c.saidas, c.capacidade_fibras],
-            padrao_cores_saidas: [...padroesSaidas, c.capacidade_fibras === 288 ? 'coroa' : 'abnt'] })}>
+          <Pressable style={[s.botaoPequeno, { alignSelf: 'flex-start', marginTop: 6 }]} onPress={() => mudar({ saidas: [...c.saidas, 0], padrao_cores_saidas: [...padroesSaidas, null] })}>
             <Text style={s.botaoPequenoTexto}>+ Adicionar saída</Text>
           </Pressable>
 
@@ -397,8 +398,8 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           <Text style={s.rotulo}>BANDEJAS · FUSÕES POR BANDEJA</Text>
           <View style={s.chips}>
             {FUSOES_POR_BANDEJA.map((n) => (
-              <Pressable key={n} style={chip((c.fusoes_por_bandeja || 12) === n)} onPress={() => mudar({ fusoes_por_bandeja: n })}>
-                <Text style={textoChip((c.fusoes_por_bandeja || 12) === n)}>{n}</Text>
+              <Pressable key={n} style={chip(c.fusoes_por_bandeja === n)} onPress={() => mudar({ fusoes_por_bandeja: n })}>
+                <Text style={textoChip(c.fusoes_por_bandeja === n)}>{n}</Text>
               </Pressable>
             ))}
           </View>

@@ -180,7 +180,7 @@ function Conteudo() {
             <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5">
               <div><dt className="text-gray-500">Vem de</dt><dd>{origem(c) ?? "—"}</dd></div>
               <div><dt className="text-gray-500">Localização</dt><dd>{c.latitude != null ? `${c.latitude.toFixed(6)}, ${c.longitude!.toFixed(6)}` : "—"}</dd></div>
-              <div className="col-span-2"><dt className="text-gray-500">Padrão de cores</dt><dd>{padroesPorExtenso(c)}</dd></div>
+              {padroesPorExtenso(c) ? <div className="col-span-2"><dt className="text-gray-500">Padrão de cores</dt><dd>{padroesPorExtenso(c)}</dd></div> : null}
               {c.bastidor ? <div><dt className="text-gray-500">Bastidor</dt><dd>{c.bastidor}</dd></div> : null}
               {c.parceiro ? <div><dt className="text-gray-500">Parceiro</dt><dd>{c.parceiro}</dd></div> : null}
               <div><dt className="text-gray-500">Plano de fusão</dt><dd>{c.capacidade_fibras} FO → {c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO`).join(", ") || "—"}</dd></div>

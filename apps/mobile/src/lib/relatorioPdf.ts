@@ -120,7 +120,7 @@ export async function compartilharRelatorio(os: OrdemServico) {
       <div class="g">
         <div><div class="l">Vem de</div>${esc(c.origem ?? '—')}</div>
         <div><div class="l">Localização</div>${c.latitude != null ? `${c.latitude.toFixed(6)}, ${c.longitude!.toFixed(6)}` : '—'}</div>
-        <div style="grid-column: span 2"><div class="l">Padrão de cores</div>${esc(padroesPorExtenso(c))}</div>
+        ${padroesPorExtenso(c) ? `<div style="grid-column: span 2"><div class="l">Padrão de cores</div>${esc(padroesPorExtenso(c))}</div>` : ''}
         ${c.bastidor ? `<div><div class="l">Bastidor</div>${esc(c.bastidor)}</div>` : ''}
         ${c.parceiro ? `<div><div class="l">Parceiro</div>${esc(c.parceiro)}</div>` : ''}
         <div style="grid-column: span 2"><div class="l">Endereço</div>${esc(c.endereco ?? '—')}</div>

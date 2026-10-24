@@ -54,7 +54,8 @@ export const PADROES_CORES = [
   { valor: 'coroa', rotulo: 'Cabo coroa', curto: 'Coroa' },
 ] as const;
 export type PadraoCores = (typeof PADROES_CORES)[number]['valor'];
-export const rotuloPadrao = (p: string | null | undefined) => PADROES_CORES.find((x) => x.valor === p)?.rotulo ?? 'Brasileiro';
+// Sem padrão informado pelo técnico não se mostra nada (o desenho usa as cores brasileiras só para ilustrar).
+export const rotuloPadrao = (p: string | null | undefined) => PADROES_CORES.find((x) => x.valor === p)?.rotulo ?? null;
 // Cabo coroa (288 FO): tubos em coroas de 12, contados a partir do tubo piloto (verde) no sentido do direcional (amarelo);
 // os demais tubos são naturais. As fibras de cada tubo seguem o código brasileiro.
 const TUBOS_POR_COROA = 12;
@@ -62,15 +63,19 @@ const NATURAL = { nome: 'Natural', hex: '#f5f5dc' };
 // Padrão de cada cabo da caixa: entrada e cada saída. "BR × EUA" quando a caixa liga padrões diferentes.
 // Por extenso, para o relatório: "Entrada: Brasileiro · Saída 1: Americano · Saída 2: Brasileiro".
 export function padroesPorExtenso(c: { tipo?: string; padrao_cores_entrada?: string | null; padrao_cores_saidas?: (string | null)[] | null; saidas: number[] }) {
-  const partes = c.tipo === 'dgo' ? [] : [`Entrada: ${rotuloPadrao(c.padrao_cores_entrada)}`];
-  c.saidas.forEach((_, i) => partes.push(`${c.tipo === 'dgo' ? 'Cabo' : 'Saída'} ${i + 1}: ${rotuloPadrao(c.padrao_cores_saidas?.[i])}`));
+  const partes: string[] = [];
+  if (c.tipo !== 'dgo' && rotuloPadrao(c.padrao_cores_entrada)) partes.push(`Entrada: ${rotuloPadrao(c.padrao_cores_entrada)}`);
+  c.saidas.forEach((_, i) => {
+    const r = rotuloPadrao(c.padrao_cores_saidas?.[i]);
+    if (r) partes.push(`${c.tipo === 'dgo' ? 'Cabo' : 'Saída'} ${i + 1}: ${r}`);
+  });
   return partes.join(' · ');
 }
 export function resumoPadroes(c: { padrao_cores_entrada?: string | null; padrao_cores_saidas?: (string | null)[] | null; saidas: number[] }) {
-  const entrada = c.padrao_cores_entrada || 'abnt';
-  const saidas = c.saidas.map((_, i) => c.padrao_cores_saidas?.[i] || 'abnt');
-  const curto = (p: string) => PADROES_CORES.find((x) => x.valor === p)?.curto ?? 'BR';
-  return saidas.length ? `${curto(entrada)} × ${[...new Set(saidas.map(curto))].join('/')}` : curto(entrada);
+  const curto = (p: string | null | undefined) => PADROES_CORES.find((x) => x.valor === p)?.curto ?? '?';
+  const saidas = c.saidas.map((_, i) => c.padrao_cores_saidas?.[i]).filter(Boolean);
+  if (!c.padrao_cores_entrada && !saidas.length) return '';
+  return saidas.length ? `${curto(c.padrao_cores_entrada)} × ${[...new Set(saidas.map(curto))].join('/')}` : curto(c.padrao_cores_entrada);
 }
 
 export type Manobra = { fibra_entrada: number; saida: number; fibra_saida: number; motivo?: string | null };
@@ -204,7 +209,7 @@ export function faixasDaBandeja(b: Bandeja) {
 // Caixa nova a partir da saída de outra: a entrada é aquele cabo, e cliente/sem potência acompanham a fibra.
 export function herdarDaAnterior(anterior: PlanoCaixa, saida: number) {
   const capacidade = anterior.saidas[saida - 1] ?? 0;
-  const padrao = anterior.padrao_cores_saidas?.[saida - 1] || 'abnt';
+  const padrao = anterior.padrao_cores_saidas?.[saida - 1] || null;
   const { ligacoes } = calcularPlano(anterior);
   const situacao = new Map((anterior.fibras ?? []).map((f) => [f.fibra, f]));
   const fibras: SituacaoFibra[] = [];
@@ -247,7 +252,7 @@ export function htmlPreviaPlano(caixa: PlanoCaixa) {
   const resumo = `${ligacoes.length} fusões · ${nums.filter((n) => situacao.get(n)?.cliente && !situacao.get(n)?.sem_potencia).length} ativas`
     + (semCliente ? ` · ${semCliente} fusionadas sem cliente` : '');
   if (!linhas.length) return `<p style="margin:4px 0"><b>Plano de fusão:</b> ${resumo}</p>`;
-  return `<p style="margin:6px 0 2px"><b>Plano de fusão</b> · ${resumo} · cores ${resumoPadroes(caixa)}</p>`
+  return `<p style="margin:6px 0 2px"><b>Plano de fusão</b> · ${resumo}${resumoPadroes(caixa) ? ` · cores ${resumoPadroes(caixa)}` : ''}</p>`
     + '<table cellpadding="2" cellspacing="0" border="0" style="font-size:11px;border-collapse:collapse">'
     + '<tr style="color:#6b7280"><td>T</td><td>F</td><td>Fibra entrada</td><td>Vai para</td><td>Cliente / parceiro</td><td>Situação</td></tr>'
     + linhas.join('') + '</table>';
@@ -287,7 +292,7 @@ export function svgMapaFusao(caixa: PlanoCaixa) {
   let y = 40;
   // No DGO a esquerda são as posições do DGO; nas caixas, o cabo que chega.
   const titulo = dgo ? `DGO · ${cap} posições${caixa.bastidor ? ` · ${caixa.bastidor}` : ''}`
-    : `Entrada · ${cap} FO · ${rotuloPadrao(padraoE)}${caixa.origem ? ` · de ${caixa.origem}` : ''}`;
+    : `Entrada · ${cap} FO${rotuloPadrao(caixa.padrao_cores_entrada) ? ` · ${rotuloPadrao(caixa.padrao_cores_entrada)}` : ''}${caixa.origem ? ` · de ${caixa.origem}` : ''}`;
   partes.push(`<rect x="0" y="4" width="250" height="22" rx="4" fill="#3f3f46"/><text x="10" y="19" fill="#fff" font-size="12" font-weight="bold">${esc(titulo.slice(0, 40))}</text>`);
   for (const t of tubosEntrada) {
     const cor = corDoTubo(t, padraoE);
@@ -325,7 +330,7 @@ export function svgMapaFusao(caixa: PlanoCaixa) {
     const s = i + 1;
     const porTuboS = fibrasPorTubo(qtdSaida);
     const padrao = padraoS(i);
-    partes.push(`<rect x="${W - 250}" y="${y - 36 + 4}" width="250" height="22" rx="4" fill="#3f3f46"/><text x="${W - 10}" y="${y - 36 + 19}" fill="#fff" font-size="12" font-weight="bold" text-anchor="end">${dgo ? 'Cabo' : 'Saída'} ${s} · ${qtdSaida} FO · ${rotuloPadrao(padrao)}</text>`);
+    partes.push(`<rect x="${W - 250}" y="${y - 36 + 4}" width="250" height="22" rx="4" fill="#3f3f46"/><text x="${W - 10}" y="${y - 36 + 19}" fill="#fff" font-size="12" font-weight="bold" text-anchor="end">${dgo ? 'Cabo' : 'Saída'} ${s} · ${qtdSaida} FO${rotuloPadrao(caixa.padrao_cores_saidas?.[i]) ? ` · ${rotuloPadrao(caixa.padrao_cores_saidas?.[i])}` : ''}</text>`);
     const tubos = [...new Set(ligacoes.filter((l) => l.saida === s).map((l) => fibra(l.fibraSaida, qtdSaida).tubo))].sort((a, b) => a - b);
     for (const t of tubos) {
       const cor = corDoTubo(t, padrao);
@@ -378,7 +383,7 @@ export function svgMapaFusao(caixa: PlanoCaixa) {
 
   const altura = Math.max(alturaEsq, alturaDir, 60);
   const semPotencia = (caixa.fibras ?? []).filter((f) => f.sem_potencia).length;
-  const legenda = `cores ${resumoPadroes(caixa)} · ${cap} fibras · ${ligacoes.length} fusionadas · ${param} param nesta caixa (⊣) · ${caixa.manobras.length} manobra(s) (M, tracejado) ${semPotencia ? ` · ${semPotencia} sem potência` : ''} ${dgo ? '' : ` · ${bandejas.length} bandeja(s) de ${caixa.fusoes_por_bandeja || 12} fusões (B)`} · só tubos com fusão`;
+  const legenda = `${resumoPadroes(caixa) ? `cores ${resumoPadroes(caixa)} · ` : ''}${cap} fibras · ${ligacoes.length} fusionadas · ${param} param nesta caixa (⊣) · ${caixa.manobras.length} manobra(s) (M, tracejado) ${semPotencia ? ` · ${semPotencia} sem potência` : ''} ${dgo ? '' : ` · ${bandejas.length} bandeja(s) de ${caixa.fusoes_por_bandeja || 12} fusões (B)`} · só tubos com fusão`;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -20 ${W} ${altura + 20}" width="100%" font-family="sans-serif">` +
     `<text x="0" y="-6" font-size="11" fill="#6b7280">${esc(`Mapa de fusão · ${caixa.identificacao} · ${legenda}`)}</text>${partes.join('')}</svg>`;
 }

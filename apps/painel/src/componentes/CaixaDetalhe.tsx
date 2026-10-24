@@ -59,7 +59,7 @@ export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
             </a>
           ) : "—"}</dd>
         </div>
-        <div className="sm:col-span-2"><dt className="text-gray-500">Padrão de cores</dt><dd>{padroesPorExtenso(c)}</dd></div>
+        {padroesPorExtenso(c) ? <div className="sm:col-span-2"><dt className="text-gray-500">Padrão de cores</dt><dd>{padroesPorExtenso(c)}</dd></div> : null}
         {c.bastidor ? <div><dt className="text-gray-500">Bastidor</dt><dd>{c.bastidor}</dd></div> : null}
         <div><dt className="text-gray-500">O.S. / técnico</dt><dd>#{c.os_numero} · {c.tecnico ?? "—"}</dd></div>
         <div className="sm:col-span-2"><dt className="text-gray-500">Endereço</dt><dd>{c.endereco ?? "—"}</dd></div>
