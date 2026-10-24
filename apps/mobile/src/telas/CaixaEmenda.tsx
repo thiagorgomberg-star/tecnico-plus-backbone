@@ -6,8 +6,8 @@ import Cabecalho from '../componentes/Cabecalho';
 import { Caixa, caixasDaRede, proximaTag, salvarCaixa } from '../lib/caixas';
 import { cores } from '../lib/estilo';
 import {
-  calcularPlano, CAPACIDADES, CaixaRede, descreverFibra, faixasDaBandeja, FUSOES_POR_BANDEJA, herdarDaAnterior, Manobra, rotuloPonto,
-  ehPonta, INSTALACOES, separarBandejas, SituacaoFibra, TIPOS_PONTO,
+  calcularPlano, CAPACIDADES, CaixaRede, descreverFibra, faixasDaBandeja, FUSOES_POR_BANDEJA, herdarDaAnterior, Manobra, PADROES_CORES, rotuloPonto,
+  descreverOlt, ehPonta, INSTALACOES, MODELOS_OLT, TIPOS_SFP, TIPOS_CORDAO, separarBandejas, SituacaoFibra, TIPOS_PONTO,
 } from '../lib/fusao';
 import { aoMudarFila, itensPendentes } from '../lib/fila';
 import { enderecoDe, posicaoAtual } from '../lib/localizacao';
@@ -23,7 +23,7 @@ type Props = {
   voltar: () => void;
 };
 
-type Camera = { tipo: 'foto_caixa' | 'foto_otdr' | 'foto_bandeja'; fibra?: number; bandeja?: number; titulo: string; feitas: number };
+type Camera = { tipo: 'foto_caixa' | 'foto_otdr' | 'foto_bandeja' | 'foto_olt'; fibra?: number; bandeja?: number; titulo: string; feitas: number };
 
 const numero = (t: string) => {
   const n = Number(t.replace(',', '.'));
@@ -47,11 +47,11 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const [capturando, setCapturando] = useState(false);
   const [gruposEditados, setGruposEditados] = useState(!!inicial);
   const [manobra, setManobra] = useState({ entrada: '', saida: 1, fibra: '', motivo: '' });
-  const FIBRA_VAZIA = { numero: '', cliente: '', semPotencia: false, potencia: '', reflexao: '', perda: '', posicao: '', tx: '', rx: '' };
+  const FIBRA_VAZIA = { numero: '', cliente: '', semPotencia: false, potencia: '', reflexao: '', perda: '', posicao: '', tx: '', rx: '', olt: false, oltPosicao: '', sfp: '', sfpModelo: '', cordao: 'SC/APC', oltModelo: '' };
   const [fibra, setFibra] = useState(FIBRA_VAZIA);
   const [camera, setCamera] = useState<Camera | null>(null);
   // Fotos já tiradas: da caixa, da tela do OTDR por fibra e de cada bandeja (enviadas + na fila).
-  const [fotos, setFotos] = useState<{ caixa: number; otdr: Record<number, number>; bandeja: Record<number, number> }>({ caixa: 0, otdr: {}, bandeja: {} });
+  const [fotos, setFotos] = useState<{ caixa: number; olt: number; otdr: Record<number, number>; bandeja: Record<number, number> }>({ caixa: 0, olt: 0, otdr: {}, bandeja: {} });
   const [salvando, setSalvando] = useState(false);
   const enderecoAuto = useRef('');
   const ponta = ehPonta(c.tipo);
@@ -64,15 +64,17 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
       const otdr: Record<number, number> = {};
       const bandeja: Record<number, number> = {};
       let total = 0;
+      let olt = 0;
       const somar = (tipo: string, fibraN: number | null | undefined, bandejaN: number | null | undefined) => {
         if (tipo === 'foto_caixa') total++;
+        if (tipo === 'foto_olt') olt++;
         if (tipo === 'foto_otdr' && fibraN) otdr[fibraN] = (otdr[fibraN] ?? 0) + 1;
         if (tipo === 'foto_bandeja' && bandejaN) bandeja[bandejaN] = (bandeja[bandejaN] ?? 0) + 1;
       };
       for (const i of await itensPendentes()) if (i.tipo === 'foto' && i.caixaId === c.id) somar(i.tipoAnexo, i.fibra, i.bandeja);
       const { data } = await supabase.from('os_anexos').select('tipo, fibra, bandeja').eq('caixa_id', c.id);
       for (const a of data ?? []) somar(a.tipo, a.fibra, a.bandeja);
-      setFotos({ caixa: total, otdr, bandeja });
+      setFotos({ caixa: total, olt, otdr, bandeja });
     };
     contar();
     return aoMudarFila(contar);
@@ -109,7 +111,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
       ...x,
       origem_caixa_id: ant.id, origem_saida: saida, origem_dgo: null, origem: ant.identificacao,
       capacidade_fibras: CAPACIDADES.includes(herdado.capacidade) ? herdado.capacidade : x.capacidade_fibras,
-      fibras: herdado.fibras,
+      fibras: herdado.fibras, padrao_cores_entrada: herdado.padrao,
     }));
   }
 
@@ -161,15 +163,21 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
         : 'Na ponta informe sinal (dBm), reflexão (dB) e perda (dB/km) da fibra, ou marque sem potência.');
     }
     if (dgo && !fibra.posicao.trim()) return Alert.alert('Informe a posição da fibra no DGO', 'Ex.: DIO 2 · posição 14');
+    if (dgo && fibra.olt && !fibra.oltPosicao.trim()) return Alert.alert('Informe a posição na OLT', 'Ex.: OLT-01 · slot 2 · PON 5');
     if (!ponta && !fibra.cliente.trim() && !fibra.semPotencia) return Alert.alert('Informe o cliente ou marque sem potência');
     const f: SituacaoFibra = {
       fibra: n, cliente: fibra.cliente.trim() || null, sem_potencia: fibra.semPotencia,
       potencia_dbm: potencia, reflexao_db: reflexao, perda_db_km: perda,
       posicao_dgo: dgo ? fibra.posicao.trim() : null,
       potencia_tx_dbm: dgo ? numero(fibra.tx) : null, potencia_rx_dbm: dgo ? numero(fibra.rx) : null,
+      cordao_olt: dgo && fibra.olt, olt_posicao: dgo && fibra.olt ? fibra.oltPosicao.trim() : null,
+      sfp_tipo: dgo && fibra.olt ? fibra.sfp.trim() || null : null,
+      cordao_tipo: dgo && fibra.olt ? fibra.cordao : null, olt_modelo: dgo && fibra.olt ? fibra.oltModelo.trim() || null : null,
+      sfp_modelo: dgo && fibra.olt ? fibra.sfpModelo.trim() || null : null,
     };
     mudar({ fibras: [...c.fibras.filter((x) => x.fibra !== n), f].sort((a, b) => a.fibra - b.fibra) });
-    setFibra({ ...FIBRA_VAZIA, numero: '' });
+    // Mantém OLT, modelo, SFP e cordão da fibra anterior: normalmente são iguais no mesmo DGO.
+    setFibra({ ...FIBRA_VAZIA, olt: fibra.olt, oltModelo: fibra.oltModelo, sfp: fibra.sfp, sfpModelo: fibra.sfpModelo, cordao: fibra.cordao });
   }
 
   async function salvar() {
@@ -205,6 +213,17 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
 
   const chip = (ativo: boolean) => [s.chip, ativo && s.chipAtivo];
   const textoChip = (ativo: boolean) => [s.chipTexto, ativo && { color: '#fff' }];
+  // Padrão de cores de cada cabo (brasileiro, americano ou coroa); pode mudar de uma caixa para outra.
+  const padroesSaidas = c.saidas.map((_, i) => c.padrao_cores_saidas?.[i] || 'abnt');
+  const padroes = (atual: string, escolher: (v: string) => void) => (
+    <View style={s.chips}>
+      {PADROES_CORES.map((p) => (
+        <Pressable key={p.valor} style={chip(atual === p.valor)} onPress={() => escolher(p.valor)}>
+          <Text style={textoChip(atual === p.valor)}>{p.rotulo}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: cores.fundo }}>
@@ -317,31 +336,43 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           <Text style={s.rotulo}>PLANO DE FUSÃO · ENTRADA (FIBRAS)</Text>
           <View style={s.chips}>
             {CAPACIDADES.map((n) => (
-              <Pressable key={n} style={chip(c.capacidade_fibras === n)} onPress={() => mudar({ capacidade_fibras: n })}>
+              <Pressable key={n} style={chip(c.capacidade_fibras === n)}
+                onPress={() => mudar({ capacidade_fibras: n, ...(n === 288 ? { padrao_cores_entrada: 'coroa' } : {}) })}>
                 <Text style={textoChip(c.capacidade_fibras === n)}>{n}</Text>
               </Pressable>
             ))}
           </View>
 
-          <Text style={s.rotulo}>SAÍDAS</Text>
+          {dgo ? null : (
+            <>
+              <Text style={s.rotulo}>PADRÃO DE CORES DA ENTRADA</Text>
+              {padroes(c.padrao_cores_entrada || 'abnt', (v) => mudar({ padrao_cores_entrada: v }))}
+            </>
+          )}
+
+          <Text style={s.rotulo}>{dgo ? 'CABOS QUE SAEM DO DGO' : 'SAÍDAS'}</Text>
           {c.saidas.map((qtd, i) => (
             <View key={i} style={{ marginBottom: 6 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={{ flex: 1, fontWeight: '600', color: cores.texto }}>Saída {i + 1}</Text>
-                <Pressable onPress={() => mudar({ saidas: c.saidas.filter((_, k) => k !== i), manobras: c.manobras.filter((m) => m.saida !== i + 1) })}>
+                <Text style={{ flex: 1, fontWeight: '600', color: cores.texto }}>{dgo ? 'Cabo' : 'Saída'} {i + 1}</Text>
+                <Pressable onPress={() => mudar({ saidas: c.saidas.filter((_, k) => k !== i), manobras: c.manobras.filter((m) => m.saida !== i + 1),
+                  padrao_cores_saidas: padroesSaidas.filter((_, k) => k !== i) })}>
                   <Text style={{ color: cores.perigo }}>remover</Text>
                 </Pressable>
               </View>
               <View style={s.chips}>
                 {CAPACIDADES.map((n) => (
-                  <Pressable key={n} style={chip(qtd === n)} onPress={() => mudar({ saidas: c.saidas.map((x, k) => (k === i ? n : x)) })}>
+                  <Pressable key={n} style={chip(qtd === n)} onPress={() => mudar({ saidas: c.saidas.map((x, k) => (k === i ? n : x)),
+                    ...(n === 288 ? { padrao_cores_saidas: padroesSaidas.map((x, k) => (k === i ? 'coroa' : x)) } : {}) })}>
                     <Text style={textoChip(qtd === n)}>{n}</Text>
                   </Pressable>
                 ))}
               </View>
+              {padroes(padroesSaidas[i], (v) => mudar({ padrao_cores_saidas: padroesSaidas.map((x, k) => (k === i ? v : x)) }))}
             </View>
           ))}
-          <Pressable style={[s.botaoPequeno, { alignSelf: 'flex-start', marginTop: 6 }]} onPress={() => mudar({ saidas: [...c.saidas, c.capacidade_fibras] })}>
+          <Pressable style={[s.botaoPequeno, { alignSelf: 'flex-start', marginTop: 6 }]} onPress={() => mudar({ saidas: [...c.saidas, c.capacidade_fibras],
+            padrao_cores_saidas: [...padroesSaidas, c.capacidade_fibras === 288 ? 'coroa' : 'abnt'] })}>
             <Text style={s.botaoPequenoTexto}>+ Adicionar saída</Text>
           </Pressable>
 
@@ -395,8 +426,8 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           {c.manobras.map((m) => (
             <View key={m.fibra_entrada} style={s.linha}>
               <View style={{ flex: 1 }}>
-                <Text style={s.texto}>{descreverFibra(m.fibra_entrada, c.capacidade_fibras)}</Text>
-                <Text style={s.suave}>→ Saída {m.saida}: {descreverFibra(m.fibra_saida, c.saidas[m.saida - 1] ?? c.capacidade_fibras)}{m.motivo ? ` · ${m.motivo}` : ''}</Text>
+                <Text style={s.texto}>{descreverFibra(m.fibra_entrada, c.capacidade_fibras, c.padrao_cores_entrada ?? undefined)}</Text>
+                <Text style={s.suave}>→ Saída {m.saida}: {descreverFibra(m.fibra_saida, c.saidas[m.saida - 1] ?? c.capacidade_fibras, c.padrao_cores_saidas?.[m.saida - 1] ?? undefined)}{m.motivo ? ` · ${m.motivo}` : ''}</Text>
               </View>
               <Pressable onPress={() => mudar({ manobras: c.manobras.filter((x) => x !== m) })}><Text style={{ color: cores.perigo }}>×</Text></Pressable>
             </View>
@@ -432,13 +463,13 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           {c.fibras.map((f) => (
             <View key={f.fibra} style={s.linha}>
               <View style={{ flex: 1 }}>
-                <Text style={s.texto}>{descreverFibra(f.fibra, c.capacidade_fibras)}</Text>
+                <Text style={s.texto}>{descreverFibra(f.fibra, c.capacidade_fibras, c.padrao_cores_entrada ?? undefined)}</Text>
                 <Text style={[s.suave, f.sem_potencia && { color: cores.perigo, fontWeight: '700' }]}>
                   {[f.cliente, f.sem_potencia ? 'SEM POTÊNCIA' : null].filter(Boolean).join(' · ')}
                 </Text>
                 {dgo ? (
                   <Text style={s.suave}>
-                    Posição {f.posicao_dgo || '—'}{f.potencia_tx_dbm != null ? ` · TX ${f.potencia_tx_dbm} dBm` : ''}{f.potencia_rx_dbm != null ? ` · RX ${f.potencia_rx_dbm} dBm` : ''}
+                    Posição {f.posicao_dgo || '—'}{f.cordao_olt ? ` · ${descreverOlt(f)}` : ''}{f.potencia_tx_dbm != null ? ` · ${f.cordao_olt ? 'Saída OLT' : 'TX'} ${f.potencia_tx_dbm} dBm` : ''}{f.potencia_rx_dbm != null ? ` · RX ${f.potencia_rx_dbm} dBm` : ''}
                   </Text>
                 ) : null}
                 {ponta && !f.sem_potencia ? (
@@ -468,10 +499,59 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
             <Switch value={fibra.semPotencia} onValueChange={(v) => setFibra({ ...fibra, semPotencia: v })} />
           </View>
           {dgo ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+              <View style={{ flex: 1 }} />
+              <Text style={s.texto}>Cordão até OLT</Text>
+              <Switch value={fibra.olt} onValueChange={(v) => setFibra({ ...fibra, olt: v })} />
+            </View>
+          ) : null}
+          {dgo && fibra.olt ? (
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TextInput style={[s.campo, { flex: 1 }]} placeholder="Posição na OLT * (slot · PON)" value={fibra.oltPosicao}
+                onChangeText={(t) => setFibra({ ...fibra, oltPosicao: t })} />
+            </View>
+          ) : null}
+          {dgo && fibra.olt ? (
+            <>
+              <Text style={s.rotulo}>MODELO DA OLT</Text>
+              <View style={s.chips}>
+                {MODELOS_OLT.map((m) => (
+                  <Pressable key={m} style={chip(fibra.oltModelo === m)} onPress={() => setFibra({ ...fibra, oltModelo: m })}>
+                    <Text style={textoChip(fibra.oltModelo === m)}>{m}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <TextInput style={s.campo} placeholder="Ou digite o modelo da OLT" value={fibra.oltModelo}
+                onChangeText={(t) => setFibra({ ...fibra, oltModelo: t })} />
+              <Text style={s.rotulo}>SFP</Text>
+              <View style={s.chips}>
+                {TIPOS_SFP.map((t) => (
+                  <Pressable key={t} style={chip(fibra.sfp === t)} onPress={() => setFibra({ ...fibra, sfp: t })}>
+                    <Text style={textoChip(fibra.sfp === t)}>{t}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TextInput style={[s.campo, { flex: 1 }]} placeholder="Tipo (outro)" autoCapitalize="characters" value={fibra.sfp}
+                  onChangeText={(t) => setFibra({ ...fibra, sfp: t })} />
+                <TextInput style={[s.campo, { flex: 1.6 }]} placeholder="Modelo / part number do SFP" value={fibra.sfpModelo}
+                  onChangeText={(t) => setFibra({ ...fibra, sfpModelo: t })} />
+              </View>
+              <Text style={s.rotulo}>CORDÃO OLT ↔ DGO</Text>
+              <View style={s.chips}>
+                {TIPOS_CORDAO.map((t) => (
+                  <Pressable key={t} style={chip(fibra.cordao === t)} onPress={() => setFibra({ ...fibra, cordao: t })}>
+                    <Text style={textoChip(fibra.cordao === t)}>{t}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          ) : null}
+          {dgo ? (
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <TextInput style={[s.campo, { flex: 1.4 }]} placeholder="Posição no DGO *" value={fibra.posicao}
                 onChangeText={(t) => setFibra({ ...fibra, posicao: t })} />
-              <TextInput style={[s.campo, { flex: 1 }]} keyboardType="numbers-and-punctuation" placeholder="TX dBm"
+              <TextInput style={[s.campo, { flex: 1 }]} keyboardType="numbers-and-punctuation" placeholder={fibra.olt ? 'Saída OLT dBm' : 'TX dBm'}
                 value={fibra.tx} onChangeText={(t) => setFibra({ ...fibra, tx: t })} />
               <TextInput style={[s.campo, { flex: 1 }]} keyboardType="numbers-and-punctuation" placeholder="RX dBm"
                 value={fibra.rx} onChangeText={(t) => setFibra({ ...fibra, rx: t })} />
@@ -503,7 +583,16 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
               onPress={() => setCamera({ tipo: 'foto_caixa', titulo: c.identificacao, feitas: fotos.caixa })}>
               <Text style={s.botaoTexto}>{dgo ? 'Fotos do DGO' : 'Fotos da acomodação da caixa'} ({fotos.caixa})</Text>
             </Pressable>
-          ) : <Text style={s.suave}>Depois de salvar, tire as fotos da acomodação da caixa{ponta ? ' e do OTDR' : ''}.</Text>}
+          ) : null}
+          {!nova && dgo && c.fibras.some((f) => f.cordao_olt) ? (
+            <Pressable style={[s.botao, { backgroundColor: cores.primaria }]}
+              onPress={() => setCamera({ tipo: 'foto_olt', titulo: `${c.identificacao} · OLT`, feitas: fotos.olt })}>
+              <Text style={s.botaoTexto}>Fotos da OLT e cordões ({fotos.olt})</Text>
+            </Pressable>
+          ) : null}
+          {!nova ? null : (
+            <Text style={s.suave}>Depois de salvar, tire as fotos da acomodação da caixa{ponta ? ' e do OTDR' : ''}.</Text>
+          )}
         </View>
       </ScrollView>
       <Modal visible={!!camera} onRequestClose={() => setCamera(null)} animationType="fade" supportedOrientations={['landscape', 'portrait']}>

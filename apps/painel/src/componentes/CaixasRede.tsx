@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import CaixaDetalhe, { CaixaPainel, ehPonta, origemDe } from "@/componentes/CaixaDetalhe";
-import { clienteDoCaminho, descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, midiasKmz, rastrearFibra, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from "@/lib/fusao";
+import { clienteDoCaminho, descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, midiasKmz, posicoesDgo, rastrearFibra, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from "@/lib/fusao";
 import { supabase } from "@/lib/supabase";
 
 const esc = (t: unknown) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -15,13 +15,13 @@ async function fotosParaKmz(caixas: CaixaPainel[]) {
   const tipoDe = new Map(caixas.map((c) => [c.id, c.tipo]));
   for (let i = 0; i < ids.length; i += 100) {
     const { data: anexos } = await supabase.from("os_anexos").select("caminho_arquivo, tipo, caixa_id, bandeja")
-      .in("caixa_id", ids.slice(i, i + 100)).in("tipo", ["foto_caixa", "foto_bandeja"]).order("tipo").order("bandeja").order("criado_em");
+      .in("caixa_id", ids.slice(i, i + 100)).in("tipo", ["foto_caixa", "foto_olt", "foto_bandeja"]).order("tipo").order("bandeja").order("criado_em");
     if (!anexos?.length) continue;
     const { data: urls } = await supabase.storage.from("os-anexos").createSignedUrls(anexos.map((a) => a.caminho_arquivo), VALIDADE_LINK_FOTO_KMZ);
     anexos.forEach((a, j) => {
       const url = urls?.[j]?.signedUrl;
       if (!url) return;
-      (porCaixa[a.caixa_id] ??= []).push({ url, legenda: a.tipo === "foto_bandeja"
+      (porCaixa[a.caixa_id] ??= []).push({ url, legenda: a.tipo === "foto_olt" ? "OLT e cordões" : a.tipo === "foto_bandeja"
         ? `Bandeja ${a.bandeja ?? "?"} · fibras acomodadas` : tipoDe.get(a.caixa_id) === "dgo" ? "DGO" : "Acomodação da caixa" });
     });
   }
@@ -29,7 +29,8 @@ async function fotosParaKmz(caixas: CaixaPainel[]) {
 }
 
 // KMZ com um pin por caixa / DGO / site de parceiro e, na descrição, a prévia do plano de fusão com os clientes.
-export async function baixarKmz(caixas: CaixaPainel[], arquivo = `caixas-emenda-${new Date().toISOString().slice(0, 10)}`) {
+// rede: todas as caixas conhecidas, para achar a posição no DGO de cada fibra mesmo que o DGO não esteja no arquivo.
+export async function baixarKmz(caixas: CaixaPainel[], arquivo = `caixas-emenda-${new Date().toISOString().slice(0, 10)}`, rede: CaixaPainel[] = caixas) {
   const fotos = await fotosParaKmz(caixas.filter((c) => c.latitude != null));
   const estilos = { emenda: "ff00a5ff", entroncamento: "ff0000ff", dgo: "ffff0000", site: "ff00b000" } as Record<string, string>;
   const pins = caixas.filter((c) => c.latitude != null).map((c) => {
@@ -41,14 +42,14 @@ export async function baixarKmz(caixas: CaixaPainel[], arquivo = `caixas-emenda-
       `Entrada ${c.capacidade_fibras} FO → ${c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO`).join(", ") || "sem saída"}`,
       `Grupos: ${c.grupos_fusionados} fusionados, ${c.grupos_vagos} vagos`,
       ...(c.tipo === "dgo" ? [] : separarBandejas(c)).map((b) => `Bandeja ${b.numero}: ${b.ligacoes.length} fusões (${faixasDaBandeja(b)})`),
-      ...c.manobras.map((m) => `Manobra: ${descreverFibra(m.fibra_entrada, c.capacidade_fibras)} → Saída ${m.saida} FO ${m.fibra_saida}${m.motivo ? ` (${m.motivo})` : ""}`),
+      ...c.manobras.map((m) => `Manobra: ${descreverFibra(m.fibra_entrada, c.capacidade_fibras, c.padrao_cores_entrada ?? undefined)} → Saída ${m.saida} FO ${m.fibra_saida}${m.motivo ? ` (${m.motivo})` : ""}`),
       c.observacao ? `Obs.: ${c.observacao}` : null,
       c.tecnico ? `Técnico: ${c.tecnico}` : null,
     ].filter(Boolean);
     return `    <Placemark>
       <name>${esc(c.identificacao)}</name>
       <styleUrl>#${c.tipo}</styleUrl>
-      <description><![CDATA[${linhas.map(esc).join("<br>")}${htmlPreviaPlano(c)}]]></description>
+      <description><![CDATA[${linhas.map(esc).join("<br>")}${htmlPreviaPlano({ ...c, posicoes_dgo: posicoesDgo(rede, c) })}]]></description>
       ${midiasKmz(fotos[c.id] ?? [])}
       <Point><coordinates>${c.longitude},${c.latitude},0</coordinates></Point>
     </Placemark>`;
@@ -139,8 +140,10 @@ export default function CaixasRede() {
                 const medida = ehPonta(c.tipo) ? c.fibras?.find((f) => f.fibra === p.fibraEntrada) : null;
                 return (
                   <li key={i} className="mb-2">
-                    <b>{c.identificacao}</b> <span className="text-gray-500">({rotuloPonto(c.tipo)})</span> · entra na {descreverFibra(p.fibraEntrada, c.capacidade_fibras)}
-                    {p.saida ? <> → sai na Saída {p.saida}, FO {p.fibraSaida}</> : <span className="text-gray-500"> · a fibra termina aqui</span>}
+                    <b>{c.identificacao}</b> <span className="text-gray-500">({rotuloPonto(c.tipo)})</span> · {c.tipo === "dgo"
+                      ? <>posição <b>{c.fibras?.find((f) => f.fibra === p.fibraEntrada)?.posicao_dgo ?? `FO ${p.fibraEntrada}`}</b>{c.bastidor ? ` (${c.bastidor})` : ""}</>
+                      : <>entra na {descreverFibra(p.fibraEntrada, c.capacidade_fibras, c.padrao_cores_entrada ?? undefined)}</>}
+                    {p.saida ? <> → sai {c.tipo === "dgo" ? "no cabo" : "na Saída"} {p.saida}, {descreverFibra(p.fibraSaida!, c.saidas[p.saida - 1] ?? c.capacidade_fibras, c.padrao_cores_saidas?.[p.saida - 1] ?? undefined)}</> : <span className="text-gray-500"> · a fibra termina aqui</span>}
                     {p.manobra && <span className="ml-1 rounded bg-red-100 px-1.5 text-xs font-semibold text-red-800">MANOBRA{p.motivo ? `: ${p.motivo}` : ""}</span>}
                     {medida && (medida.potencia_dbm != null || medida.reflexao_db != null || medida.perda_db_km != null) && (
                       <div className="text-xs text-gray-600">
@@ -162,7 +165,7 @@ export default function CaixasRede() {
         <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 p-4">
           <h2 className="font-semibold">Caixas e DGOs ({caixas.length})</h2>
           <input className={`${campo} ml-auto min-w-56`} placeholder="Buscar por caixa, trecho ou cliente" value={busca} onChange={(e) => setBusca(e.target.value)} />
-          <button className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800" onClick={() => baixarKmz(filtradas)}>
+          <button className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800" onClick={() => baixarKmz(filtradas, undefined, caixas)}>
             Baixar KMZ ({filtradas.filter((c) => c.latitude != null).length})
           </button>
         </div>

@@ -13,7 +13,7 @@ export type ItemFila =
       tipo: 'foto';
       id: string;
       osId: string;
-      tipoAnexo: 'foto_antes' | 'foto_depois' | 'foto_caixa' | 'foto_otdr' | 'foto_bandeja' | 'assinatura';
+      tipoAnexo: 'foto_antes' | 'foto_depois' | 'foto_caixa' | 'foto_otdr' | 'foto_bandeja' | 'foto_olt' | 'assinatura';
       descricao?: string;
       caixaId?: string;
       fibra?: number;

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { CaixaRede, calcularPlano, ehPonta, descreverFibra, faixasDaBandeja, rotuloInstalacao, rotuloPonto, separarBandejas, svgMapaFusao } from "@/lib/fusao";
+import { CaixaRede, calcularPlano, descreverOlt, ehPonta, descreverFibra, faixasDaBandeja, rotuloInstalacao, rotuloPonto, separarBandejas, svgMapaFusao } from "@/lib/fusao";
 import { supabase } from "@/lib/supabase";
 
 export type CaixaPainel = CaixaRede & {
@@ -78,8 +78,8 @@ export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
             <tbody>
               {c.manobras.map((m) => (
                 <tr key={m.fibra_entrada} className="border-t border-gray-100">
-                  <td className="py-1">{descreverFibra(m.fibra_entrada, c.capacidade_fibras)}</td>
-                  <td className="py-1">Saída {m.saida}: {descreverFibra(m.fibra_saida, c.saidas[m.saida - 1] ?? c.capacidade_fibras)}</td>
+                  <td className="py-1">{descreverFibra(m.fibra_entrada, c.capacidade_fibras, c.padrao_cores_entrada ?? undefined)}</td>
+                  <td className="py-1">Saída {m.saida}: {descreverFibra(m.fibra_saida, c.saidas[m.saida - 1] ?? c.capacidade_fibras, c.padrao_cores_saidas?.[m.saida - 1] ?? undefined)}</td>
                   <td className="py-1">{m.motivo ?? "—"}</td>
                 </tr>
               ))}
@@ -93,18 +93,19 @@ export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
           <h4 className="mt-4 font-semibold">Fibras ({c.fibras!.length})</h4>
           <table className="mt-1 w-full">
             <thead className="text-left text-xs text-gray-500">
-              <tr><th>Fibra</th><th>Cliente</th>{dgo && <><th>Posição DGO</th><th>TX dBm</th><th>RX dBm</th></>}{ponta && <><th>{dgo ? "" : "Sinal dBm"}</th><th>Reflexão dB</th><th>Perda dB/km</th><th>OTDR</th></>}<th>Situação</th></tr>
+              <tr><th>Fibra</th><th>Cliente</th>{dgo && <><th>Posição DGO</th><th>OLT · SFP · cordão</th><th>TX / saída OLT dBm</th><th>RX dBm</th></>}{ponta && <><th>{dgo ? "" : "Sinal dBm"}</th><th>Reflexão dB</th><th>Perda dB/km</th><th>OTDR</th></>}<th>Situação</th></tr>
             </thead>
             <tbody>
               {c.fibras!.map((f) => {
                 const otdr = fotos.filter((x) => x.tipo === "foto_otdr" && x.fibra === f.fibra);
                 return (
                   <tr key={f.fibra} className="border-t border-gray-100">
-                    <td className="py-1">{descreverFibra(f.fibra, c.capacidade_fibras)}</td>
+                    <td className="py-1">{descreverFibra(f.fibra, c.capacidade_fibras, c.padrao_cores_entrada ?? undefined)}</td>
                     <td className="py-1">{f.cliente ?? "—"}</td>
                     {dgo && (
                       <>
                         <td className="py-1">{f.posicao_dgo ?? "—"}</td>
+                        <td className="py-1">{f.cordao_olt ? descreverOlt(f) : "—"}</td>
                         <td className="py-1">{f.potencia_tx_dbm ?? "—"}</td>
                         <td className="py-1">{f.potencia_rx_dbm ?? "—"}</td>
                       </>
@@ -157,12 +158,12 @@ export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
         </>
       )}
 
-      {fotos.filter((f) => f.tipo === "foto_caixa").length > 0 && (
+      {fotos.filter((f) => f.tipo === "foto_caixa" || f.tipo === "foto_olt").length > 0 && (
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {fotos.filter((f) => f.tipo === "foto_caixa").map((f) => (
+          {fotos.filter((f) => f.tipo === "foto_caixa" || f.tipo === "foto_olt").map((f) => (
             <a key={f.id} href={f.url} target="_blank" rel="noreferrer">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={f.url} alt={dgo ? "DGO" : "Acomodação da caixa"} className="aspect-[4/3] w-full rounded border border-gray-200 object-cover" />
+              <img src={f.url} alt={f.tipo === "foto_olt" ? "OLT e cordões" : dgo ? "DGO" : "Acomodação da caixa"} className="aspect-[4/3] w-full rounded border border-gray-200 object-cover" />
             </a>
           ))}
         </div>

@@ -5,7 +5,7 @@ import { Alert } from 'react-native';
 
 import { Caixa } from './caixas';
 import { itensPendentes } from './fila';
-import { descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, midiasKmz, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from './fusao';
+import { descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, midiasKmz, posicoesDgo, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from './fusao';
 import { supabase } from './supabase';
 import { OrdemServico } from './tipos';
 
@@ -26,14 +26,14 @@ export function kmlDasCaixas(os: Pick<OrdemServico, 'numero' | 'titulo' | 'tipo'
       c.origem ? `Vem de: ${c.origem}${c.origem_saida ? ` (saída ${c.origem_saida})` : ''}` : null,
       `Entrada ${c.capacidade_fibras} FO → ${c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO`).join(', ') || 'sem saída'}`,
       ...(c.tipo === 'dgo' ? [] : separarBandejas(c)).map((b) => `Bandeja ${b.numero}: ${b.ligacoes.length} fusões (${faixasDaBandeja(b)})`),
-      ...c.manobras.map((m) => `Manobra: ${descreverFibra(m.fibra_entrada, c.capacidade_fibras)} → Saída ${m.saida} FO ${m.fibra_saida}${m.motivo ? ` (${m.motivo})` : ''}`),
+      ...c.manobras.map((m) => `Manobra: ${descreverFibra(m.fibra_entrada, c.capacidade_fibras, c.padrao_cores_entrada ?? undefined)} → Saída ${m.saida} FO ${m.fibra_saida}${m.motivo ? ` (${m.motivo})` : ''}`),
       c.endereco ? `Endereço: ${c.endereco}` : null,
       c.observacao ? `Obs.: ${c.observacao}` : null,
     ].filter(Boolean);
     return `      <Placemark>
         <name>${esc(c.identificacao)}</name>
         <styleUrl>#${c.tipo}</styleUrl>
-        <description><![CDATA[${linhas.map(esc).join('<br>')}${htmlPreviaPlano(c)}]]></description>
+        <description><![CDATA[${linhas.map(esc).join('<br>')}${htmlPreviaPlano({ ...c, posicoes_dgo: posicoesDgo(caixas, c) })}]]></description>
         ${midiasKmz(fotos[c.id] ?? [])}
         <Point><coordinates>${c.longitude},${c.latitude},0</coordinates></Point>
       </Placemark>`;
@@ -66,14 +66,14 @@ async function fotosDasCaixas(osId: string, caixas: Caixa[]) {
   const ids = caixas.map((c) => c.id);
   try {
     const { data: anexos } = await supabase.from('os_anexos').select('caminho_arquivo, tipo, caixa_id, bandeja')
-      .in('caixa_id', ids).in('tipo', ['foto_caixa', 'foto_bandeja']).order('tipo').order('bandeja').order('criado_em');
+      .in('caixa_id', ids).in('tipo', ['foto_caixa', 'foto_olt', 'foto_bandeja']).order('tipo').order('bandeja').order('criado_em');
     if (anexos?.length) {
       const { data: urls } = await supabase.storage.from('os-anexos')
         .createSignedUrls(anexos.map((a) => a.caminho_arquivo), VALIDADE_LINK_FOTO_KMZ);
       anexos.forEach((a, i) => {
         const url = urls?.[i]?.signedUrl;
         if (!url) return;
-        (porCaixa[a.caixa_id] ??= []).push({ url, legenda: a.tipo === 'foto_bandeja'
+        (porCaixa[a.caixa_id] ??= []).push({ url, legenda: a.tipo === 'foto_olt' ? 'OLT e cordões' : a.tipo === 'foto_bandeja'
           ? `Bandeja ${a.bandeja ?? '?'} · fibras acomodadas` : tipoDe.get(a.caixa_id) === 'dgo' ? 'DGO' : 'Acomodação da caixa' });
       });
     }
@@ -81,7 +81,7 @@ async function fotosDasCaixas(osId: string, caixas: Caixa[]) {
     // sem internet: o KMZ sai sem fotos
   }
   const naFila = (await itensPendentes()).filter((p) => p.tipo === 'foto' && p.osId === osId && p.caixaId
-    && (p.tipoAnexo === 'foto_caixa' || p.tipoAnexo === 'foto_bandeja')).length;
+    && (p.tipoAnexo === 'foto_caixa' || p.tipoAnexo === 'foto_olt' || p.tipoAnexo === 'foto_bandeja')).length;
   return { porCaixa, naFila };
 }
 

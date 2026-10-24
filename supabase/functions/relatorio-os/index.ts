@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
     admin.from("os_servicos_executados").select("quantidade, observacao, item:itens_execucao(nome, unidade, categoria)").eq("os_id", osId).order("lancado_em"),
     admin.from("os_tecnicos_apoio").select("tecnico:usuarios!os_tecnicos_apoio_tecnico_id_fkey(nome)").eq("os_id", osId),
     admin.from("os_anexos").select("tipo, caminho_arquivo, tirada_em, caixa_id, fibra, bandeja, descricao").eq("os_id", osId)
-      .in("tipo", ["foto_antes", "foto_depois", "foto_caixa", "foto_otdr", "foto_bandeja", "assinatura"]).order("criado_em"),
+      .in("tipo", ["foto_antes", "foto_depois", "foto_caixa", "foto_otdr", "foto_bandeja", "foto_olt", "assinatura"]).order("criado_em"),
     admin.from("eventos_mapa").select("latitude, longitude, evento_localizado_em, evento_precisao_m").eq("id", osId).maybeSingle(),
     admin.from("caixas_mapa").select("*").eq("os_id", osId).order("localizada_em"),
   ]);

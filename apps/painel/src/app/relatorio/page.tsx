@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import type { CaixaPainel } from "@/componentes/CaixaDetalhe";
-import { calcularPlano, descreverFibra, ehPonta, faixasDaBandeja, rotuloInstalacao, rotuloPonto, separarBandejas, svgMapaFusao } from "@/lib/fusao";
+import { calcularPlano, descreverFibra, descreverOlt, ehPonta, faixasDaBandeja, rotuloInstalacao, rotuloPonto, posicoesDgo, separarBandejas, svgMapaFusao } from "@/lib/fusao";
 import { rotuloStatus, StatusOS } from "@/lib/tipos";
 
 // Relatório do evento aberto pelo link compartilhado com parceiros (sem login).
@@ -191,8 +191,8 @@ function Conteudo() {
                 <tbody>
                   {c.manobras.map((m) => (
                     <tr key={m.fibra_entrada} className="border-b border-gray-100">
-                      <td className="py-1">{descreverFibra(m.fibra_entrada, c.capacidade_fibras)}</td>
-                      <td className="py-1">Saída {m.saida}: {descreverFibra(m.fibra_saida, c.saidas[m.saida - 1] ?? c.capacidade_fibras)}</td>
+                      <td className="py-1">{descreverFibra(m.fibra_entrada, c.capacidade_fibras, c.padrao_cores_entrada ?? undefined)}</td>
+                      <td className="py-1">Saída {m.saida}: {descreverFibra(m.fibra_saida, c.saidas[m.saida - 1] ?? c.capacidade_fibras, c.padrao_cores_saidas?.[m.saida - 1] ?? undefined)}</td>
                       <td className="py-1">{m.motivo ?? "—"}</td>
                     </tr>
                   ))}
@@ -202,14 +202,14 @@ function Conteudo() {
             {(c.fibras ?? []).length > 0 && (
               <table className="mt-3 w-full break-inside-avoid">
                 <thead className="text-left text-xs text-gray-500">
-                  <tr><th>Fibra</th><th>Cliente</th>{dgo ? <><th>Posição DGO</th><th>TX dBm</th><th>RX dBm</th></> : ponta && <th>Sinal dBm</th>}{ponta && <><th>Reflexão dB</th><th>Perda dB/km</th></>}<th>Situação</th></tr>
+                  <tr><th>Fibra</th><th>Cliente</th>{dgo ? <><th>Posição DGO</th><th>OLT · SFP · cordão</th><th>TX / saída OLT dBm</th><th>RX dBm</th></> : ponta && <th>Sinal dBm</th>}{ponta && <><th>Reflexão dB</th><th>Perda dB/km</th></>}<th>Situação</th></tr>
                 </thead>
                 <tbody>
                   {c.fibras!.map((f) => (
                     <tr key={f.fibra} className="border-b border-gray-100">
-                      <td className="py-1">{descreverFibra(f.fibra, c.capacidade_fibras)}</td>
+                      <td className="py-1">{descreverFibra(f.fibra, c.capacidade_fibras, c.padrao_cores_entrada ?? undefined)}</td>
                       <td className="py-1">{f.cliente ?? "—"}</td>
-                      {dgo ? <><td>{f.posicao_dgo ?? "—"}</td><td>{f.potencia_tx_dbm ?? "—"}</td><td>{f.potencia_rx_dbm ?? "—"}</td></> : ponta && <td>{f.potencia_dbm ?? "—"}</td>}
+                      {dgo ? <><td>{f.posicao_dgo ?? "—"}</td><td>{f.cordao_olt ? descreverOlt(f) : "—"}</td><td>{f.potencia_tx_dbm ?? "—"}</td><td>{f.potencia_rx_dbm ?? "—"}</td></> : ponta && <td>{f.potencia_dbm ?? "—"}</td>}
                       {ponta && <><td>{f.reflexao_db ?? "—"}</td><td>{f.perda_db_km ?? "—"}</td></>}
                       <td className="py-1">{f.sem_potencia ? <b className="text-red-700">SEM POTÊNCIA</b> : "OK"}</td>
                     </tr>
@@ -218,7 +218,7 @@ function Conteudo() {
               </table>
             )}
             {c.saidas.length > 0 && (
-              <div className="mt-3" dangerouslySetInnerHTML={{ __html: svgMapaFusao({ ...c, origem: origem(c) }) }} />
+              <div className="mt-3" dangerouslySetInnerHTML={{ __html: svgMapaFusao({ ...c, origem: origem(c), posicoes_dgo: posicoesDgo(dados.caixas ?? [], c) }) }} />
             )}
             {separarBandejas(c).length > 0 && (
               <table className="mt-3 w-full break-inside-avoid">
@@ -240,7 +240,7 @@ function Conteudo() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {f.url ? <img src={f.url} alt="" className="aspect-[4/3] w-full rounded border border-gray-200 object-cover" /> : null}
                     <figcaption className="mt-0.5 text-xs text-gray-500">
-                      {f.tipo === "foto_otdr" ? `OTDR · fibra ${f.fibra}` : f.tipo === "foto_bandeja" ? `Bandeja ${f.bandeja} · fibras acomodadas` : dgo ? "DGO" : "Acomodação da caixa"} · {quando(f.tirada_em)}
+                      {f.tipo === "foto_otdr" ? `OTDR · fibra ${f.fibra}` : f.tipo === "foto_olt" ? "OLT e cordões" : f.tipo === "foto_bandeja" ? `Bandeja ${f.bandeja} · fibras acomodadas` : dgo ? "DGO" : "Acomodação da caixa"} · {quando(f.tirada_em)}
                     </figcaption>
                   </figure>
                 ))}

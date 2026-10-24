@@ -21,6 +21,8 @@ export type Caixa = CaixaRede & {
   parceiro?: string | null;
   instalacao?: string | null;
   bastidor?: string | null;
+  padrao_cores_entrada?: string | null;
+  padrao_cores_saidas?: (string | null)[] | null;
 };
 
 const chaveOs = (osId: string) => `caixas-os-${osId}`;
@@ -36,7 +38,7 @@ async function ler<T>(chave: string, padrao: T): Promise<T> {
 }
 
 const CAMPOS = 'id, os_id, tipo, identificacao, capacidade_fibras, saidas, grupos_fusionados, grupos_vagos, observacao, endereco, ' +
-  'latitude, longitude, precisao_m, localizada_em, origem_caixa_id, origem_saida, origem_dgo, origem_identificacao, manobras, fibras, fusoes_por_bandeja, parceiro, instalacao, bastidor';
+  'latitude, longitude, precisao_m, localizada_em, origem_caixa_id, origem_saida, origem_dgo, origem_identificacao, manobras, fibras, fusoes_por_bandeja, parceiro, instalacao, bastidor, padrao_cores_entrada, padrao_cores_saidas';
 
 // Caixas da O.S.: na hora vem do celular; com internet atualiza do servidor (sem perder o que ainda está na fila).
 export async function caixasDaOs(osId: string, aoAtualizar: (c: Caixa[]) => void) {
@@ -94,6 +96,8 @@ export async function salvarCaixa(caixa: Caixa, nova: boolean) {
     grupos_vagos: caixa.grupos_vagos,
     fusoes_por_bandeja: caixa.fusoes_por_bandeja || 12,
     parceiro: caixa.tipo === 'site' ? caixa.parceiro?.trim() || null : null,
+    padrao_cores_entrada: caixa.padrao_cores_entrada || 'abnt',
+    padrao_cores_saidas: caixa.saidas.map((_, i) => caixa.padrao_cores_saidas?.[i] || 'abnt'),
     bastidor: caixa.tipo === 'dgo' ? caixa.bastidor?.trim() || null : null,
     instalacao: caixa.tipo === 'emenda' || caixa.tipo === 'entroncamento' ? caixa.instalacao ?? null : null,
     observacao: caixa.observacao,
@@ -119,13 +123,16 @@ export async function salvarCaixa(caixa: Caixa, nova: boolean) {
     });
   }
   const fibras = caixa.fibras.filter((f) => f.cliente || f.sem_potencia || f.potencia_dbm != null || f.reflexao_db != null || f.perda_db_km != null
-    || f.posicao_dgo || f.potencia_tx_dbm != null || f.potencia_rx_dbm != null);
+    || f.posicao_dgo || f.potencia_tx_dbm != null || f.potencia_rx_dbm != null || f.cordao_olt);
   if (fibras.length) {
     await enfileirar({
       tipo: 'inserirVarios', tabela: 'caixa_fibras',
       linhas: fibras.map((f) => ({ caixa_id: caixa.id, fibra: f.fibra, cliente: f.cliente || null, sem_potencia: f.sem_potencia,
         potencia_dbm: f.potencia_dbm ?? null, reflexao_db: f.reflexao_db ?? null, perda_db_km: f.perda_db_km ?? null,
-        posicao_dgo: f.posicao_dgo || null, potencia_tx_dbm: f.potencia_tx_dbm ?? null, potencia_rx_dbm: f.potencia_rx_dbm ?? null })),
+        posicao_dgo: f.posicao_dgo || null, potencia_tx_dbm: f.potencia_tx_dbm ?? null, potencia_rx_dbm: f.potencia_rx_dbm ?? null,
+        cordao_olt: !!f.cordao_olt, olt_posicao: f.cordao_olt ? f.olt_posicao || null : null, sfp_tipo: f.cordao_olt ? f.sfp_tipo || null : null,
+        cordao_tipo: f.cordao_olt ? f.cordao_tipo || null : null, olt_modelo: f.cordao_olt ? f.olt_modelo || null : null,
+        sfp_modelo: f.cordao_olt ? f.sfp_modelo || null : null })),
     });
   }
 }
