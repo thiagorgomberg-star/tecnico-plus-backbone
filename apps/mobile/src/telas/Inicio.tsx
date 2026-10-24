@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Linking, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { LINK_APK, VERSAO_APP, versaoPublicada } from '../lib/atualizacao';
 import { bloqueioDeHoje, rotuloEscala } from '../lib/escala';
 import { cores, corDoStatus, estilo } from '../lib/estilo';
 import { aoMudarFila, itensPendentes } from '../lib/fila';
@@ -29,6 +30,13 @@ export default function Inicio({ nome, abrirOS, sair, abrir }: Props) {
   const [km, setKm] = useState('');
   const [carregando, setCarregando] = useState(false);
   const [semRede, setSemRede] = useState(false);
+  const [novaVersao, setNovaVersao] = useState<number | null>(null);
+
+  // Avisa quando há um APK mais novo publicado (só no app instalado, não em desenvolvimento).
+  useEffect(() => {
+    if (!VERSAO_APP) return;
+    versaoPublicada().then((v) => v && v > VERSAO_APP && setNovaVersao(v));
+  }, []);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -119,6 +127,14 @@ export default function Inicio({ nome, abrirOS, sair, abrir }: Props) {
         </View>
         <Pressable onPress={sair}><Text style={s.barraSub}>Sair</Text></Pressable>
       </View>
+
+      {novaVersao && (
+        <Pressable style={[s.faixa, { backgroundColor: cores.primaria }]} onPress={() => Linking.openURL(LINK_APK)}>
+          <Text style={[s.faixaTexto, { color: '#fff' }]}>
+            Nova versão do app disponível ({novaVersao}). Toque para atualizar. Seus dados continuam.
+          </Text>
+        </Pressable>
+      )}
 
       {(semRede || pendentes > 0) && (
         <View style={s.faixa}>
