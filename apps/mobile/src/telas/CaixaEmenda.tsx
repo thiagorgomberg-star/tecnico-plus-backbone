@@ -59,7 +59,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
 
   const mudar = (campos: Partial<Caixa>) => setC((x) => ({ ...x, ...campos }));
 
+  const servidor = useRef<{ assinatura: string } | null>(null);
   useEffect(() => {
+    servidor.current = null;
     const contar = async () => {
       const otdr: Record<number, number> = {};
       const bandeja: Record<number, number> = {};
@@ -71,8 +73,13 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
         if (tipo === 'foto_otdr' && fibraN) otdr[fibraN] = (otdr[fibraN] ?? 0) + 1;
         if (tipo === 'foto_bandeja' && bandejaN) bandeja[bandejaN] = (bandeja[bandejaN] ?? 0) + 1;
       };
-      for (const i of await itensPendentes()) if (i.tipo === 'foto' && i.caixaId === c.id) somar(i.tipoAnexo, i.fibra, i.bandeja);
+      const pendentes = (await itensPendentes()).filter((i) => i.tipo === 'foto' && i.caixaId === c.id);
+      // A fila muda a cada lote de GPS: só consulta o servidor de novo quando mudam as fotos desta caixa.
+      const assinatura = pendentes.map((i) => i.id).join(',');
+      if (servidor.current && assinatura === servidor.current.assinatura) return;
+      for (const i of pendentes) if (i.tipo === 'foto') somar(i.tipoAnexo, i.fibra, i.bandeja);
       const { data } = await supabase.from('os_anexos').select('tipo, fibra, bandeja').eq('caixa_id', c.id);
+      servidor.current = { assinatura };
       for (const a of data ?? []) somar(a.tipo, a.fibra, a.bandeja);
       setFotos({ caixa: total, olt, otdr, bandeja });
     };

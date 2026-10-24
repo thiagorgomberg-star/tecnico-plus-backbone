@@ -9,6 +9,7 @@ import { lerJornada } from './jornada';
 // Rastreio do dia: roda em segundo plano (notificação fixa no Android) do início ao fim do expediente.
 // Cada lote de posições vai para a fila e sobe quando houver internet.
 const TAREFA = 'rastreio-expediente';
+let ultimaVerificacao = 0;
 
 TaskManager.defineTask<{ locations: Location.LocationObject[] }>(TAREFA, async ({ data, error }) => {
   if (error || !data?.locations?.length) return;
@@ -32,7 +33,10 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(TAREFA, async (
       bateria_pct: bateria,
     })),
   });
-  // Aproveita que o app acordou em segundo plano para tocar alertas novos.
+  // Aproveita que o app acordou em segundo plano para tocar alertas novos (no máximo 1x por minuto;
+  // com o app aberto o tempo real já avisa na hora).
+  if (Date.now() - ultimaVerificacao < 60_000) return;
+  ultimaVerificacao = Date.now();
   await verificarAlertas();
 });
 
