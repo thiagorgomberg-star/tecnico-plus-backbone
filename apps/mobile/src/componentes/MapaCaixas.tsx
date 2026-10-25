@@ -12,6 +12,8 @@ type Item = ComLocal & { lat: number; lng: number; distancia: number | null };
 const COR_TIPO: Record<string, string> = { emenda: '#1F6FD1', entroncamento: '#7A5AA6', dgo: '#163A6B', site: '#227E9E' };
 const ALTURA = 380;
 const MARGEM = 44;
+// O texto acompanha o tipo do ponto: "esta caixa", "este DGO", "este site".
+const este = (tipo?: string) => (tipo === 'dgo' ? 'este DGO' : tipo === 'site' ? 'este site' : 'esta caixa');
 const fmtKm = (k: number) => (k < 1 ? `${Math.round(k * 1000)} m` : `${k.toFixed(1).replace('.', ',')} km`);
 
 // Mapa das caixas já cadastradas na rede (desenhado no próprio app, funciona sem internet com o que está guardado).
@@ -73,8 +75,8 @@ export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher
         <View style={s.topo}>
           <Pressable onPress={fechar} hitSlop={12}><Icone nome="arrow-left" tamanho={24} cor="#fff" /></Pressable>
           <View style={{ flex: 1 }}>
-            <Text style={s.topoTitulo}>{seguinte ? `Para onde vai a saída ${modo.saida}?` : 'De qual caixa vem a fibra?'}</Text>
-            <Text style={s.topoSub}>{seguinte ? 'Toque no pin da caixa seguinte' : 'Toque no pin da caixa anterior'}</Text>
+            <Text style={s.topoTitulo}>{seguinte ? `Para onde vai a saída ${modo.saida}?` : 'De onde vem a fibra?'}</Text>
+            <Text style={s.topoSub}>{seguinte ? 'Toque no pin da caixa ou DGO seguinte' : 'Toque no pin da caixa ou DGO anterior'}</Text>
           </View>
         </View>
         <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
@@ -94,6 +96,16 @@ export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher
                     const a = projecao.xy(aqui), b = projecao.xy(sel);
                     return <Line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={cores.primaria} strokeWidth={2} strokeDasharray="5,4" />;
                   })() : null}
+                  {/* Onde está a caixa nova: desenhada antes dos pins para não esconder um ponto no mesmo lugar (ex.: DGO na sala). */}
+                  {aqui ? (() => {
+                    const { x, y } = projecao.xy(aqui);
+                    return (
+                      <G>
+                        <Circle cx={x} cy={y} r={22} fill="rgba(208,69,59,0.16)" />
+                        <Circle cx={x} cy={y} r={20} fill="none" stroke="#D0453B" strokeWidth={2} strokeDasharray="4,3" />
+                      </G>
+                    );
+                  })() : null}
                   {itens.map((c) => {
                     const { x, y } = projecao.xy(c);
                     if (x < -20 || x > largura + 20 || y < -20 || y > ALTURA + 20) return null;
@@ -107,15 +119,6 @@ export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher
                       </G>
                     );
                   })}
-                  {aqui ? (() => {
-                    const { x, y } = projecao.xy(aqui);
-                    return (
-                      <G>
-                        <Circle cx={x} cy={y} r={16} fill="rgba(208,69,59,0.18)" />
-                        <Circle cx={x} cy={y} r={7} fill="#D0453B" stroke="#fff" strokeWidth={2.5} />
-                      </G>
-                    );
-                  })() : null}
                   <Line x1={12} y1={ALTURA - 14} x2={12 + projecao.passo * projecao.escala} y2={ALTURA - 14} stroke={cores.texto2} strokeWidth={3} />
                   <SvgText x={12} y={ALTURA - 20} fontSize={11} fill={cores.texto2}>{fmtKm(projecao.passo)}</SvgText>
                   <SvgText x={largura - 12} y={ALTURA - 12} fontSize={13} fontWeight="bold" fill={cores.suave} textAnchor="end">N ↑</SvgText>
@@ -127,7 +130,7 @@ export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher
               </View>
             )}
             <View style={s.legenda}>
-              {[['#1F6FD1', 'Emenda'], ['#7A5AA6', 'Entroncamento'], ['#163A6B', 'DGO'], ...(seguinte ? [] : [['#B8C0CC', 'Sem saída']]), ['#D0453B', 'Esta caixa']].map(([c, t]) => (
+              {[['#1F6FD1', 'Emenda'], ['#7A5AA6', 'Entroncamento'], ['#163A6B', 'DGO'], ...(seguinte ? [] : [['#B8C0CC', 'Sem saída']]), ['#D0453B', 'Ponto novo']].map(([c, t]) => (
                 <View key={t} style={s.legendaItem}><View style={[s.bolinha, { backgroundColor: c }]} /><Text style={s.legendaTexto}>{t}</Text></View>
               ))}
             </View>
@@ -137,7 +140,7 @@ export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher
               <View style={s.selecao}>
                 <Text style={s.selTitulo}>{sel.identificacao}</Text>
                 <Text style={s.selSub}>
-                  {rotuloPonto(sel.tipo ?? 'emenda')}{sel.distancia != null ? ` · ${fmtKm(sel.distancia)} daqui` : ''}
+                  {rotuloPonto(sel.tipo ?? 'emenda')}{sel.distancia != null ? (sel.distancia < 0.02 ? ' · no mesmo local' : ` · ${fmtKm(sel.distancia)} daqui`) : ''}
                   {sel.saidas.length ? ` · ${sel.saidas.length} saída(s): ${sel.saidas.map((q) => `${q} FO`).join(', ')}` : ''}
                 </Text>
                 {sel.endereco ? <Text style={s.selSub}>{sel.endereco}</Text> : null}
@@ -146,7 +149,7 @@ export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher
                 {serve(sel) ? (
                   <Pressable style={s.usar} onPress={() => { escolher(sel); fechar(); }}>
                     <Icone nome={seguinte ? 'arrow-right-bold' : 'link-variant'} tamanho={18} cor="#fff" />
-                    <Text style={s.usarTexto}>{seguinte ? `Saída ${modo.saida} vai para esta caixa` : 'Vem desta caixa'}</Text>
+                    <Text style={s.usarTexto}>{seguinte ? `Saída ${modo.saida} vai para ${este(sel.tipo)}` : `A fibra vem d${este(sel.tipo)}`}</Text>
                   </Pressable>
                 ) : <Text style={[s.aviso, { paddingHorizontal: 0 }]}>Esta caixa não tem saída cadastrada, então não pode ser a anterior.</Text>}
               </View>

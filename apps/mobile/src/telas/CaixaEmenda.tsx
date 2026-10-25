@@ -319,7 +319,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
         <View style={s.bloco}>
           <Text style={s.rotulo}>VEM DE</Text>
           <View style={s.chips}>
-            {([['caixa', 'Caixa anterior'], ['dgo', 'DGO'], ['nenhuma', 'Não informar']] as const).map(([v, r]) => (
+            {([['caixa', 'Caixa ou DGO cadastrado'], ['dgo', 'DGO pelo nome'], ['nenhuma', 'Não informar']] as const).map(([v, r]) => (
               <Pressable key={v} style={chip(origemTipo === v)} onPress={() => setOrigemTipo(v)}>
                 <Text style={textoChip(origemTipo === v)}>{r}</Text>
               </Pressable>
@@ -331,7 +331,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           {origemTipo === 'caixa' && todasCaixas.some((x) => x.id !== c.id) ? (
             <Pressable style={s.botaoMapa} onPress={() => setMapa({ tipo: 'anterior' })}>
               <Icone nome="map-search-outline" tamanho={18} cor={cores.primaria} />
-              <Text style={s.botaoMapaTexto}>{anterior ? `Vem de ${anterior.identificacao} · trocar no mapa` : 'Escolher a caixa anterior no mapa'}</Text>
+              <Text style={s.botaoMapaTexto}>{anterior ? `Vem de ${anterior.identificacao} · trocar no mapa` : 'Escolher no mapa (caixa ou DGO)'}</Text>
             </Pressable>
           ) : null}
           {origemTipo === 'caixa' ? (
@@ -420,7 +420,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
                     <Pressable style={[s.botaoMapa, { flex: 1, marginTop: 0 }]} onPress={() => setMapa({ tipo: 'seguinte', saida: i + 1 })}>
                       <Icone nome="map-marker-right-outline" tamanho={18} cor={cores.primaria} />
-                      <Text style={s.botaoMapaTexto} numberOfLines={1}>{seg ? `Vai para ${seg.identificacao} · trocar` : 'Caixa seguinte: escolher no mapa'}</Text>
+                      <Text style={s.botaoMapaTexto} numberOfLines={1}>{seg ? `Vai para ${seg.identificacao} · trocar` : 'Seguinte: escolher no mapa'}</Text>
                     </Pressable>
                     {seg ? (
                       <Pressable hitSlop={8} onPress={() => setSeguintesNovas((x) => ({ ...x, [i + 1]: null }))}>
