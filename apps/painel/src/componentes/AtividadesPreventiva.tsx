@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 
 type Atividade = { id: string; tipo: string; nome: string; ordem: number; ativo: boolean };
 
-const TIPOS = ["Preventiva rede", "Preventiva site"];
+const TIPOS = ["Preventiva rede", "Preventiva site", "Vistoria Backbone MG"];
 
 // Lista de atividades que o técnico marca ao abrir uma preventiva no app.
 export default function AtividadesPreventiva() {
@@ -50,7 +50,7 @@ export default function AtividadesPreventiva() {
         <button className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800">Incluir</button>
       </form>
 
-      <div className="grid gap-px bg-gray-100 md:grid-cols-2">
+      <div className="grid gap-px bg-gray-100 md:grid-cols-3">
         {TIPOS.map((t) => (
           <div key={t} className="bg-white">
             <h3 className="px-4 pt-4 text-sm font-semibold text-gray-600">{t}</h3>

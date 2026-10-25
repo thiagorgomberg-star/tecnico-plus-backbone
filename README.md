@@ -40,6 +40,7 @@ Precisa de Postgres 16 com PostGIS:
 createdb tecnico_teste
 psql -d tecnico_teste -f supabase/tests/stub_auth.sql -f supabase/migrations/20261024120000_mvp.sql
 psql -d tecnico_teste -f supabase/tests/fluxo_mvp.sql
+psql -d tecnico_teste -f supabase/tests/vistoria_mg.sql   # Vistoria Backbone MG
 ```
 
 ## Publicação do painel (Vercel)

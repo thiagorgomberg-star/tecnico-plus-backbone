@@ -11,9 +11,10 @@ import { enderecoDe, posicaoAtual } from '../lib/localizacao';
 import { compartilharOsApresentacao } from '../lib/osApresentacao';
 import { ponto, supabase } from '../lib/supabase';
 import { OrdemServico } from '../lib/tipos';
+import { TRECHOS_MG, VISTORIA_MG } from '../lib/vistoria';
 
 type Rota = { id: string; trecho: string };
-const TIPOS = ['Preventiva rede', 'Preventiva site'];
+const TIPOS = ['Preventiva rede', 'Preventiva site', VISTORIA_MG];
 const CACHE_ROTAS = 'rotas-cache';
 const CACHE_ATIVIDADES = 'atividades-preventiva-cache';
 
@@ -55,6 +56,7 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
   }, []);
 
   const doTipo = lista.filter((a) => a.tipo === tipo);
+  const vistoriaMg = tipo === VISTORIA_MG;
   const marcar = (nome: string) => setMarcadas((m) => (m.includes(nome) ? m.filter((x) => x !== nome) : [...m, nome]));
 
   // Captura a posição (funciona sem internet) e preenche o endereço (com internet; offline, as coordenadas).
@@ -83,8 +85,8 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
   }, []);
 
   async function iniciar() {
-    if (rotas.length > 0 && !rotaId) return Alert.alert('Escolha o trecho', 'Informe em qual trecho do backbone é a preventiva.');
-    if (!local.trim()) return Alert.alert('Informe o local', tipo === 'Preventiva site' ? 'Nome do site/POP.' : 'Ponto ou trecho atendido.');
+    if (!vistoriaMg && rotas.length > 0 && !rotaId) return Alert.alert('Escolha o trecho', 'Informe em qual trecho do backbone é a preventiva.');
+    if (!local.trim()) return Alert.alert(vistoriaMg ? 'Escolha o trecho' : 'Informe o local', vistoriaMg ? 'Toque no trecho de Minas que será vistoriado.' : tipo === 'Preventiva site' ? 'Nome do site/POP.' : 'Ponto ou trecho atendido.');
     if (!endereco.trim()) return Alert.alert('Informe o endereço ou referência', 'Ex.: km, cidade, rodovia.');
     const escolhidas = doTipo.filter((a) => marcadas.includes(a.nome)).map((a) => `• ${a.nome}`);
     const descricao = [...escolhidas, atividades.trim()].filter(Boolean).join('\n');
@@ -114,7 +116,7 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
       descricao,
       ticket_acionamento: ticket.trim() || null,
       observacao_tecnico: observacao.trim() || null,
-      rota_id: rotaId,
+      rota_id: vistoriaMg ? null : rotaId,
       tecnico_id: usuario,
       criada_por: usuario,
       iniciada_em: agora,
@@ -158,7 +160,23 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
           ))}
         </View>
 
-        {rotas.length > 0 && (
+        {vistoriaMg ? (
+          <>
+            <Text style={s.rotulo}>Trecho de Minas *</Text>
+            <View style={s.chips}>
+              {TRECHOS_MG.map((t) => (
+                <Pressable key={t} style={chip(local === t)} onPress={() => setLocal(t)}>
+                  <Text style={[s.chipTexto, local === t && { color: '#fff' }]}>{t}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={[estilo.suave, { marginTop: 8 }]}>
+              Depois de iniciar, lance poste a poste e as ocorrências na aba Postes. As caixas vão na aba Caixas.
+            </Text>
+          </>
+        ) : null}
+
+        {!vistoriaMg && rotas.length > 0 && (
           <>
             <Text style={s.rotulo}>Trecho</Text>
             <View style={s.chips}>
@@ -171,7 +189,7 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
           </>
         )}
 
-        <Text style={s.rotulo}>{tipo === 'Preventiva site' ? 'Site / POP *' : 'Local / ponto atendido *'}</Text>
+        <Text style={s.rotulo}>{vistoriaMg ? 'Trecho (pode ajustar)' : tipo === 'Preventiva site' ? 'Site / POP *' : 'Local / ponto atendido *'}</Text>
         <TextInput style={estilo.campo} value={local} onChangeText={setLocal}
           placeholder={tipo === 'Preventiva site' ? 'Ex.: POP Taubaté' : 'Ex.: Caixa de emenda km 112'} />
 
@@ -214,7 +232,7 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
         <TextInput style={[estilo.campo, { minHeight: 60, textAlignVertical: 'top' }]} value={observacao} onChangeText={setObservacao} multiline />
 
         <Pressable style={[estilo.botao, { backgroundColor: cores.sucesso }]} onPress={iniciar} disabled={salvando}>
-          {salvando ? <ActivityIndicator color="#fff" /> : <Text style={estilo.botaoTexto}>Iniciar preventiva</Text>}
+          {salvando ? <ActivityIndicator color="#fff" /> : <Text style={estilo.botaoTexto}>{vistoriaMg ? 'Iniciar vistoria' : 'Iniciar preventiva'}</Text>}
         </Pressable>
       </View>
       <View style={{ height: 32 }} />
