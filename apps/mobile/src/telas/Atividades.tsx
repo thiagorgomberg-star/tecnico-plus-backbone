@@ -6,7 +6,7 @@ import Cabecalho from '../componentes/Cabecalho';
 import Icone, { iconeDoTipo, NomeIcone } from '../componentes/Icone';
 import { LINK_APK, VERSAO_APP, versaoPublicada } from '../lib/atualizacao';
 import { bloqueioDeHoje, rotuloEscala } from '../lib/escala';
-import { cores, corDoStatus, fundoDe } from '../lib/estilo';
+import { cores, corDoStatus, fundoDe, sombra } from '../lib/estilo';
 import { aoMudarFila, itensPendentes } from '../lib/fila';
 import { dataCurta, diaSemana, hora, textoSla } from '../lib/formato';
 import {
@@ -21,6 +21,7 @@ import {
 import { abrirAjusteBateria, garantirRastreio, SituacaoRastreio } from '../lib/rastreio';
 import { inventarioLocal, pendenciasInventario, precisaFoto } from '../lib/inventario';
 import { supabase } from '../lib/supabase';
+import { meuVeiculo } from '../lib/veiculo';
 import { OrdemServico, rotuloDaOs } from '../lib/tipos';
 
 type Props = { nome: string; abrirOS: (os: OrdemServico) => void; abrirInventario: () => void; iniciarAtividade: () => void };
@@ -29,8 +30,14 @@ const CACHE_OS = 'ordens-cache';
 const PESO_PRIORIDADE = { emergencia: 0, alta: 1, media: 2, baixa: 3 };
 const PESO_STATUS: Record<string, number> = { em_execucao: 0, pausada: 1, devolvida: 2, enviada: 3, aceita: 4, concluida: 5, baixada: 6, cancelada: 7 };
 const ENCERRADAS = ['concluida', 'baixada', 'cancelada'];
+type Grupo = 'andamento' | 'pendente' | 'fechada';
+const saudacao = (d: Date) => (d.getHours() < 12 ? 'Bom dia' : d.getHours() < 18 ? 'Boa tarde' : 'Boa noite');
+const duracao = (ms: number) => {
+  const min = Math.max(0, Math.floor(ms / 60000));
+  return `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`;
+};
 
-// Tela principal do técnico: jornada do dia e lista de atividades (padrão Oracle Field Service).
+// Tela principal do técnico: cartão do expediente sobre o topo e as O.S. separadas em abas.
 export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtividade }: Props) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
@@ -41,10 +48,19 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   const [carregando, setCarregando] = useState(false);
   const [semRede, setSemRede] = useState(false);
   const [novaVersao, setNovaVersao] = useState<number | null>(null);
-  // Grupos recolhíveis do lobby (padrão Claro): Fechada começa recolhida.
-  const [recolhidos, setRecolhidos] = useState<Record<string, boolean>>({ fechada: true });
+  // Aba da lista (Em andamento / Pendentes / Fechadas); null = escolhe sozinha a primeira com O.S.
+  const [filtro, setFiltro] = useState<Grupo | null>(null);
+  const [agora, setAgora] = useState(Date.now());
+  const [placa, setPlaca] = useState<string | null>(null);
   const [inventarioFaltam, setInventarioFaltam] = useState(0);
   const [rastreio, setRastreio] = useState<SituacaoRastreio | null>(null);
+
+  // Relógio do expediente (atualiza a cada 30 s) e placa do veículo (do cache, funciona offline).
+  useEffect(() => {
+    const t = setInterval(() => setAgora(Date.now()), 30_000);
+    meuVeiculo(false).then((v) => setPlaca(v?.placa ?? null)).catch(() => {});
+    return () => clearInterval(t);
+  }, []);
 
   // Confere o trajeto a cada minuto e ao voltar para o app; religa o GPS se o Android tiver parado.
   useEffect(() => {
@@ -207,15 +223,32 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
 
   const emExpediente = !!jornada?.expedienteId;
   const emRefeicao = !!jornada?.inicioRefeicao;
-  const situacao = !emExpediente ? 'Fora do expediente' : emRefeicao ? 'Em refeição' : 'Em expediente';
-  const corSituacao = !emExpediente ? cores.suave : emRefeicao ? cores.alerta : cores.sucesso;
-  const desde = emExpediente && jornada?.inicioExpediente ? hora(new Date(jornada.inicioRefeicao ?? jornada.inicioExpediente)) : null;
-  const hoje = new Date();
+  const hoje = new Date(agora);
+  const primeiroNome = nome.split(/\s+/)[0] ? nome.split(/\s+/)[0][0] + nome.split(/\s+/)[0].slice(1).toLowerCase() : '';
+  const tempo = emExpediente && jornada?.inicioExpediente ? duracao(agora - new Date(jornada.inicioExpediente).getTime()) : null;
+  const desde = emExpediente && jornada?.inicioExpediente ? hora(new Date(jornada.inicioExpediente)) : null;
+  const gpsOk = rastreio ? rastreio.permissao === 'sempre' && !(rastreio.ultimoPonto && agora - rastreio.ultimoPonto > 10 * 60_000) : true;
 
   const sincronizando = semRede || pendentes > 0;
+  const faixa = (icone: NomeIcone, texto: string, cor: string, fundo: string, aoTocar?: () => void) => (
+    <Pressable style={[s.faixa, { backgroundColor: fundo }]} onPress={aoTocar} disabled={!aoTocar}>
+      <Icone nome={icone} tamanho={18} cor={cor} />
+      <Text style={[s.faixaTexto, { color: cor }]}>{texto}</Text>
+      {aoTocar ? <Icone nome="chevron-right" tamanho={18} cor={cor} /> : null}
+    </Pressable>
+  );
+
+  const grupos: { chave: Grupo; rotulo: string; cor: string; ordens: OrdemServico[] }[] = [
+    { chave: 'andamento', rotulo: 'Em andamento', cor: corDoStatus.em_execucao, ordens: abertas.filter((o) => ['em_execucao', 'pausada'].includes(o.status)) },
+    { chave: 'pendente', rotulo: 'Pendentes', cor: corDoStatus.enviada, ordens: abertas.filter((o) => !['em_execucao', 'pausada'].includes(o.status)) },
+    { chave: 'fechada', rotulo: 'Fechadas', cor: corDoStatus.concluida, ordens: encerradas },
+  ];
+  const aba: Grupo = filtro ?? (grupos.find((g) => g.ordens.length > 0)?.chave ?? 'andamento');
+
   const topo = (
     <View>
-      <Cabecalho titulo="Atividades" subtitulo={`${diaSemana(hoje)}, ${dataCurta(hoje)}${nome ? ` · ${nome}` : ''}`}
+      <Cabecalho titulo={`${saudacao(hoje)}${primeiroNome ? `, ${primeiroNome}` : ''}`}
+        subtitulo={`${diaSemana(hoje)}, ${dataCurta(hoje)} · Multivale Backbone`} estendido={74}
         acoes={[
           { icone: semRede ? 'cloud-off-outline' : pendentes > 0 ? 'cloud-upload-outline' : 'cloud-check-outline', rotulo: 'Sincronização',
             selo: pendentes, cor: sincronizando ? '#F5C26B' : undefined,
@@ -223,70 +256,47 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
           { icone: 'refresh', rotulo: 'Atualizar', aoTocar: carregar },
         ]} />
 
-      {novaVersao ? (
-        <Pressable style={[s.faixa, { backgroundColor: cores.primaria }]} onPress={() => Linking.openURL(LINK_APK)}>
-          <Icone nome="download" tamanho={18} cor="#fff" />
-          <Text style={[s.faixaTexto, { color: '#fff' }]}>Nova versão do app ({novaVersao}). Toque para atualizar.</Text>
-        </Pressable>
-      ) : null}
-      {inventarioFaltam > 0 ? (
-        <Pressable style={[s.faixa, { backgroundColor: '#F3E8FA' }]} onPress={abrirInventario}>
-          <Icone nome="toolbox-outline" tamanho={18} cor="#5B3A86" />
-          <Text style={[s.faixaTexto, { color: '#5B3A86' }]}>
-            Inventário Matinal: {inventarioFaltam} item(ns) para fotografar. Toque para fazer.
-          </Text>
-          <Icone nome="chevron-right" tamanho={18} cor="#5B3A86" />
-        </Pressable>
-      ) : null}
-      {emExpediente && rastreio && rastreio.permissao !== 'sempre' ? (
-        <Pressable style={[s.faixa, { backgroundColor: '#FBE3E1' }]} onPress={() => Linking.openSettings()}>
-          <Icone nome="map-marker-off-outline" tamanho={18} cor={cores.perigo} />
-          <Text style={[s.faixaTexto, { color: cores.perigo }]}>
-            Trajeto só é gravado com o app aberto. Toque, vá em Localização e escolha "Permitir o tempo todo".
-          </Text>
-        </Pressable>
-      ) : emExpediente && rastreio?.ultimoPonto && Date.now() - rastreio.ultimoPonto > 10 * 60_000 ? (
-        <Pressable style={[s.faixa, { backgroundColor: '#FBE3E1' }]} onPress={abrirAjusteBateria}>
-          <Icone nome="map-marker-alert-outline" tamanho={18} cor={cores.perigo} />
-          <Text style={[s.faixaTexto, { color: cores.perigo }]}>
-            O celular parou o GPS por {Math.round((Date.now() - rastreio.ultimoPonto) / 60000)} min. Toque e tire o Técnico Plus da economia de bateria.
-          </Text>
-        </Pressable>
-      ) : null}
-      {semRede ? (
-        <View style={s.faixa}>
-          <Icone nome="wifi-off" tamanho={18} cor="#7A4B00" />
-          <Text style={s.faixaTexto}>Sem internet. Tudo que você registrar fica salvo no celular.</Text>
-        </View>
-      ) : null}
-
-      <View style={s.jornada}>
-        <View style={s.jornadaLinha}>
-          <View style={[s.jornadaIcone, { backgroundColor: fundoDe(corSituacao) }]}>
-            {!emExpediente ? <Icone nome="sleep" tamanho={24} cor={corSituacao} />
-              : emRefeicao ? <Icone nome="silverware-fork-knife" tamanho={22} cor={corSituacao} />
-              : (
-                // Técnico "ligado no 220V": silhueta com capacete e um raio.
-                <View>
-                  <Icone nome="account-hard-hat" tamanho={24} cor={corSituacao} />
-                  <Icone nome="flash" tamanho={14} cor="#F5B400" style={{ position: 'absolute', right: -7, top: -5 }} />
-                </View>
-              )}
-          </View>
+      {/* Cartão do expediente, flutuando sobre o topo */}
+      <View style={s.hero}>
+        <View style={s.heroLinha}>
           <View style={{ flex: 1 }}>
-            <Text style={s.jornadaTexto}>{situacao}</Text>
-            <Text style={s.jornadaDesde}>
-              {desde ? `desde ${desde}` : 'Inicie o expediente para receber e executar atividades'}
-              {emExpediente && jornada?.kmInicial != null ? ` · km inicial ${jornada.kmInicial.toLocaleString('pt-BR')}` : ''}
+            <Text style={s.heroRotulo}>EXPEDIENTE</Text>
+            {emExpediente ? (
+              <Text style={s.heroTempo}>{tempo}<Text style={s.heroDesde}>  · desde {desde}</Text></Text>
+            ) : (
+              <Text style={[s.heroTempo, { fontSize: 22 }]}>Fora do expediente</Text>
+            )}
+          </View>
+          <View style={[s.situacao, { backgroundColor: !emExpediente ? '#F2F4F7' : emRefeicao ? '#FFF4E5' : '#E7F6EC' }]}>
+            {!emExpediente ? <Icone nome="sleep" tamanho={16} cor={cores.suave} />
+              : <View style={[s.pulso, { backgroundColor: emRefeicao ? cores.alerta : '#22A04B' }]} />}
+            <Text style={[s.situacaoTexto, { color: !emExpediente ? cores.suave : emRefeicao ? cores.alerta : '#1E7B3A' }]}>
+              {!emExpediente ? 'Off' : emRefeicao ? 'Refeição' : 'Ativo'}
             </Text>
           </View>
         </View>
+
+        {emExpediente ? (
+          <View style={s.metas}>
+            {jornada?.kmInicial != null ? (
+              <View style={s.meta}><Icone nome="speedometer" tamanho={15} cor={cores.apagado} /><Text style={s.metaTexto}>km {jornada.kmInicial.toLocaleString('pt-BR')}</Text></View>
+            ) : null}
+            <View style={s.meta}>
+              <Icone nome={gpsOk ? 'crosshairs-gps' : 'crosshairs-off'} tamanho={15} cor={gpsOk ? '#22A04B' : cores.perigo} />
+              <Text style={[s.metaTexto, !gpsOk && { color: cores.perigo }]}>{gpsOk ? 'GPS ativo' : 'GPS parado'}</Text>
+            </View>
+            {placa ? <View style={s.meta}><Icone nome="car-outline" tamanho={15} cor={cores.apagado} /><Text style={s.metaTexto}>{placa}</Text></View> : null}
+          </View>
+        ) : (
+          <Text style={s.heroAjuda}>Inicie o expediente para receber e executar atividades.</Text>
+        )}
+
         {pedindoKm ? (
-          <View style={{ marginTop: 12 }}>
-            <TextInput style={s.campo} keyboardType="numeric" value={km} onChangeText={setKm} autoFocus
+          <View style={{ marginTop: 14 }}>
+            <TextInput style={s.campo} keyboardType="numeric" value={km} onChangeText={setKm} autoFocus placeholderTextColor={cores.apagado}
               placeholder={emExpediente ? 'Km final do odômetro' : 'Km inicial do odômetro'} />
             {!emExpediente && kmAnterior != null ? (
-              <Text style={s.jornadaDesde}>Km anterior: {kmAnterior.toLocaleString('pt-BR')} (último registrado)</Text>
+              <Text style={[s.heroAjuda, { marginTop: 6 }]}>Km anterior: {kmAnterior.toLocaleString('pt-BR')} (último registrado)</Text>
             ) : null}
             <View style={s.botoes}>
               <Pressable style={[s.botao, s.botaoSecundario]} onPress={() => { setPedindoKm(false); setKm(''); }}>
@@ -298,175 +308,163 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
               </Pressable>
             </View>
           </View>
+        ) : !emExpediente ? (
+          <View style={s.botoes}>
+            <Pressable style={[s.botao, { backgroundColor: cores.sucesso }]} onPress={pedirExpediente}>
+              <Icone nome="play-circle-outline" tamanho={20} cor="#fff" />
+              <Text style={s.botaoTexto}>Iniciar expediente</Text>
+            </Pressable>
+          </View>
+        ) : emRefeicao ? (
+          <View style={s.botoes}>
+            <Pressable style={[s.botao, { backgroundColor: cores.alerta }]} onPress={alternarRefeicao}>
+              <Icone nome="play-circle-outline" tamanho={20} cor="#fff" />
+              <Text style={s.botaoTexto}>Encerrar refeição</Text>
+            </Pressable>
+          </View>
         ) : (
           <View style={s.botoes}>
-            {!emRefeicao ? (
-              <Pressable style={[s.botao, emExpediente ? s.botaoContorno : { backgroundColor: cores.sucesso }]} onPress={pedirExpediente}>
-                <Icone nome={emExpediente ? 'stop-circle-outline' : 'play-circle-outline'} tamanho={20} cor={emExpediente ? cores.perigo : '#fff'} />
-                <Text style={[s.botaoTexto, emExpediente && { color: cores.perigo }]} numberOfLines={1}>{emExpediente ? 'Encerrar expediente' : 'Iniciar expediente'}</Text>
+            <Pressable style={[s.botao, { backgroundColor: cores.primaria }]} onPress={iniciarAtividade}>
+              <Icone nome="plus" tamanho={20} cor="#fff" />
+              <Text style={s.botaoTexto}>Nova atividade</Text>
+            </Pressable>
+            {!jornada?.refeicaoFeita ? (
+              <Pressable style={[s.quadrado, { backgroundColor: '#FFF4E5' }]} onPress={alternarRefeicao} accessibilityLabel="Iniciar refeição">
+                <Icone nome="silverware-fork-knife" tamanho={21} cor={cores.alerta} />
               </Pressable>
             ) : null}
-            {emExpediente && (emRefeicao || !jornada?.refeicaoFeita) ? (
-              <Pressable style={[s.botao, { backgroundColor: emRefeicao ? cores.sucesso : cores.alerta }]} onPress={alternarRefeicao}>
-                <Icone nome={emRefeicao ? 'play-circle-outline' : 'silverware-fork-knife'} tamanho={20} cor="#fff" />
-                <Text style={s.botaoTexto}>{emRefeicao ? 'Encerrar refeição' : 'Refeição'}</Text>
-              </Pressable>
-            ) : null}
+            <Pressable style={[s.quadrado, { backgroundColor: '#FDECEC' }]} onPress={pedirExpediente} accessibilityLabel="Encerrar expediente">
+              <Icone nome="power" tamanho={21} cor={cores.perigo} />
+            </Pressable>
           </View>
         )}
-        {emExpediente && !emRefeicao && !pedindoKm ? (
-          <Pressable style={[s.botao, { backgroundColor: cores.primaria, marginTop: 10, flex: 0 }]} onPress={iniciarAtividade}>
-            <Icone nome="plus-circle-outline" tamanho={20} cor="#fff" />
-            <Text style={s.botaoTexto}>Iniciar atividade</Text>
-          </Pressable>
-        ) : null}
       </View>
 
-      <View style={s.resumo}>
-        <Resumo numero={contagem.novas} rotulo="Novas" cor={corDoStatus.enviada} icone="bell-ring-outline" />
-        <Resumo numero={contagem.andamento} rotulo="Em andamento" cor={corDoStatus.em_execucao} icone="progress-wrench" />
-        <Resumo numero={contagem.concluidas} rotulo="Encerradas (7d)" cor={corDoStatus.concluida} icone="check-circle-outline" />
-      </View>
+      {novaVersao ? faixa('download', `Nova versão do app (${novaVersao}). Toque para atualizar.`, '#fff', cores.primaria, () => Linking.openURL(LINK_APK)) : null}
+      {emExpediente && rastreio && rastreio.permissao !== 'sempre'
+        ? faixa('map-marker-off-outline', 'Trajeto só é gravado com o app aberto. Toque, vá em Localização e escolha "Permitir o tempo todo".',
+          cores.perigo, '#FDECEC', () => Linking.openSettings())
+        : emExpediente && rastreio?.ultimoPonto && agora - rastreio.ultimoPonto > 10 * 60_000
+          ? faixa('map-marker-alert-outline', `O celular parou o GPS por ${Math.round((agora - rastreio.ultimoPonto) / 60000)} min. Toque e tire o Técnico Plus da economia de bateria.`,
+            cores.perigo, '#FDECEC', abrirAjusteBateria)
+          : null}
+      {inventarioFaltam > 0
+        ? faixa('toolbox-outline', `Inventário Matinal: ${inventarioFaltam} item(ns) para fotografar. Toque para fazer.`, '#5B3A86', '#F3EEFA', abrirInventario)
+        : null}
+      {semRede ? faixa('wifi-off', 'Sem internet. Tudo que você registrar fica salvo no celular.', '#7A4B00', '#FFF4E5') : null}
 
+      <View style={s.segmento}>
+        {grupos.map((g) => {
+          const ativo = g.chave === aba;
+          return (
+            <Pressable key={g.chave} style={[s.segItem, ativo && s.segAtivo]} onPress={() => setFiltro(g.chave)}>
+              <Text style={[s.segTexto, ativo && { color: cores.texto }]} numberOfLines={1}>
+                {g.rotulo} <Text style={{ color: ativo ? g.cor : cores.apagado }}>{g.ordens.length}</Text>
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
-
-  const grupos = [
-    { chave: 'andamento', rotulo: 'Em andamento', cor: corDoStatus.em_execucao, ordens: abertas.filter((o) => ['em_execucao', 'pausada'].includes(o.status)) },
-    { chave: 'pendente', rotulo: 'Pendente', cor: corDoStatus.enviada, ordens: abertas.filter((o) => !['em_execucao', 'pausada'].includes(o.status)) },
-    { chave: 'fechada', rotulo: 'Fechada (7 dias)', cor: corDoStatus.concluida, ordens: encerradas },
-  ];
-  type Linha = { tipo: 'grupo'; chave: string; rotulo: string; cor: string; n: number } | { tipo: 'os'; os: OrdemServico };
-  const lista: Linha[] = grupos.filter((g) => g.ordens.length > 0).flatMap((g) => [
-    { tipo: 'grupo' as const, chave: g.chave, rotulo: g.rotulo, cor: g.cor, n: g.ordens.length },
-    ...(recolhidos[g.chave] ? [] : g.ordens.map((os) => ({ tipo: 'os' as const, os }))),
-  ]);
 
   return (
     <FlatList
       style={{ flex: 1, backgroundColor: cores.fundo }}
-      data={lista}
-      keyExtractor={(l) => (l.tipo === 'grupo' ? `g-${l.chave}` : l.os.id)}
+      data={grupos.find((g) => g.chave === aba)?.ordens ?? []}
+      keyExtractor={(os) => os.id}
       ListHeaderComponent={topo}
-      ListEmptyComponent={<Text style={s.vazio}>Nenhuma atividade.</Text>}
+      ListEmptyComponent={<Text style={s.vazio}>{aba === 'andamento' ? 'Nenhuma atividade em andamento.' : aba === 'pendente' ? 'Nenhuma atividade pendente.' : 'Nenhuma atividade fechada nos últimos 7 dias.'}</Text>}
       refreshControl={<RefreshControl refreshing={carregando} onRefresh={carregar} />}
-      renderItem={({ item }) => (item.tipo === 'grupo' ? (
-        <Pressable style={s.grupo} onPress={() => setRecolhidos((r) => ({ ...r, [item.chave]: !r[item.chave] }))}>
-          <View style={[s.grupoCor, { backgroundColor: item.cor }]} />
-          <Text style={s.grupoTexto}>{item.rotulo}</Text>
-          <Text style={s.grupoNumero}>{item.n}</Text>
-          <Icone nome={recolhidos[item.chave] ? 'chevron-down' : 'chevron-up'} tamanho={22} cor={cores.suave} style={{ marginLeft: 'auto' }} />
-        </Pressable>
-      ) : <Cartao os={item.os} abrir={abrirOS} />)}
-      contentContainerStyle={{ paddingBottom: 16 }}
-      initialNumToRender={12}
+      renderItem={({ item }) => <Cartao os={item} abrir={abrirOS} />}
+      contentContainerStyle={{ paddingBottom: 24 }}
+      initialNumToRender={10}
       windowSize={7}
     />
-  );
-}
-
-function Resumo({ numero, rotulo, cor, icone }: { numero: number; rotulo: string; cor: string; icone: NomeIcone }) {
-  return (
-    <View style={s.resumoItem}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <Icone nome={icone} tamanho={18} cor={cor} />
-        <Text style={[s.resumoNumero, { color: cor }]}>{numero}</Text>
-      </View>
-      <Text style={s.resumoRotulo}>{rotulo}</Text>
-    </View>
   );
 }
 
 const Cartao = memo(function Cartao({ os, abrir }: { os: OrdemServico; abrir: (os: OrdemServico) => void }) {
   const emAberto = !ENCERRADAS.includes(os.status);
   const sla = os.sla_limite && emAberto ? textoSla(os.sla_limite) : null;
-  const corSla = !sla ? cores.suave : sla.nivel === 'ok' ? cores.sucesso : sla.nivel === 'alerta' ? cores.alerta : cores.perigo;
+  const corSla = !sla ? cores.apagado : sla.nivel === 'ok' ? cores.sucesso : sla.nivel === 'alerta' ? cores.alerta : cores.perigo;
   const cor = corDoStatus[os.status] ?? cores.suave;
   const urgente = os.prioridade === 'emergencia' || os.prioridade === 'alta';
   return (
-    <Pressable style={({ pressed }) => [s.cartao, pressed && { backgroundColor: cores.selecionado }]} onPress={() => abrir(os)}>
-      <View style={s.cartaoHora}>
-        {sla ? (
-          <>
-            <Text style={[s.cartaoHoraValor, { color: corSla }]}>
-              {new Date(os.sla_limite!).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-            </Text>
-            <Text style={s.cartaoHoraRotulo}>limite</Text>
-          </>
-        ) : (
-          <Text style={[s.cartaoHoraValor, { color: '#B9B4AF' }]}>—</Text>
-        )}
-      </View>
-      <View style={[s.cartaoFaixa, { backgroundColor: cor }]} />
-      <View style={[s.cartaoIcone, { backgroundColor: fundoDe(cor) }]}>
-        <Icone nome={iconeDoTipo(os.tipo)} tamanho={22} cor={cor} />
-      </View>
-      <View style={{ flex: 1, paddingVertical: 12, paddingRight: 4 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          {urgente ? <Icone nome="alert" tamanho={16} cor={cores.perigo} /> : null}
-          <Text style={s.cartaoTitulo} numberOfLines={1}>{os.titulo}</Text>
+    <Pressable style={({ pressed }) => [s.cartao, pressed && { opacity: 0.85 }]} onPress={() => abrir(os)}>
+      <View style={s.cartaoTopo}>
+        <View style={[s.cartaoIcone, { backgroundColor: cor }]}>
+          <Icone nome={iconeDoTipo(os.tipo)} tamanho={19} cor="#fff" />
         </View>
-        <Text style={s.cartaoLinha} numberOfLines={1}>
-          {os.tipo}{os.numero ? ` · O.S. ${os.numero}` : ''}{os.ticket_acionamento ? ` · ${os.ticket_acionamento}` : ''}
-        </Text>
-        {os.endereco ? (
-          <View style={s.cartaoMeta}>
-            <Icone nome="map-marker-outline" tamanho={14} cor={cores.suave} />
-            <Text style={s.cartaoLinha} numberOfLines={1}>{os.endereco}</Text>
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            {urgente ? <Icone nome="alert" tamanho={15} cor={cores.perigo} /> : null}
+            <Text style={s.cartaoTitulo} numberOfLines={1}>{os.titulo}</Text>
           </View>
-        ) : null}
-        <View style={s.selos}>
-          <View style={[s.selo, { backgroundColor: fundoDe(cor) }]}>
-            <Text style={[s.seloTexto, { color: cor }]}>{rotuloDaOs(os)}</Text>
-          </View>
+          <Text style={s.cartaoSub} numberOfLines={1}>
+            {os.tipo}{os.numero ? ` · #${os.numero}` : ''}{os.ticket_acionamento ? ` · ${os.ticket_acionamento}` : ''}
+          </Text>
+        </View>
+        <View style={{ alignItems: 'flex-end', marginLeft: 8 }}>
           {sla ? (
-            <View style={s.cartaoMeta}>
-              <Icone nome={sla.nivel === 'vencido' ? 'clock-alert-outline' : 'clock-outline'} tamanho={14} cor={corSla} />
-              <Text style={[s.slaTexto, { color: corSla }]}>{sla.texto.replace('SLA ', '')}</Text>
-            </View>
-          ) : null}
+            <>
+              <Text style={[s.cartaoHora, { color: corSla }]}>
+                {sla.nivel === 'vencido' ? 'Vencido' : new Date(os.sla_limite!).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+              <Text style={s.cartaoHoraRotulo}>{sla.nivel === 'vencido' ? 'SLA' : 'LIMITE'}</Text>
+            </>
+          ) : <Text style={[s.cartaoHora, { color: cores.apagado }]}>—</Text>}
         </View>
       </View>
-      <Icone nome="chevron-right" tamanho={22} cor="#B9B4AF" style={{ marginRight: 6 }} />
+      <View style={s.cartaoDivisor} />
+      <View style={s.cartaoBase}>
+        <Icone nome="map-marker-outline" tamanho={14} cor={cores.apagado} />
+        <Text style={s.cartaoEndereco} numberOfLines={1}>{os.endereco || 'Sem endereço'}</Text>
+        <View style={[s.selo, { backgroundColor: fundoDe(cor) }]}>
+          <Text style={[s.seloTexto, { color: cor }]}>{rotuloDaOs(os)}</Text>
+        </View>
+      </View>
     </Pressable>
   );
 });
 
 const s = StyleSheet.create({
-  grupo: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 12, marginTop: 8,
-    backgroundColor: cores.cartao, borderBottomWidth: 1, borderBottomColor: cores.borda },
-  grupoCor: { width: 14, height: 14, borderRadius: 2 },
-  grupoTexto: { fontSize: 15, fontWeight: '700', color: cores.texto },
-  grupoNumero: { fontSize: 15, color: cores.suave },
-  faixa: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FCEFD9', paddingHorizontal: 16, paddingVertical: 8 },
-  faixaTexto: { flex: 1, color: '#7A4B00', fontSize: 13 },
-  jornada: { backgroundColor: cores.cartao, padding: 14, borderBottomWidth: 1, borderBottomColor: cores.borda },
-  jornadaLinha: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  jornadaIcone: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-  jornadaTexto: { fontSize: 16, fontWeight: '700', color: cores.texto },
-  jornadaDesde: { fontSize: 13, color: cores.suave, marginTop: 1 },
-  campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 6, padding: 10, fontSize: 16, backgroundColor: '#fff' },
-  botoes: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  botao: { flex: 1, flexDirection: 'row', gap: 8, justifyContent: 'center', borderRadius: 6, paddingVertical: 11, alignItems: 'center' },
+  hero: { backgroundColor: cores.cartao, marginHorizontal: 16, marginTop: -74, borderRadius: 22, padding: 16,
+    shadowColor: '#0F2747', shadowOpacity: 0.16, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+  heroLinha: { flexDirection: 'row', alignItems: 'flex-start' },
+  heroRotulo: { fontSize: 11.5, fontWeight: '700', color: cores.suave, letterSpacing: 0.6 },
+  heroTempo: { fontSize: 28, fontWeight: '800', color: cores.texto, letterSpacing: -0.6, marginTop: 2 },
+  heroDesde: { fontSize: 14, fontWeight: '500', color: cores.suave, letterSpacing: 0 },
+  heroAjuda: { fontSize: 13, color: cores.suave, marginTop: 6 },
+  situacao: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
+  situacaoTexto: { fontSize: 12.5, fontWeight: '700' },
+  pulso: { width: 8, height: 8, borderRadius: 4 },
+  metas: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 10 },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaTexto: { fontSize: 12.5, color: cores.texto2 },
+  campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 12, padding: 12, fontSize: 16, backgroundColor: '#F9FAFB', color: cores.texto },
+  botoes: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  botao: { flex: 1, flexDirection: 'row', gap: 8, justifyContent: 'center', alignItems: 'center', borderRadius: 14, height: 50 },
+  quadrado: { width: 50, height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   botaoSecundario: { backgroundColor: cores.cartao, borderWidth: 1, borderColor: cores.borda },
-  botaoContorno: { backgroundColor: cores.cartao, borderWidth: 1.5, borderColor: cores.perigo },
-  botaoTexto: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  resumo: { flexDirection: 'row', backgroundColor: cores.cartao, borderBottomWidth: 1, borderBottomColor: cores.borda },
-  resumoItem: { flex: 1, alignItems: 'center', paddingVertical: 10 },
-  resumoNumero: { fontSize: 20, fontWeight: '700' },
-  resumoRotulo: { fontSize: 11, color: cores.suave, marginTop: 2 },
-  vazio: { color: cores.suave, margin: 16, textAlign: 'center' },
-  cartao: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.cartao, borderBottomWidth: 1, borderBottomColor: cores.linha },
-  cartaoHora: { width: 58, alignItems: 'center' },
-  cartaoHoraValor: { fontSize: 15, fontWeight: '700' },
-  cartaoHoraRotulo: { fontSize: 10, color: cores.suave, textTransform: 'uppercase', letterSpacing: 0.4 },
-  cartaoFaixa: { width: 3, alignSelf: 'stretch', marginVertical: 10, borderRadius: 2 },
-  cartaoIcone: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginHorizontal: 10 },
-  cartaoTitulo: { flex: 1, fontSize: 16, fontWeight: '600', color: cores.texto },
-  cartaoLinha: { flexShrink: 1, fontSize: 13, color: cores.suave, marginTop: 2 },
-  cartaoMeta: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 },
-  selos: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap' },
-  selo: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
-  seloTexto: { fontSize: 11, fontWeight: '700' },
-  slaTexto: { fontSize: 12, fontWeight: '600' },
+  botaoTexto: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  faixa: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginTop: 10, paddingHorizontal: 14, paddingVertical: 11, borderRadius: 14 },
+  faixaTexto: { flex: 1, fontSize: 13, fontWeight: '500' },
+  segmento: { flexDirection: 'row', backgroundColor: '#E2E7EE', borderRadius: 14, padding: 4, marginHorizontal: 16, marginTop: 16, marginBottom: 4 },
+  segItem: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 11 },
+  segAtivo: { backgroundColor: cores.cartao, ...sombra },
+  segTexto: { fontSize: 13, fontWeight: '700', color: '#5A6576' },
+  vazio: { color: cores.suave, margin: 24, textAlign: 'center' },
+  cartao: { backgroundColor: cores.cartao, borderRadius: 18, marginHorizontal: 16, marginTop: 12, paddingHorizontal: 14, paddingTop: 14, paddingBottom: 12, ...sombra },
+  cartaoTopo: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  cartaoIcone: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  cartaoTitulo: { flex: 1, fontSize: 15.5, fontWeight: '700', color: cores.texto },
+  cartaoSub: { fontSize: 12.5, color: cores.suave, marginTop: 2 },
+  cartaoHora: { fontSize: 15, fontWeight: '800' },
+  cartaoHoraRotulo: { fontSize: 10, color: cores.apagado, letterSpacing: 0.5, marginTop: 1 },
+  cartaoDivisor: { height: 1, backgroundColor: cores.linha, marginTop: 12, marginBottom: 10 },
+  cartaoBase: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  cartaoEndereco: { flex: 1, fontSize: 12.5, color: cores.suave, marginRight: 8 },
+  selo: { borderRadius: 8, paddingHorizontal: 9, paddingVertical: 3 },
+  seloTexto: { fontSize: 11.5, fontWeight: '700' },
 });

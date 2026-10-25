@@ -5,7 +5,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import Cabecalho from '../componentes/Cabecalho';
 import Icone, { NomeIcone } from '../componentes/Icone';
 import { buscarAtualizacaoAgora, DATA_ATUALIZACAO, VERSAO_APP } from '../lib/atualizacao';
-import { cores, fundoDe } from '../lib/estilo';
+import { cores, fundoDe, sombra } from '../lib/estilo';
 import { Tema, TEMAS, temaAtual, trocarTema } from '../lib/tema';
 import { supabase } from '../lib/supabase';
 import { descreverVeiculo, MeuVeiculo, meuVeiculo } from '../lib/veiculo';
@@ -37,14 +37,14 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
         <Text style={[s.rotulo, cor === cores.perigo && { color: cor }]}>{rotulo}</Text>
         {detalhe ? <Text style={s.detalhe}>{detalhe}</Text> : null}
       </View>
-      <Icone nome="chevron-right" tamanho={22} cor="#B9B4AF" />
+      <Icone nome="chevron-right" tamanho={22} cor={cores.apagado} />
     </Pressable>
   );
 
   return (
     <View style={{ flex: 1, backgroundColor: cores.fundo }}>
-      <Cabecalho titulo="Menu" />
       <ScrollView>
+        <Cabecalho titulo="Menu" estendido={44} />
         <View style={s.perfil}>
           <View style={s.avatar}><Text style={s.avatarTexto}>{iniciais(nome)}</Text></View>
           <View style={{ flex: 1 }}>
@@ -55,11 +55,13 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
           </View>
         </View>
         <Text style={s.secao}>CAMPO</Text>
+        <View style={s.grupo}>
         {item('toolbox-outline', 'Inventário Matinal', 'Foto de cada ferramenta e EPI a cada 30 dias', () => abrir('inventario'), '#7A5AA6')}
         {item('car-outline', 'Frota', 'Meu veículo: abastecimento, pedágio e manutenção', () => abrir('frota'), '#227E9E')}
         {item('receipt-text-outline', 'Despesas', 'Ferramentas, material, alimentação: foto do comprovante e valores', () => abrir('despesas'), cores.alerta)}
         {item('calendar-month-outline', 'Minha escala', 'Jornada, plantão e folgas do mês', () => abrir('escala'))}
         {item('map-outline', 'Rotas KMZ', 'Trechos do backbone para abrir no Google Earth', () => abrir('rotas'), '#227E9E')}
+        </View>
         <Text style={s.secao}>APARÊNCIA</Text>
         <View style={s.temas}>
           {(Object.keys(TEMAS) as Tema[]).map((t) => {
@@ -75,10 +77,12 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
           })}
         </View>
         <Text style={s.secao}>CONTA</Text>
+        <View style={s.grupo}>
         {item('logout', 'Sair', pendentes > 0 ? `${pendentes} registro(s) ainda não enviados` : '', sair, cores.perigo)}
         {item('update', 'Buscar atualização', DATA_ATUALIZACAO
           ? `Atualizado em ${DATA_ATUALIZACAO.toLocaleDateString('pt-BR')} às ${DATA_ATUALIZACAO.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
           : 'Código original do APK', async () => Alert.alert('Atualização', await buscarAtualizacaoAgora()))}
+        </View>
         <Text style={s.versao}>Técnico Plus · versão {VERSAO_APP || 'desenvolvimento'}</Text>
       </ScrollView>
     </View>
@@ -86,19 +90,21 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
 }
 
 const s = StyleSheet.create({
-  perfil: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: cores.cartao, padding: 16, borderBottomWidth: 1, borderBottomColor: cores.borda },
+  perfil: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: cores.cartao, padding: 16, marginHorizontal: 16, marginTop: -44,
+    borderRadius: 20, shadowColor: '#0F2747', shadowOpacity: 0.14, shadowRadius: 18, shadowOffset: { width: 0, height: 6 }, elevation: 5 },
+  grupo: { backgroundColor: cores.cartao, marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', ...sombra },
   avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: cores.primaria, alignItems: 'center', justifyContent: 'center' },
   avatarTexto: { color: '#fff', fontSize: 19, fontWeight: '700' },
   nome: { fontSize: 17, fontWeight: '700', color: cores.texto },
-  secao: { color: cores.suave, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginHorizontal: 16, marginTop: 18, marginBottom: 6 },
+  secao: { color: cores.suave, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginHorizontal: 20, marginTop: 20, marginBottom: 8 },
   item: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: cores.cartao, paddingHorizontal: 16, paddingVertical: 12,
     borderBottomWidth: 1, borderBottomColor: cores.linha },
   itemIcone: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   rotulo: { fontSize: 16, fontWeight: '600', color: cores.texto },
   detalhe: { fontSize: 13, color: cores.suave, marginTop: 2 },
-  temas: { flexDirection: 'row', gap: 10, backgroundColor: cores.cartao, padding: 12, borderBottomWidth: 1, borderBottomColor: cores.borda },
-  tema: { flex: 1, alignItems: 'center', gap: 6, paddingVertical: 10, borderRadius: 10, borderWidth: 2, borderColor: cores.linha },
+  temas: { flexDirection: 'row', gap: 10, backgroundColor: cores.cartao, padding: 12, marginHorizontal: 16, borderRadius: 18, ...sombra },
+  tema: { flex: 1, alignItems: 'center', gap: 6, paddingVertical: 10, borderRadius: 14, borderWidth: 2, borderColor: cores.linha },
   temaCor: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   temaRotulo: { fontSize: 13, color: cores.texto },
-  versao: { textAlign: 'center', color: cores.suave, fontSize: 12, marginVertical: 24 },
+  versao: { textAlign: 'center', color: cores.apagado, fontSize: 12, marginVertical: 24 },
 });

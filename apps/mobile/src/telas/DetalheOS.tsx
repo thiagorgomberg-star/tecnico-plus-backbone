@@ -8,7 +8,7 @@ import CaixasOS from '../componentes/CaixasOS';
 import PontosVistoria from '../componentes/PontosVistoria';
 import ExecucaoOS from '../componentes/ExecucaoOS';
 import MaterialApoio from '../componentes/MaterialApoio';
-import { cores, corDoStatus, fundoDe } from '../lib/estilo';
+import { cores, corDoStatus, fundoDe, sombra } from '../lib/estilo';
 import { Caixa, caixasAtuais } from '../lib/caixas';
 import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
 import { textoSla } from '../lib/formato';
@@ -220,6 +220,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
         acoes={['concluida', 'baixada'].includes(os.status)
           ? [{ icone: 'map-marker-multiple', rotulo: 'KMZ das caixas', aoTocar: () => enviarKmz() },
             { icone: 'file-pdf-box', rotulo: 'Relatório PDF', aoTocar: () => enviarRelatorio() }] : undefined}
+        estendido={44}
       />
       <View style={s.resumo}>
         <View style={[s.resumoIcone, { backgroundColor: fundoDe(corStatus) }]}>
@@ -308,6 +309,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
             </View>
 
             <Text style={s.secao}>INFORMAÇÕES</Text>
+            <View style={s.grupo}>
             <Info icone="map-marker-outline" rotulo="Endereço / referência" valor={os.endereco} />
             <Info icone="text-box-outline" rotulo="Descrição" valor={os.descricao} />
             <Info icone="ticket-confirmation-outline" rotulo="Ticket de acionamento" valor={os.ticket_acionamento} />
@@ -322,6 +324,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
                   : 'Ainda não registrado. Toque em "Localizei o evento" (funciona sem internet).'} />
             ) : null}
             <Info icone="draw-pen" rotulo="Assinatura do responsável no local" valor={assinadoPor ? `Assinado por ${assinadoPor}` : 'Ainda não colhida.'} />
+            </View>
 
             <MaterialApoio osId={os.id} />
 
@@ -466,15 +469,16 @@ function Aviso({ cor, texto }: { cor: string; texto: string }) {
 }
 
 const s = StyleSheet.create({
-  resumo: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: cores.cartao, padding: 14,
-    borderBottomWidth: 1, borderBottomColor: cores.borda },
+  resumo: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: cores.cartao, padding: 16, marginHorizontal: 16, marginTop: -44,
+    borderRadius: 20, shadowColor: '#0F2747', shadowOpacity: 0.14, shadowRadius: 18, shadowOffset: { width: 0, height: 6 }, elevation: 5 },
   resumoIcone: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   resumoTitulo: { fontSize: 17, fontWeight: '700', color: cores.texto },
   resumoSelos: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 6 },
-  selo: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+  selo: { borderRadius: 8, paddingHorizontal: 9, paddingVertical: 3 },
   seloTexto: { fontSize: 12, fontWeight: '700' },
   grade: { flexDirection: 'row', flexWrap: 'wrap', backgroundColor: cores.cartao, paddingVertical: 8, paddingHorizontal: 4,
-    borderBottomWidth: 1, borderBottomColor: cores.borda },
+    marginHorizontal: 16, marginTop: 12, borderRadius: 18, ...sombra },
+  grupo: { backgroundColor: cores.cartao, marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', ...sombra },
   acao: { width: '25%', alignItems: 'center', paddingVertical: 8, borderRadius: 8 },
   acaoIcone: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   acaoFeito: { position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 9, backgroundColor: cores.sucesso,
@@ -488,23 +492,24 @@ const s = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 10, borderLeftWidth: 5, borderBottomWidth: 1, borderBottomColor: cores.borda },
   statusTexto: { fontSize: 15, fontWeight: '700' },
   sla: { fontSize: 14, fontWeight: '600' },
-  abas: { flexDirection: 'row', backgroundColor: cores.cartao, borderBottomWidth: 1, borderBottomColor: cores.borda },
-  aba: { flex: 1, alignItems: 'center', paddingTop: 8, paddingBottom: 6, borderBottomWidth: 3, borderBottomColor: 'transparent' },
-  abaAtiva: { borderBottomColor: cores.primaria },
-  abaTexto: { fontSize: 11, color: cores.suave, fontWeight: '600', marginTop: 2 },
+  abas: { flexDirection: 'row', backgroundColor: '#E2E7EE', borderRadius: 14, padding: 4, marginHorizontal: 16, marginTop: 12, marginBottom: 2 },
+  aba: { flex: 1, alignItems: 'center', paddingTop: 7, paddingBottom: 6, borderRadius: 11 },
+  abaAtiva: { backgroundColor: cores.cartao, ...sombra },
+  abaTexto: { fontSize: 10.5, color: '#5A6576', fontWeight: '700', marginTop: 2 },
   abaTextoAtivo: { color: cores.primaria },
-  bloco: { backgroundColor: cores.cartao, borderBottomWidth: 1, borderBottomColor: cores.borda, padding: 14 },
+  bloco: { backgroundColor: cores.cartao, marginHorizontal: 16, marginTop: 12, borderRadius: 18, padding: 16, ...sombra },
   rotulo: { fontSize: 12, fontWeight: '700', color: cores.suave, letterSpacing: 0.5, marginBottom: 4 },
   valor: { fontSize: 15, color: cores.texto },
   link: { color: cores.primaria, fontWeight: '600', marginTop: 6 },
-  aviso: { backgroundColor: '#FFF8EC', borderLeftWidth: 4, padding: 12, borderBottomWidth: 1, borderBottomColor: cores.borda },
-  campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 6, padding: 10, fontSize: 15, minHeight: 80, textAlignVertical: 'top', backgroundColor: '#fff' },
-  botaoBloco: { borderRadius: 6, paddingVertical: 12, alignItems: 'center', marginTop: 10 },
+  aviso: { backgroundColor: '#FFF8EC', borderLeftWidth: 4, padding: 12, marginHorizontal: 16, marginTop: 12, borderRadius: 12 },
+  campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 12, padding: 12, color: cores.texto, fontSize: 15, minHeight: 80, textAlignVertical: 'top', backgroundColor: '#fff' },
+  botaoBloco: { borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 10 },
   fotosNumero: { fontSize: 44, fontWeight: '700' },
   evento: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   eventoPonto: { width: 10, height: 10, borderRadius: 5, marginRight: 10 },
-  rodape: { backgroundColor: cores.cartao, borderTopWidth: 1, borderTopColor: cores.borda, padding: 12 },
-  botaoRodape: { flex: 1, flexDirection: 'row', gap: 8, justifyContent: 'center', borderRadius: 6, paddingVertical: 14, alignItems: 'center' },
+  rodape: { backgroundColor: cores.cartao, padding: 12, borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    shadowColor: '#101828', shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: -4 }, elevation: 12 },
+  botaoRodape: { flex: 1, flexDirection: 'row', gap: 8, justifyContent: 'center', borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
   botaoSecundario: { backgroundColor: cores.cartao, borderWidth: 1, borderColor: cores.borda },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

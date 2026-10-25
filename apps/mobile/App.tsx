@@ -179,7 +179,7 @@ export default function App() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: cores.cabecalho, paddingTop: TOPO }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: cores.cabecalho2, paddingTop: TOPO }}>
       <StatusBar style="light" />
       <View style={{ flex: 1, backgroundColor: cores.fundo }}>{conteudo}</View>
     </SafeAreaView>

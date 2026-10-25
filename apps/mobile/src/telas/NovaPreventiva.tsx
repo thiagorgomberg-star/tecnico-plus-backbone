@@ -155,8 +155,8 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
         <Text style={s.rotulo}>Tipo</Text>
         <View style={s.chips}>
           {TIPOS.map((t) => (
-            <Pressable key={t} style={chip(tipo === t)} onPress={() => { if (ehVistoria(t) || vistoriaMg) setLocal(''); setTipo(t); setMarcadas([]); }}>
-              <Text style={[s.chipTexto, tipo === t && { color: '#fff' }]}>{t}</Text>
+            <Pressable key={t} style={[...chip(tipo === t), s.tipo]} onPress={() => { if (ehVistoria(t) || vistoriaMg) setLocal(''); setTipo(t); setMarcadas([]); }}>
+              <Text style={[s.chipTexto, { textAlign: 'center' }, tipo === t && { color: '#fff' }]}>{t}</Text>
             </Pressable>
           ))}
         </View>
@@ -245,6 +245,7 @@ const s = StyleSheet.create({
   rotulo: { fontSize: 13, fontWeight: '600', color: cores.suave, marginTop: 14 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   chip: { borderWidth: 1, borderColor: cores.borda, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
+  tipo: { width: '48.5%', alignItems: 'center', borderRadius: 12, paddingVertical: 10 },
   chipTexto: { color: cores.texto, fontSize: 14 },
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9 },
   caixa: { width: 24, height: 24, borderRadius: 4, borderWidth: 2, borderColor: cores.borda, alignItems: 'center', justifyContent: 'center' },
