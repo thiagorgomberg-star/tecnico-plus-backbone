@@ -3,12 +3,13 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, FlatList, Linking, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
+import DetalheBacklog from '../componentes/DetalheBacklog';
 import Icone, { iconeDoTipo, NomeIcone } from '../componentes/Icone';
 import { LINK_APK, VERSAO_APP, versaoPublicada } from '../lib/atualizacao';
 import { bloqueioDeHoje, rotuloEscala } from '../lib/escala';
 import { cores, corDoStatus, fundoDe, sombra } from '../lib/estilo';
 import { aoMudarFila, itensPendentes } from '../lib/fila';
-import { dataCurta, diaSemana, hora, textoSla } from '../lib/formato';
+import { dataCurta, diaSemana, hora, idadeOs, textoSla } from '../lib/formato';
 import {
   encerrarExpediente,
   encerrarRefeicao,
@@ -34,6 +35,12 @@ const PESO_PRIORIDADE = { emergencia: 0, alta: 1, media: 2, baixa: 3 };
 const PESO_STATUS: Record<string, number> = { em_execucao: 0, pausada: 1, devolvida: 2, enviada: 3, aceita: 4, concluida: 5, baixada: 6, cancelada: 7 };
 const ENCERRADAS = ['concluida', 'baixada', 'cancelada'];
 type Grupo = 'andamento' | 'pendente' | 'fechada' | 'backlog';
+type OrdemBacklog = 'distancia' | 'prioridade' | 'data';
+const ORDENS_BACKLOG: { chave: OrdemBacklog; rotulo: string; icone: NomeIcone }[] = [
+  { chave: 'distancia', rotulo: 'Distância', icone: 'map-marker-distance' },
+  { chave: 'prioridade', rotulo: 'Prioridade', icone: 'alert-outline' },
+  { chave: 'data', rotulo: 'Mais antigas', icone: 'calendar-clock' },
+];
 const saudacao = (d: Date) => (d.getHours() < 12 ? 'Bom dia' : d.getHours() < 18 ? 'Boa tarde' : 'Boa noite');
 const duracao = (ms: number) => {
   const min = Math.max(0, Math.floor(ms / 60000));
@@ -61,6 +68,8 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   const [backlog, setBacklog] = useState<ItemBacklog[]>([]);
   const [posicao, setPosicao] = useState<{ lat: number; lng: number } | null>(null);
   const [assumindo, setAssumindo] = useState<string | null>(null);
+  const [ordemBacklog, setOrdemBacklog] = useState<OrdemBacklog>('distancia');
+  const [detalhe, setDetalhe] = useState<string | null>(null);
 
   // Backlog: o técnico não recebe aviso em tempo real dessas O.S., então confere a cada 2 min e ao voltar para o app.
   useEffect(() => {
@@ -295,9 +304,12 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
     { chave: 'pendente', rotulo: 'Pendentes', cor: corDoStatus.enviada, ordens: abertas.filter((o) => !['em_execucao', 'pausada'].includes(o.status)) },
     { chave: 'fechada', rotulo: 'Fechadas', cor: corDoStatus.concluida, ordens: encerradas },
   ];
-  const aba: Grupo = filtro ?? (grupos.find((g) => g.ordens.length > 0)?.chave ?? 'andamento');
+  // Fora do expediente a tela abre no Backlog; em expediente, no Em andamento.
+  const aba: Grupo = filtro ?? (emExpediente ? 'andamento' : 'backlog');
   const abas = [...grupos.map((g) => ({ chave: g.chave, rotulo: g.rotulo, cor: g.cor, total: g.ordens.length })),
     { chave: 'backlog' as Grupo, rotulo: 'Backlog', cor: cores.alerta, total: backlog.length }];
+
+  useEffect(() => setFiltro(null), [emExpediente]);
 
   // Distância até cada O.S. do backlog (a posição é lida só quando o técnico abre a aba).
   useEffect(() => {
@@ -305,11 +317,15 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   }, [aba, posicao]);
   const backlogOrdenado = useMemo(() => {
     const dist = (b: ItemBacklog) => (posicao && b.lat != null && b.lng != null ? distanciaKm(posicao, { lat: b.lat, lng: b.lng }) : null);
+    const porDistancia = (a: { distancia: number | null }, b: { distancia: number | null }) => (a.distancia ?? 1e9) - (b.distancia ?? 1e9);
+    const porPrioridade = (a: ItemBacklog, b: ItemBacklog) => PESO_PRIORIDADE[a.prioridade] - PESO_PRIORIDADE[b.prioridade];
+    const porData = (a: ItemBacklog, b: ItemBacklog) => a.criado_em.localeCompare(b.criado_em);
+    const criterios = ordemBacklog === 'distancia' ? [porDistancia, porPrioridade, porData]
+      : ordemBacklog === 'prioridade' ? [porPrioridade, porDistancia, porData] : [porData, porPrioridade, porDistancia];
     return backlog.map((b) => ({ ...b, distancia: dist(b) }))
-      .sort((a, b) => Number(b.reservada) - Number(a.reservada)
-        || PESO_PRIORIDADE[a.prioridade] - PESO_PRIORIDADE[b.prioridade]
-        || (a.distancia ?? 1e9) - (b.distancia ?? 1e9));
-  }, [backlog, posicao]);
+      .sort((a, b) => Number(b.reservada) - Number(a.reservada) || criterios.reduce((r, c) => r || c(a, b), 0));
+  }, [backlog, posicao, ordemBacklog]);
+  const itemDetalhe = backlogOrdenado.find((b) => b.id === detalhe) ?? null;
 
   function assumir(b: ItemBacklog) {
     Alert.alert(`Assumir O.S. #${b.numero}?`, `${b.titulo}\n\nEla sai do backlog, passa para você e o supervisor é avisado.`, [
@@ -320,6 +336,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
           try {
             await assumirBacklog(b.id);
             setBacklog((l) => l.filter((x) => x.id !== b.id));
+            setDetalhe(null);
             setFiltro('pendente');
             carregar();
             Alert.alert('O.S. assumida', 'Ela já está em Pendentes. Quer abrir a rota agora?', [
@@ -437,6 +454,13 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
             </Pressable>
           </View>
         )}
+
+        {!pedindoKm ? (
+          <Pressable style={({ pressed }) => [s.ocorrencia, pressed && { opacity: 0.85 }]} onPress={informarEvento}>
+            <Icone nome="alert-octagon-outline" tamanho={22} cor="#fff" />
+            <Text style={s.botaoTexto}>Informar ocorrência</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {novaVersao ? faixa('download', `Nova versão do app (${novaVersao}). Toque para atualizar.`, '#fff', cores.primaria, () => Linking.openURL(LINK_APK)) : null}
@@ -465,20 +489,25 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
           );
         })}
       </View>
-      {aba === 'backlog' ? (
-        <Pressable style={({ pressed }) => [s.informar, pressed && { opacity: 0.85 }]} onPress={informarEvento}>
-          <View style={s.informarIcone}><Icone nome="alert-octagon-outline" tamanho={22} cor={cores.perigo} /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={s.informarTitulo}>Informar evento</Text>
-            <Text style={s.informarTexto}>Viu um problema na rede? Registre com foto e localização.</Text>
-          </View>
-          <Icone nome="chevron-right" tamanho={22} cor={cores.apagado} />
-        </Pressable>
+      {aba === 'backlog' && backlog.length > 1 ? (
+        <View style={s.ordenar}>
+          <Text style={s.ordenarRotulo}>Ordenar</Text>
+          {ORDENS_BACKLOG.map((o) => {
+            const ativo = o.chave === ordemBacklog;
+            return (
+              <Pressable key={o.chave} style={[s.chip, ativo && s.chipAtivo]} onPress={() => setOrdemBacklog(o.chave)}>
+                <Icone nome={o.icone} tamanho={15} cor={ativo ? '#fff' : cores.texto2} />
+                <Text style={[s.chipTexto, ativo && { color: '#fff' }]}>{o.rotulo}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
       ) : null}
     </View>
   );
 
   return (
+    <>
     <FlatList
       style={{ flex: 1, backgroundColor: cores.fundo }}
       data={(aba === 'backlog' ? backlogOrdenado : grupos.find((g) => g.chave === aba)?.ordens ?? []) as (OrdemServico | ItemBacklog)[]}
@@ -487,12 +516,14 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
       ListEmptyComponent={<Text style={s.vazio}>{aba === 'andamento' ? 'Nenhuma atividade em andamento.' : aba === 'pendente' ? 'Nenhuma atividade pendente.' : aba === 'backlog' ? 'Nenhum serviço no backlog agora.' : 'Nenhuma atividade fechada nos últimos 7 dias.'}</Text>}
       refreshControl={<RefreshControl refreshing={carregando} onRefresh={carregar} />}
       renderItem={({ item }) => (aba === 'backlog'
-        ? <CartaoBacklog b={item as ItemBacklog & { distancia: number | null }} assumir={assumir} ocupado={assumindo === item.id} />
+        ? <CartaoBacklog b={item as ItemBacklog & { distancia: number | null }} assumir={assumir} abrir={setDetalhe} ocupado={assumindo === item.id} />
         : <Cartao os={item as OrdemServico} abrir={abrirOS} />)}
       contentContainerStyle={{ paddingBottom: 24 }}
       initialNumToRender={10}
       windowSize={7}
     />
+    <DetalheBacklog b={itemDetalhe} fechar={() => setDetalhe(null)} assumir={assumir} ocupado={assumindo === detalhe} />
+    </>
   );
 }
 
@@ -502,6 +533,7 @@ const Cartao = memo(function Cartao({ os, abrir }: { os: OrdemServico; abrir: (o
   const corSla = !sla ? cores.apagado : sla.nivel === 'ok' ? cores.sucesso : sla.nivel === 'alerta' ? cores.alerta : cores.perigo;
   const cor = corDoStatus[os.status] ?? cores.suave;
   const urgente = os.prioridade === 'emergencia' || os.prioridade === 'alta';
+  const idade = !sla && emAberto && os.criado_em ? idadeOs(os.criado_em) : null;
   return (
     <Pressable style={({ pressed }) => [s.cartao, pressed && { opacity: 0.85 }]} onPress={() => abrir(os)}>
       <View style={s.cartaoTopo}>
@@ -525,6 +557,11 @@ const Cartao = memo(function Cartao({ os, abrir }: { os: OrdemServico; abrir: (o
               </Text>
               <Text style={s.cartaoHoraRotulo}>{sla.nivel === 'vencido' ? 'SLA' : 'LIMITE'}</Text>
             </>
+          ) : idade ? (
+            <>
+              <Text style={[s.cartaoHora, { color: idade.cor }]}>{idade.texto}</Text>
+              <Text style={s.cartaoHoraRotulo}>ABERTA HÁ</Text>
+            </>
           ) : <Text style={[s.cartaoHora, { color: cores.apagado }]}>—</Text>}
         </View>
       </View>
@@ -541,11 +578,15 @@ const Cartao = memo(function Cartao({ os, abrir }: { os: OrdemServico; abrir: (o
 });
 
 // O.S. do backlog: o técnico vê onde fica, abre a rota (Waze/Google Maps) e assume para ir atender.
-function CartaoBacklog({ b, assumir, ocupado }: { b: ItemBacklog & { distancia: number | null }; assumir: (b: ItemBacklog) => void; ocupado: boolean }) {
+function CartaoBacklog({ b, assumir, abrir, ocupado }: {
+  b: ItemBacklog & { distancia: number | null }; assumir: (b: ItemBacklog) => void; abrir: (id: string) => void; ocupado: boolean;
+}) {
   const urgente = b.prioridade === 'emergencia' || b.prioridade === 'alta';
   const temLocal = (b.lat != null && b.lng != null) || !!b.endereco;
+  const sla = b.sla_limite ? textoSla(b.sla_limite) : null;
+  const idade = idadeOs(b.criado_em);
   return (
-    <View style={s.cartao}>
+    <Pressable style={({ pressed }) => [s.cartao, pressed && { opacity: 0.9 }]} onPress={() => abrir(b.id)}>
       <View style={s.cartaoTopo}>
         <View style={[s.cartaoIcone, { backgroundColor: cores.alerta }]}>
           <Icone nome={iconeDoTipo(b.tipo)} tamanho={19} cor="#fff" />
@@ -575,7 +616,16 @@ function CartaoBacklog({ b, assumir, ocupado }: { b: ItemBacklog & { distancia: 
           <View style={[s.selo, { backgroundColor: fundoDe(cores.primaria) }]}>
             <Text style={[s.seloTexto, { color: cores.primaria }]}>Reservada p/ você</Text>
           </View>
-        ) : null}
+        ) : sla ? (
+          <View style={[s.selo, { backgroundColor: fundoDe(sla.nivel === 'ok' ? cores.sucesso : cores.perigo) }]}>
+            <Text style={[s.seloTexto, { color: sla.nivel === 'ok' ? cores.sucesso : cores.perigo }]}>{sla.nivel === 'vencido' ? 'SLA vencido' : 'SLA'}</Text>
+          </View>
+        ) : (
+          <View style={[s.selo, s.seloIdade, { backgroundColor: fundoDe(idade.cor) }]}>
+            <View style={[s.bolinha, { backgroundColor: idade.cor }]} />
+            <Text style={[s.seloTexto, { color: idade.cor }]}>{idade.texto}</Text>
+          </View>
+        )}
       </View>
       <View style={s.backlogBotoes}>
         <Pressable style={[s.backlogBotao, { backgroundColor: cores.selecionado }]} disabled={!temLocal}
@@ -592,16 +642,23 @@ function CartaoBacklog({ b, assumir, ocupado }: { b: ItemBacklog & { distancia: 
           )}
         </Pressable>
       </View>
-    </View>
+      <Text style={s.verDetalhes}>Toque para ver todos os detalhes</Text>
+    </Pressable>
   );
 }
 
 const s = StyleSheet.create({
-  informar: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: cores.cartao, marginHorizontal: 16, marginTop: 12,
-    borderRadius: 18, padding: 14, borderWidth: 1, borderColor: '#F6D3D3', ...sombra },
-  informarIcone: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#FDECEC', alignItems: 'center', justifyContent: 'center' },
-  informarTitulo: { fontSize: 15, fontWeight: '800', color: cores.texto },
-  informarTexto: { fontSize: 12.5, color: cores.suave, marginTop: 2 },
+  ocorrencia: { flexDirection: 'row', gap: 8, justifyContent: 'center', alignItems: 'center', borderRadius: 14, height: 52, marginTop: 10,
+    backgroundColor: cores.perigo },
+  ordenar: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginHorizontal: 16, marginTop: 10 },
+  ordenarRotulo: { fontSize: 12, fontWeight: '700', color: cores.suave, marginRight: 2 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 32, borderRadius: 16, backgroundColor: cores.cartao,
+    borderWidth: 1, borderColor: cores.borda },
+  chipAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  chipTexto: { fontSize: 12.5, fontWeight: '700', color: cores.texto2 },
+  seloIdade: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  bolinha: { width: 7, height: 7, borderRadius: 4 },
+  verDetalhes: { fontSize: 11.5, color: cores.apagado, textAlign: 'center', marginTop: 8 },
   backlogDescricao: { fontSize: 13, color: cores.suave, marginTop: 8 },
   backlogBotoes: { flexDirection: 'row', gap: 8, marginTop: 12 },
   backlogBotao: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: 12 },

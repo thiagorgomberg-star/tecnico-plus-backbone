@@ -22,7 +22,7 @@ export default function FotosReferencia({ osId }: { osId: string }) {
         <Text style={[estilo.titulo, { fontSize: 16, flex: 1 }]}>Fotos de referência ({fotos.length})</Text>
       </View>
       <Text style={estilo.suave}>
-        Tiradas na vistoria. Na baixa, fotografe a correção no mesmo ângulo e posição de cada uma: a câmera mostra a foto como guia.
+        Tiradas na abertura (vistoria ou ocorrência). Na baixa, fotografe a correção no mesmo ângulo e posição de cada uma: a câmera mostra a foto como guia.
       </Text>
       <ScrollView horizontal style={{ marginTop: 10 }} contentContainerStyle={{ gap: 8 }}>
         {fotos.map((uri) => (

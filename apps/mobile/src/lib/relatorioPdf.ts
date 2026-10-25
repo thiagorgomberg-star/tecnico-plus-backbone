@@ -6,6 +6,7 @@ import * as Sharing from 'expo-sharing';
 
 import { Caixa } from './caixas';
 import { itensPendentes } from './fila';
+import { referenciasLocais } from './referencia';
 import { calcularPlano, descreverFibra, descreverOlt, padroesPorExtenso, ehPonta, faixasDaBandeja, rotuloInstalacao, rotuloPonto, posicoesDgo, separarBandejas, svgMapaFusao } from './fusao';
 import { descreverVeiculo, meuVeiculo } from './veiculo';
 import { supabase } from './supabase';
@@ -75,12 +76,25 @@ export async function compartilharRelatorio(os: OrdemServico) {
   // Sem internet (ou O.S. ainda não iniciada no servidor): usa o veículo vinculado guardado no celular.
   const veiculo = extra?.veiculo ?? await meuVeiculo(false);
 
+  // O.S. aberta por vistoria ou ocorrência informada: as fotos da abertura entram como "Antes" no comparativo com a correção.
+  const comAbertura = !!(os.origem_ponto_id || os.informado_por);
+  const { data: refs } = comAbertura ? await supabase.rpc('fotos_referencia', { p_os: os.id }) : { data: null };
+  const caminhosRef = new Set(((refs ?? []) as { caminho_arquivo: string }[]).map((r) => r.caminho_arquivo));
+  let antes: string[] = [];
+  if (caminhosRef.size) {
+    const { data: urls } = await supabase.storage.from('os-anexos').createSignedUrls([...caminhosRef], 600);
+    antes = (await Promise.all((urls ?? []).map((u) => (u.signedUrl ? dataUrl(u.signedUrl) : null)))).filter((x): x is string => !!x);
+  } else if (comAbertura) {
+    antes = (await Promise.all((await referenciasLocais(os.id)).map(dataUrl))).filter((x): x is string => !!x);
+  }
+
   const fotos: Foto[] = [];
-  if (anexos?.length) {
-    const { data: urls } = await supabase.storage.from('os-anexos').createSignedUrls(anexos.map((a) => a.caminho_arquivo), 600);
+  const anexosOs = anexos?.filter((a) => !caminhosRef.has(a.caminho_arquivo));
+  if (anexosOs?.length) {
+    const { data: urls } = await supabase.storage.from('os-anexos').createSignedUrls(anexosOs.map((a) => a.caminho_arquivo), 600);
     const imagens = await Promise.all((urls ?? []).map((u) => (u.signedUrl ? dataUrl(u.signedUrl) : null)));
     imagens.forEach((src, i) => src && fotos.push({
-      src, tiradaEm: anexos[i].tirada_em, tipo: anexos[i].tipo, caixaId: anexos[i].caixa_id, fibra: anexos[i].fibra, bandeja: anexos[i].bandeja, descricao: anexos[i].descricao,
+      src, tiradaEm: anexosOs[i].tirada_em, tipo: anexosOs[i].tipo, caixaId: anexosOs[i].caixa_id, fibra: anexosOs[i].fibra, bandeja: anexosOs[i].bandeja, descricao: anexosOs[i].descricao,
     }));
   }
   for (const p of pendentes) {
@@ -106,6 +120,13 @@ export async function compartilharRelatorio(os: OrdemServico) {
 
   const fotosOs = fotos.filter((f) => f.tipo === 'foto_antes' || f.tipo === 'foto_depois');
   const assinatura = [...fotos].reverse().find((f) => f.tipo === 'assinatura');
+  const depois = fotos.filter((f) => f.tipo === 'foto_depois');
+  const pares = Array.from({ length: Math.max(antes.length, depois.length) }, (_, i) => [antes[i], depois[i]?.src] as const);
+  const figura = (src: string | undefined, legenda: string) => (src ? `<figure><img src="${src}"><figcaption>${legenda}</figcaption></figure>` : '<div class="vazio">—</div>');
+  const secaoAntesDepois = antes.length ? `<h2>Antes × Depois</h2>
+  <p class="s">Antes: fotos da abertura (vistoria ou ocorrência informada). Depois: correção executada no mesmo ângulo.</p>
+  <table class="ad"><tr><th>ANTES</th><th>DEPOIS</th></tr>${pares.map(([a, d], i) =>
+    `<tr><td>${figura(a, `Antes ${i + 1}`)}</td><td>${figura(d, `Depois ${i + 1}${depois[i] ? ` · ${quando(depois[i].tiradaEm)}` : ''}`)}</td></tr>`).join('')}</table>` : '';
   const secaoCaixas = caixas.map((c) => {
     const plano = calcularPlano(c);
     const ponta = ehPonta(c.tipo);
@@ -151,7 +172,8 @@ export async function compartilharRelatorio(os: OrdemServico) {
     .g { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; } .l { color: #6b7280; font-size: 9pt; }
     table { width: 100%; border-collapse: collapse; } td { padding: 3px 0; border-bottom: 1px solid #eee; } .d { text-align: right; font-weight: bold; }
     .s { color: #6b7280; } .fotos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .fotos img { width: 100%; border: 1px solid #ddd; } figure { margin: 0; break-inside: avoid; } figcaption { font-size: 8pt; color: #6b7280; }
+    .fotos img { width: 100%; border: 1px solid #ddd; } .ad td { width: 50%; vertical-align: top; } .ad img { width: 100%; border: 1px solid #ddd; }
+    .ad th { text-align: center; font-size: 9pt; } .vazio { text-align: center; color: #9ca3af; padding: 24px 0; } figure { margin: 0; break-inside: avoid; } figcaption { font-size: 8pt; color: #6b7280; }
     pre { white-space: pre-wrap; font-family: inherit; margin: 0; }
   </style></head><body>
   <header>${logo ? `<img src="${logo}">` : ''}<div class="t"><h1>Relatório de atendimento</h1>
@@ -178,6 +200,7 @@ export async function compartilharRelatorio(os: OrdemServico) {
   ${tabela('material', 'Materiais utilizados')}
   ${os.observacao_tecnico ? `<h2>Observações do técnico</h2><pre>${esc(os.observacao_tecnico)}</pre>` : ''}
   ${secaoCaixas}
+  ${secaoAntesDepois}
   <h2>Registro fotográfico (${fotosOs.length})</h2>
   <div class="fotos">${fotosOs.map((f, i) => `<figure><img src="${f.src}"><figcaption>Foto ${i + 1} · ${quando(f.tiradaEm)}</figcaption></figure>`).join('')}</div>
   ${assinatura ? `<h2>Assinatura do responsável</h2><img src="${assinatura.src}" style="max-height:110px;border-bottom:1px solid #999">

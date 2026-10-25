@@ -12,7 +12,7 @@ export default function Icone({ nome, tamanho = 20, cor, style }: { nome: NomeIc
 // Ícone de cada tipo de O.S.
 export function iconeDoTipo(tipo: string): NomeIcone {
   if (/corretiva/i.test(tipo)) return 'flash-alert';
-  if (/evento informado/i.test(tipo)) return 'alert-octagon-outline';
+  if (/evento informado|ocorr[eê]ncia informada/i.test(tipo)) return 'alert-octagon-outline';
   if (/preventiva site/i.test(tipo)) return 'office-building-cog';
   if (/preventiva/i.test(tipo)) return 'shield-check';
   if (/roteamento/i.test(tipo)) return 'transit-connection-variant';

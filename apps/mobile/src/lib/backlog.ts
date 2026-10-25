@@ -27,3 +27,21 @@ export async function assumirBacklog(id: string) {
   const { error } = await supabase.rpc('assumir_backlog', { p_os: id });
   if (error) throw new Error(/assumida|despachada/.test(error.message) ? error.message : 'Não foi possível assumir. Verifique a internet.');
 }
+
+// Dados extras para a tela de detalhe (quem abriu/informou, trecho, origem). Fica guardado para abrir sem internet.
+export type DetalheBacklog = {
+  criada_por: string | null; informado_por: string | null; trecho: string | null; regiao: string | null;
+  observacao_supervisor: string | null; prazo: string | null; evento_localizado_em: string | null; evento_precisao_m: number | null;
+  ponto: { categoria: string; identificacao: string | null; ocorrencia: string | null; observacao: string | null; via: string | null } | null;
+  fotos: number;
+};
+
+export async function detalheBacklog(id: string, aoAtualizar: (d: DetalheBacklog) => void) {
+  const chave = `backlog-detalhe-${id}`;
+  const guardado = await AsyncStorage.getItem(chave).catch(() => null);
+  if (guardado) aoAtualizar(JSON.parse(guardado));
+  const { data, error } = await supabase.rpc('detalhe_backlog', { p_os: id });
+  if (error || !data) return;
+  await AsyncStorage.setItem(chave, JSON.stringify(data));
+  aoAtualizar(data as DetalheBacklog);
+}

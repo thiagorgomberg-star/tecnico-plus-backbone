@@ -99,7 +99,7 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
               <th className="p-3">Título</th>
               <th className="p-3">Técnico</th>
               <th className="p-3">Status</th>
-              <th className="p-3">SLA (4h)</th>
+              <th className="p-3">SLA (4h) / idade</th>
               <th className="p-3">Ações</th>
             </tr>
           </thead>
@@ -142,7 +142,7 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${corStatus[os.status]}`}>{rotuloDaOs(os)}</span>
                   </td>
                   <td className={`p-3 ${atrasada ? "font-semibold text-red-700" : perto ? "font-semibold text-amber-700" : ""}`}>
-                    {data(limite)}
+                    {limite ? data(limite) : emAberto ? <Idade criadoEm={os.criado_em} agora={agora} /> : "—"}
                     {emAberto && restante != null && (
                       <div className="text-xs">{restante < 0 ? `vencido há ${-restante} min` : `${Math.floor(restante / 60)}h${String(restante % 60).padStart(2, "0")} restantes`}</div>
                     )}
@@ -185,5 +185,17 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
       {apoio && <MaterialApoio osId={apoio.id} numero={apoio.numero} fechar={() => setApoio(null)} />}
       {novaAberta && <NovaOS tecnicos={tecnicos} fechar={() => setNovaAberta(false)} criada={carregar} />}
     </section>
+  );
+}
+
+// O.S. sem SLA (ocorrências e correções da preventiva): idade desde a abertura. Até 24h verde, até 48h amarelo, depois vermelho.
+function Idade({ criadoEm, agora }: { criadoEm: string; agora: Date }) {
+  const horas = Math.max(0, (agora.getTime() - new Date(criadoEm).getTime()) / 3_600_000);
+  const cor = horas < 24 ? "bg-green-50 text-green-700" : horas < 48 ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700";
+  const texto = horas < 48 ? `${Math.floor(horas)}h` : `${Math.floor(horas / 24)}d ${Math.floor(horas % 24)}h`;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${cor}`} title="Sem SLA: 24h verde, 48h amarelo, 72h vermelho">
+      <span className="h-1.5 w-1.5 rounded-full bg-current" /> aberta há {texto}
+    </span>
   );
 }

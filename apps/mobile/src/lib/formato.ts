@@ -27,3 +27,12 @@ export function textoSla(limite: string, agora = new Date()) {
     ? { texto: `SLA ${duracao(minutos)} restantes`, nivel: minutos <= 60 ? 'alerta' : 'ok' }
     : { texto: `SLA vencido há ${duracao(-minutos)}`, nivel: 'vencido' };
 }
+
+// O.S. sem SLA (ocorrências e correções da preventiva): idade desde a abertura. Até 24h verde, até 48h amarelo,
+// depois vermelho (72h é o limite de referência).
+export function idadeOs(criadoEm: string, agora = new Date()) {
+  const horas = Math.max(0, (agora.getTime() - new Date(criadoEm).getTime()) / 3_600_000);
+  const texto = horas < 1 ? `${Math.max(1, Math.round(horas * 60))} min` : horas < 48 ? `${Math.floor(horas)}h` : `${Math.floor(horas / 24)}d ${Math.floor(horas % 24)}h`;
+  const nivel: 'verde' | 'amarelo' | 'vermelho' = horas < 24 ? 'verde' : horas < 48 ? 'amarelo' : 'vermelho';
+  return { horas, texto, nivel, cor: nivel === 'verde' ? '#1E9E4A' : nivel === 'amarelo' ? '#D99A00' : '#D0453B' };
+}

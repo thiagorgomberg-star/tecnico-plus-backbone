@@ -20,7 +20,7 @@ type EventoCampo = {
   situacao: string; os_numero: number | null; latitude: number | null; longitude: number | null;
 };
 type Fonte = "os" | "informado" | "vistoria";
-const FONTES: [Fonte, string, string][] = [["os", "O.S.", "#2a78d6"], ["informado", "Eventos informados", "#d0453b"], ["vistoria", "Anotados na vistoria", "#7a5aa6"]];
+const FONTES: [Fonte, string, string][] = [["os", "O.S.", "#2a78d6"], ["informado", "Ocorrências informadas", "#d0453b"], ["vistoria", "Anotados na vistoria", "#7a5aa6"]];
 type Gasto = { data: string; categoria: string; valor: number; tecnico: string; status: string; os_id: string | null };
 
 // Paleta categórica de referência (ordem fixa, validada para barras empilhadas) e rampa sequencial azul.
@@ -169,7 +169,7 @@ export default function Analise() {
     })) : [];
     const deCampo = eventosFiltrados.filter((e) => fontes.includes(e.fonte) && e.latitude != null && e.longitude != null).map((e) => ({
       lon: e.longitude!, lat: e.latitude!,
-      texto: `${e.fonte === "informado" ? "Evento informado" : "Vistoria"} · ${e.descricao} · ${new Date(e.criado_em).toLocaleDateString("pt-BR")}${e.tecnico ? ` · ${e.tecnico}` : ""}${e.os_numero ? ` · O.S. ${e.os_numero}` : ""}`,
+      texto: `${e.fonte === "informado" ? "Ocorrência informada" : "Vistoria"} · ${e.descricao} · ${new Date(e.criado_em).toLocaleDateString("pt-BR")}${e.tecnico ? ` · ${e.tecnico}` : ""}${e.os_numero ? ` · O.S. ${e.os_numero}` : ""}`,
       cor: FONTES.find(([f]) => f === e.fonte)![2],
     }));
     const comLocal = [...daOs, ...deCampo];

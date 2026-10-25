@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
 
   const [os, eventos, servicos, apoio, anexos, local, caixas] = await Promise.all([
     admin.from("ordens_servico")
-      .select("numero, tipo, titulo, descricao, endereco, status, prioridade, ticket_acionamento, ticket_interno, criado_em, enviada_em, iniciada_em, concluida_em, baixada_em, observacao_tecnico, tecnico:usuarios!ordens_servico_tecnico_id_fkey(nome, cargo), rota:rotas(trecho), veiculo:veiculos(placa, marca, modelo, cor)")
+      .select("numero, tipo, origem_ponto_id, informado_por, titulo, descricao, endereco, status, prioridade, ticket_acionamento, ticket_interno, criado_em, enviada_em, iniciada_em, concluida_em, baixada_em, observacao_tecnico, tecnico:usuarios!ordens_servico_tecnico_id_fkey(nome, cargo), rota:rotas(trecho), veiculo:veiculos(placa, marca, modelo, cor)")
       .eq("id", osId).single(),
     admin.from("os_eventos").select("status_novo, criado_em").eq("os_id", osId).order("criado_em"),
     admin.from("os_servicos_executados").select("quantidade, observacao, item:itens_execucao(nome, unidade, categoria)").eq("os_id", osId).order("lancado_em"),
@@ -42,17 +42,36 @@ Deno.serve(async (req) => {
   ]);
   if (os.error || !os.data) return responder({ erro: "O.S. não encontrada." }, 404);
 
-  const caminhos = (anexos.data ?? []).map((a) => a.caminho_arquivo);
+  // O.S. aberta por vistoria ou ocorrência informada: as fotos da abertura viram o "Antes" do comparativo.
+  const { origem_ponto_id: pontoId, informado_por: informante, ...dadosOs } = os.data as typeof os.data & { origem_ponto_id: string | null; informado_por: string | null };
+  const abertura: { caminho_arquivo: string; tirada_em: string | null }[] = [];
+  if (pontoId) {
+    const { data } = await admin.from("os_anexos").select("caminho_arquivo, tirada_em").eq("ponto_id", pontoId).order("criado_em");
+    abertura.push(...(data ?? []));
+  }
+  if (informante) {
+    const { data } = await admin.from("os_anexos").select("caminho_arquivo, tirada_em")
+      .eq("os_id", osId).eq("enviado_por", informante).eq("tipo", "foto_antes").order("criado_em");
+    abertura.push(...(data ?? []));
+  }
+  const daAbertura = new Set(abertura.map((a) => a.caminho_arquivo));
+  const anexosOs = (anexos.data ?? []).filter((a) => !daAbertura.has(a.caminho_arquivo));
+  const { data: urlsAntes } = abertura.length
+    ? await admin.storage.from("os-anexos").createSignedUrls(abertura.map((a) => a.caminho_arquivo), 24 * 3600)
+    : { data: [] };
+
+  const caminhos = anexosOs.map((a) => a.caminho_arquivo);
   const { data: urls } = caminhos.length
     ? await admin.storage.from("os-anexos").createSignedUrls(caminhos, 24 * 3600)
     : { data: [] };
 
   return responder({
-    os: os.data,
+    os: dadosOs,
     eventos: eventos.data ?? [],
     servicos: servicos.data ?? [],
     apoio: (apoio.data ?? []).map((a) => (a.tecnico as { nome?: string } | null)?.nome).filter(Boolean),
-    fotos: (anexos.data ?? []).map((a, i) => ({
+    antes: abertura.map((a, i) => ({ tirada_em: a.tirada_em, url: urlsAntes?.[i]?.signedUrl ?? null })),
+    fotos: anexosOs.map((a, i) => ({
       tirada_em: a.tirada_em, url: urls?.[i]?.signedUrl ?? null, tipo: a.tipo, caixa_id: a.caixa_id, fibra: a.fibra, bandeja: a.bandeja, descricao: a.descricao,
     })),
     caixas: caixas.data ?? [],

@@ -10,7 +10,7 @@ import { enderecoDe, posicaoAtual } from '../lib/localizacao';
 import { navegarAte } from '../lib/navegacao';
 import CameraOS from './CameraOS';
 
-// Evento visto em campo (cabo rompido, poste caído...): vira uma O.S. no backlog que qualquer técnico pode assumir.
+// Ocorrência vista em campo (cabo rompido, poste caído...): vira uma O.S. no backlog que qualquer técnico pode assumir.
 // Funciona sem internet: o registro e as fotos entram na fila e sobem quando houver sinal.
 const CATEGORIAS = [
   'Cabo rompido', 'Cabo baixo / flecha', 'Cabo exposto', 'Poste danificado', 'Caixa de emenda danificada',
@@ -39,7 +39,7 @@ export default function InformarEvento({ usuario, voltar }: { usuario: { nome: s
     return () => assinatura.remove();
   });
 
-  // Fotos deste evento ainda na fila ou já enviadas nesta tela.
+  // Fotos desta ocorrência ainda na fila ou já enviadas nesta tela.
   useEffect(() => {
     const contar = () => itensPendentes().then((i) => setFotos((f) => Math.max(f, i.filter((x) => x.tipo === 'foto' && x.osId === id).length)));
     contar();
@@ -60,9 +60,9 @@ export default function InformarEvento({ usuario, voltar }: { usuario: { nome: s
   }
 
   function validar() {
-    if (!categoria) { Alert.alert('O que é o evento?', 'Escolha o tipo do evento.'); return false; }
-    if (!descricao.trim()) { Alert.alert('Descreva o evento', 'Conte o que foi visto e o que precisa ser feito.'); return false; }
-    if (!local) { Alert.alert('Capture a localização', 'Toque em CAPTURAR LOCALIZAÇÃO no ponto do evento.'); return false; }
+    if (!categoria) { Alert.alert('O que é a ocorrência?', 'Escolha o tipo da ocorrência.'); return false; }
+    if (!descricao.trim()) { Alert.alert('Descreva a ocorrência', 'Conte o que foi visto e o que precisa ser feito.'); return false; }
+    if (!local) { Alert.alert('Capture a localização', 'Toque em CAPTURAR LOCALIZAÇÃO no ponto da ocorrência.'); return false; }
     return true;
   }
 
@@ -87,14 +87,14 @@ export default function InformarEvento({ usuario, voltar }: { usuario: { nome: s
 
   async function concluir() {
     if (!(await registrar())) return;
-    if (fotos === 0) return Alert.alert('Falta a foto', 'Fotografe o evento: as fotos orientam quem for executar.', [{ text: 'Fotografar', onPress: () => setCamera(true) }]);
-    Alert.alert('Evento informado', 'A O.S. foi para o Backlog. Você ou outro técnico pode assumir e iniciar a execução.', [{ text: 'OK', onPress: voltar }]);
+    if (fotos === 0) return Alert.alert('Falta a foto', 'Fotografe a ocorrência: as fotos orientam quem for executar.', [{ text: 'Fotografar', onPress: () => setCamera(true) }]);
+    Alert.alert('Ocorrência informada', 'A O.S. foi para o Backlog. Você ou outro técnico pode assumir e iniciar a execução.', [{ text: 'OK', onPress: voltar }]);
   }
 
   function sair() {
     if (camera) return;
     if (registrado || (!categoria && !descricao && !local)) return voltar();
-    Alert.alert('Descartar evento?', 'O que foi preenchido será perdido.', [
+    Alert.alert('Descartar ocorrência?', 'O que foi preenchido será perdido.', [
       { text: 'Continuar', style: 'cancel' },
       { text: 'Descartar', style: 'destructive', onPress: voltar },
     ]);
@@ -113,10 +113,10 @@ export default function InformarEvento({ usuario, voltar }: { usuario: { nome: s
 
   return (
     <View style={{ flex: 1, backgroundColor: cores.fundo }}>
-      <Cabecalho titulo="Informar evento" subtitulo="Vira O.S. no backlog" voltar={sair} />
+      <Cabecalho titulo="Informar ocorrência" subtitulo="Vira O.S. no backlog" voltar={sair} />
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
         <View style={s.cartao}>
-          <Text style={s.rotulo}>O QUE É O EVENTO *</Text>
+          <Text style={s.rotulo}>O QUE É A OCORRÊNCIA *</Text>
           {chips(CATEGORIAS.map((c) => ({ valor: c, rotulo: c })), categoria, setCategoria)}
           <Text style={s.rotulo}>GRAVIDADE</Text>
           {chips(GRAVIDADES, gravidade, setGravidade)}
@@ -128,7 +128,7 @@ export default function InformarEvento({ usuario, voltar }: { usuario: { nome: s
         </View>
 
         <View style={s.cartao}>
-          <Text style={s.rotulo}>LOCALIZAÇÃO DO EVENTO *</Text>
+          <Text style={s.rotulo}>LOCALIZAÇÃO DA OCORRÊNCIA *</Text>
           <Pressable style={[s.capturar, { backgroundColor: local ? cores.sucesso : cores.primaria }]} onPress={capturar} disabled={capturando || bloqueado}>
             {capturando ? <ActivityIndicator color="#fff" /> : <Icone nome={local ? 'map-marker-check' : 'crosshairs-gps'} tamanho={22} cor="#fff" />}
             <Text style={s.capturarTexto}>{capturando ? 'CAPTURANDO...' : local ? 'LOCALIZAÇÃO CAPTURADA' : 'CAPTURAR LOCALIZAÇÃO'}</Text>
@@ -148,13 +148,13 @@ export default function InformarEvento({ usuario, voltar }: { usuario: { nome: s
                 </Pressable>
               </View>
             </>
-          ) : <Text style={s.ajuda}>Fique no ponto do evento e toque no botão. Funciona sem internet.</Text>}
+          ) : <Text style={s.ajuda}>Fique no ponto da ocorrência e toque no botão. Funciona sem internet.</Text>}
           <TextInput style={s.campo} editable={!bloqueado} value={endereco} onChangeText={setEndereco} multiline
             placeholder="Endereço / referência" placeholderTextColor={cores.apagado} />
         </View>
 
         <View style={s.cartao}>
-          <Text style={s.rotulo}>FOTOS DO EVENTO</Text>
+          <Text style={s.rotulo}>FOTOS DA OCORRÊNCIA</Text>
           <Text style={s.ajuda}>
             {fotos > 0 ? `${fotos} foto(s) tirada(s).` : 'Tire pelo menos uma foto (recomendado 3).'} Quem for executar vai usar estas fotos como guia para fotografar a correção no mesmo ângulo.
           </Text>

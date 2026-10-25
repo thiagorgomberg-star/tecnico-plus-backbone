@@ -23,6 +23,7 @@ type Relatorio = {
   eventos: { status_novo: StatusOS; criado_em: string }[];
   servicos: { quantidade: number; observacao: string | null; item: { nome: string; unidade: string; categoria: string } | null }[];
   apoio: string[];
+  antes?: { tirada_em: string | null; url: string | null }[];
   fotos: { tirada_em: string | null; url: string | null; tipo?: string; caixa_id?: string | null; fibra?: number | null; bandeja?: number | null; descricao?: string | null }[];
   caixas?: CaixaPainel[];
   local: { latitude: number; longitude: number; evento_localizado_em: string; evento_precisao_m: number | null } | null;
@@ -59,6 +60,8 @@ function Conteudo() {
   const { os, local } = dados;
   const fotosOs = dados.fotos.filter((f) => !f.tipo || f.tipo === "foto_antes" || f.tipo === "foto_depois");
   const assinatura = [...dados.fotos].reverse().find((f) => f.tipo === "assinatura");
+  const antes = dados.antes ?? [];
+  const depois = dados.fotos.filter((f) => f.tipo === "foto_depois");
   const origem = (c: CaixaPainel) => c.origem_identificacao ?? (c.origem_dgo ? `DGO ${c.origem_dgo}` : null);
   const secao = "mt-6 break-inside-avoid";
   const titulo = "border-b-2 border-[#0572CE] pb-1 text-sm font-bold uppercase tracking-wide text-[#0572CE]";
@@ -252,6 +255,26 @@ function Conteudo() {
           </section>
         );
       })}
+
+      {antes.length ? (
+        <section className="mt-6">
+          <h2 className={titulo}>Antes × Depois</h2>
+          <p className="mt-1 text-xs text-gray-500">Antes: fotos da abertura (vistoria ou ocorrência informada). Depois: correção executada no mesmo ângulo.</p>
+          <div className="mt-2 grid grid-cols-2 gap-3 text-center text-xs font-bold text-gray-600"><div>ANTES</div><div>DEPOIS</div></div>
+          {Array.from({ length: Math.max(antes.length, depois.length) }, (_, i) => (
+            <div key={i} className="mt-2 grid break-inside-avoid grid-cols-2 gap-3">
+              {[antes[i], depois[i]].map((f, lado) => (
+                <figure key={lado}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {f?.url ? <img src={f.url} alt={`${lado ? "Depois" : "Antes"} ${i + 1}`} className="aspect-[4/3] w-full rounded border border-gray-200 object-cover" />
+                    : <div className="flex aspect-[4/3] items-center justify-center rounded border border-dashed border-gray-300 text-gray-400">—</div>}
+                  <figcaption className="mt-1 text-xs text-gray-500">{lado ? "Depois" : "Antes"} {i + 1}{f?.tirada_em ? ` · ${quando(f.tirada_em)}` : ""}</figcaption>
+                </figure>
+              ))}
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       <section className="mt-6">
         <h2 className={titulo}>Registro fotográfico ({fotosOs.length})</h2>
