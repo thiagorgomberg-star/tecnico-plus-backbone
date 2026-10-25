@@ -39,23 +39,28 @@ export default function AnalisarCurva({ voltar }: { voltar: () => void }) {
     const r = await Seletor.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
     if (r.canceled || !r.assets[0]) return;
     const a = r.assets[0];
-    if (!/\.sor$/i.test(a.name)) return Alert.alert('Arquivo não aceito', 'Escolha o arquivo .SOR exportado do OTDR.');
     const origem = new File(a.uri);
+    let nome = a.name;
     try {
-      lerSor(await origem.bytes());
-    } catch (e) {
-      return Alert.alert('Não foi possível ler a curva', (e as Error).message || 'Arquivo .SOR inválido.');
+      const sor = lerSor(await origem.bytes());
+      // Sem o nome original, identifica pela própria curva (cabo, fibra, onda e data).
+      if (!/\.sor$/i.test(a.name)) {
+        nome = [sor.cabo, sor.fibra, `${sor.comprimentoOndaNm} nm`, sor.data?.toLocaleDateString('pt-BR')].filter(Boolean).join(' · ') || a.name;
+      }
+    } catch {
+      // O Android às vezes entrega o arquivo sem a extensão (ex.: "Documento"), então vale o conteúdo, não o nome.
+      return Alert.alert('Arquivo não aceito', 'Este arquivo não é uma curva .SOR. Escolha o arquivo exportado do OTDR.');
     }
     if (!pasta().exists) pasta().create({ intermediates: true });
     const destino = new File(pasta(), `${Date.now()}_${a.name.replace(/[^\w.-]+/g, '_')}`);
     origem.copy(destino);
-    const nova = [{ arquivo: destino.name, nome: a.name, em: new Date().toISOString() }, ...lista];
+    const nova = [{ arquivo: destino.name, nome, em: new Date().toISOString() }, ...lista];
     for (const velha of nova.slice(LIMITE)) {
       const f = new File(pasta(), velha.arquivo);
       if (f.exists) f.delete();
     }
     await salvar(nova.slice(0, LIMITE));
-    setAberta({ nome: a.name, uri: destino.uri });
+    setAberta({ nome, uri: destino.uri });
   }
 
   function apagar(g: Guardada) {
