@@ -109,10 +109,13 @@ export const descreverOlt = (f: SituacaoFibra) => (f.cordao_olt
   ? [`OLT${f.olt_modelo ? ` ${f.olt_modelo}` : ''}`, f.olt_posicao, f.sfp_tipo || f.sfp_modelo ? `SFP ${[f.sfp_tipo, f.sfp_modelo].filter(Boolean).join(' ')}` : null, f.cordao_tipo ? `cordão ${f.cordao_tipo}` : null]
     .filter(Boolean).join(' · ')
   : '');
+// Onde o DGO fica na sala (todos opcionais): "Fila 3 · Rack 12 · Bastidor B03".
+export const localDgo = (c: { fila?: string | null; rack?: string | null; bastidor?: string | null }) =>
+  [c.fila && `Fila ${c.fila}`, c.rack && `Rack ${c.rack}`, c.bastidor && `Bastidor ${c.bastidor}`].filter(Boolean).join(' · ');
 export type PlanoCaixa = {
   identificacao: string; capacidade_fibras: number; saidas: number[]; manobras: Manobra[];
   fibras?: SituacaoFibra[]; origem?: string | null; fusoes_por_bandeja?: number | null;
-  tipo?: string; bastidor?: string | null;
+  tipo?: string; bastidor?: string | null; fila?: string | null; rack?: string | null;
   padrao_cores_entrada?: string | null; padrao_cores_saidas?: (string | null)[] | null;
   // Posição no DGO de cada fibra de entrada, achada seguindo o cabo de volta até o DGO (ver posicoesDgo).
   posicoes_dgo?: Record<number, string>;
@@ -300,7 +303,7 @@ export function svgMapaFusao(caixa: PlanoCaixa) {
   const partes: string[] = [];
   let y = 40;
   // No DGO a esquerda são as posições do DGO; nas caixas, o cabo que chega.
-  const titulo = dgo ? `DGO · ${cap} posições${caixa.bastidor ? ` · ${caixa.bastidor}` : ''}`
+  const titulo = dgo ? `DGO · ${cap} posições${localDgo(caixa) ? ` · ${localDgo(caixa)}` : ''}`
     : `Entrada · ${cap} FO${rotuloPadrao(caixa.padrao_cores_entrada) ? ` · ${rotuloPadrao(caixa.padrao_cores_entrada)}` : ''}${caixa.origem ? ` · de ${caixa.origem}` : ''}`;
   partes.push(`<rect x="0" y="4" width="250" height="22" rx="4" fill="#3f3f46"/><text x="10" y="19" fill="#fff" font-size="12" font-weight="bold">${esc(titulo.slice(0, 40))}</text>`);
   for (const t of tubosEntrada) {

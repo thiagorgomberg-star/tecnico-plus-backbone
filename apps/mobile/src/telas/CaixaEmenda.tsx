@@ -213,7 +213,6 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
     if (c.saidas.some((q) => !q)) return Alert.alert('Informe o tamanho do cabo de cada saída');
     if (calcularPlano(c).ligacoes.length && !c.fusoes_por_bandeja && !dgo) return Alert.alert('Informe quantas fusões cabem por bandeja');
     if (c.tipo === 'site' && !c.parceiro?.trim()) return Alert.alert('Informe o parceiro do site');
-    if (dgo && !c.bastidor?.trim()) return Alert.alert('Informe o bastidor do DGO');
     if ((c.tipo === 'emenda' || c.tipo === 'entroncamento') && !c.instalacao) return Alert.alert('Informe se a caixa é aérea ou subterrânea');
     if (dgo && !c.instalacao) return Alert.alert('Informe onde o DGO está instalado', 'Container, rooftop ou site de outro parceiro.');
     if (dgo && c.instalacao === 'site_parceiro' && !c.parceiro?.trim()) return Alert.alert('Informe de qual parceiro é o site');
@@ -297,9 +296,15 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           ) : null}
           {dgo ? (
             <>
-              <Text style={s.rotulo}>BASTIDOR *</Text>
-              <TextInput style={s.campo} value={c.bastidor ?? ''} onChangeText={(t) => mudar({ bastidor: t })}
-                placeholder="Ex.: Sala 2 · Bastidor B03" />
+              <Text style={s.rotulo}>LOCAL NA SALA (OPCIONAL)</Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {([['fila', 'Fila', 'Ex.: 3'], ['rack', 'Rack', 'Ex.: 12'], ['bastidor', 'Bastidor', 'Ex.: B03']] as const).map(([campo, rotulo, ex]) => (
+                  <View key={campo} style={{ flex: 1 }}>
+                    <Text style={s.suave}>{rotulo}</Text>
+                    <TextInput style={s.campo} value={c[campo] ?? ''} onChangeText={(t) => mudar({ [campo]: t })} placeholder={ex} />
+                  </View>
+                ))}
+              </View>
             </>
           ) : null}
           {c.tipo === 'site' || (dgo && c.instalacao === 'site_parceiro') ? (

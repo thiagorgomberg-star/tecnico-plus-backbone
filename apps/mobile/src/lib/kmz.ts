@@ -5,7 +5,7 @@ import { Alert } from 'react-native';
 
 import { Caixa } from './caixas';
 import { itensPendentes } from './fila';
-import { descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, midiasKmz, posicoesDgo, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from './fusao';
+import { descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, localDgo, midiasKmz, posicoesDgo, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from './fusao';
 import { supabase } from './supabase';
 import { OrdemServico } from './tipos';
 
@@ -22,7 +22,7 @@ export function kmlDasCaixas(os: Pick<OrdemServico, 'numero' | 'titulo' | 'tipo'
     const linhas = [
       `${rotuloPonto(c.tipo)}${rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ''} · O.S. ${os.numero}`,
       c.parceiro ? `Parceiro: ${c.parceiro}` : null,
-      c.bastidor ? `Bastidor: ${c.bastidor}` : null,
+      localDgo(c) || null,
       c.origem ? `Vem de: ${c.origem}${c.origem_saida ? ` (saída ${c.origem_saida})` : ''}` : null,
       `Entrada ${c.capacidade_fibras} FO → ${c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO`).join(', ') || 'sem saída'}`,
       ...(c.tipo === 'dgo' ? [] : separarBandejas(c)).map((b) => `Bandeja ${b.numero}: ${b.ligacoes.length} fusões (${faixasDaBandeja(b)})`),

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import CaixaDetalhe, { CaixaPainel, ehPonta, origemDe } from "@/componentes/CaixaDetalhe";
-import { clienteDoCaminho, descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, midiasKmz, posicoesDgo, rastrearFibra, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from "@/lib/fusao";
+import { clienteDoCaminho, descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, localDgo, midiasKmz, posicoesDgo, rastrearFibra, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from "@/lib/fusao";
 import { excluirComConfirmacao } from "@/lib/excluir";
 import { supabase } from "@/lib/supabase";
 
@@ -38,7 +38,7 @@ export async function baixarKmz(caixas: CaixaPainel[], arquivo = `caixas-emenda-
     const linhas = [
       `${rotuloPonto(c.tipo)}${rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ""} · O.S. ${c.os_numero}${c.trecho ? ` · ${c.trecho}` : ""}`,
       c.parceiro ? `Parceiro: ${c.parceiro}` : null,
-      c.bastidor ? `Bastidor: ${c.bastidor}` : null,
+      localDgo(c) || null,
       origemDe(c) ? `Vem de: ${origemDe(c)}${c.origem_saida ? ` (saída ${c.origem_saida})` : ""}` : null,
       `Entrada ${c.capacidade_fibras} FO → ${c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO`).join(", ") || "sem saída"}`,
       `Grupos: ${c.grupos_fusionados} fusionados, ${c.grupos_vagos} vagos`,
@@ -142,7 +142,7 @@ export default function CaixasRede() {
                 return (
                   <li key={i} className="mb-2">
                     <b>{c.identificacao}</b> <span className="text-gray-500">({rotuloPonto(c.tipo)})</span> · {c.tipo === "dgo"
-                      ? <>posição <b>{c.fibras?.find((f) => f.fibra === p.fibraEntrada)?.posicao_dgo ?? `FO ${p.fibraEntrada}`}</b>{c.bastidor ? ` (${c.bastidor})` : ""}</>
+                      ? <>posição <b>{c.fibras?.find((f) => f.fibra === p.fibraEntrada)?.posicao_dgo ?? `FO ${p.fibraEntrada}`}</b>{localDgo(c) ? ` (${localDgo(c)})` : ""}</>
                       : <>entra na {descreverFibra(p.fibraEntrada, c.capacidade_fibras, c.padrao_cores_entrada ?? undefined)}</>}
                     {p.saida ? <> → sai {c.tipo === "dgo" ? "no cabo" : "na Saída"} {p.saida}, {descreverFibra(p.fibraSaida!, c.saidas[p.saida - 1] ?? c.capacidade_fibras, c.padrao_cores_saidas?.[p.saida - 1] ?? undefined)}</> : <span className="text-gray-500"> · a fibra termina aqui</span>}
                     {p.manobra && <span className="ml-1 rounded bg-red-100 px-1.5 text-xs font-semibold text-red-800">MANOBRA{p.motivo ? `: ${p.motivo}` : ""}</span>}

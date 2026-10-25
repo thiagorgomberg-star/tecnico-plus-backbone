@@ -21,6 +21,8 @@ export type Caixa = CaixaRede & {
   parceiro?: string | null;
   instalacao?: string | null;
   bastidor?: string | null;
+  fila?: string | null;
+  rack?: string | null;
   padrao_cores_entrada?: string | null;
   padrao_cores_saidas?: (string | null)[] | null;
 };
@@ -38,7 +40,7 @@ async function ler<T>(chave: string, padrao: T): Promise<T> {
 }
 
 const CAMPOS = 'id, os_id, tipo, identificacao, capacidade_fibras, saidas, grupos_fusionados, grupos_vagos, observacao, endereco, ' +
-  'latitude, longitude, precisao_m, localizada_em, origem_caixa_id, origem_saida, origem_dgo, origem_identificacao, manobras, fibras, fusoes_por_bandeja, parceiro, instalacao, bastidor, padrao_cores_entrada, padrao_cores_saidas';
+  'latitude, longitude, precisao_m, localizada_em, origem_caixa_id, origem_saida, origem_dgo, origem_identificacao, manobras, fibras, fusoes_por_bandeja, parceiro, instalacao, bastidor, padrao_cores_entrada, padrao_cores_saidas, fila, rack';
 
 // Caixas da O.S.: na hora vem do celular; com internet atualiza do servidor (sem perder o que ainda está na fila).
 export async function caixasDaOs(osId: string, aoAtualizar: (c: Caixa[]) => void) {
@@ -100,6 +102,8 @@ export async function salvarCaixa(caixa: Caixa, nova: boolean) {
     padrao_cores_saidas: caixa.saidas.some((_, i) => caixa.padrao_cores_saidas?.[i])
       ? caixa.saidas.map((_, i) => caixa.padrao_cores_saidas?.[i] || null) : null,
     bastidor: caixa.tipo === 'dgo' ? caixa.bastidor?.trim() || null : null,
+    fila: caixa.tipo === 'dgo' ? caixa.fila?.trim() || null : null,
+    rack: caixa.tipo === 'dgo' ? caixa.rack?.trim() || null : null,
     instalacao: instalacoesDoTipo(caixa.tipo).some((x) => x.valor === caixa.instalacao) ? caixa.instalacao ?? null : null,
     observacao: caixa.observacao,
     endereco: caixa.endereco,

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { CaixaRede, calcularPlano, descreverOlt, padroesPorExtenso, ehPonta, descreverFibra, faixasDaBandeja, rotuloInstalacao, rotuloPonto, separarBandejas, svgMapaFusao } from "@/lib/fusao";
+import { CaixaRede, calcularPlano, descreverOlt, localDgo, padroesPorExtenso, ehPonta, descreverFibra, faixasDaBandeja, rotuloInstalacao, rotuloPonto, separarBandejas, svgMapaFusao } from "@/lib/fusao";
 import { supabase } from "@/lib/supabase";
 
 export type CaixaPainel = CaixaRede & {
@@ -22,6 +22,8 @@ export type CaixaPainel = CaixaRede & {
   parceiro?: string | null;
   instalacao?: string | null;
   bastidor?: string | null;
+  fila?: string | null;
+  rack?: string | null;
 };
 
 type Foto = { id: string; tipo: string; fibra: number | null; bandeja: number | null; url?: string };
@@ -60,7 +62,7 @@ export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
           ) : "—"}</dd>
         </div>
         {padroesPorExtenso(c) ? <div className="sm:col-span-2"><dt className="text-gray-500">Padrão de cores</dt><dd>{padroesPorExtenso(c)}</dd></div> : null}
-        {c.bastidor ? <div><dt className="text-gray-500">Bastidor</dt><dd>{c.bastidor}</dd></div> : null}
+        {localDgo(c) ? <div><dt className="text-gray-500">Local do DGO</dt><dd>{localDgo(c)}</dd></div> : null}
         <div><dt className="text-gray-500">O.S. / técnico</dt><dd>#{c.os_numero} · {c.tecnico ?? "—"}</dd></div>
         <div className="sm:col-span-2"><dt className="text-gray-500">Endereço</dt><dd>{c.endereco ?? "—"}</dd></div>
         <div>
