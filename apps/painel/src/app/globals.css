@@ -1,12 +1,28 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: mdi;
+  src: url("/fonts/mdi.ttf") format("truetype");
+  font-display: block;
+}
+
 body {
-  background: #f4f6f8;
-  color: #1b1f24;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: #eef1f5;
+  color: #101828;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 @media print {
   @page { size: A4; margin: 12mm; }
-  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #fff; }
+  nav, .barra-topo { display: none !important; }
+}
+
+/* Cartões das telas no estilo do app do técnico: cantos maiores e sombra leve no lugar da borda. */
+main .rounded-xl.border-gray-200,
+main .rounded-lg.border-gray-200.bg-white {
+  border-color: #e7ebf0;
+  border-radius: 18px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 4px 12px rgba(16, 24, 40, 0.04);
 }

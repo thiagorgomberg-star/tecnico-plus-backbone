@@ -1,5 +1,6 @@
 "use client";
 
+import Icone from "@/componentes/Icone";
 import { useCallback, useEffect, useState } from "react";
 
 import { supabase } from "@/lib/supabase";
@@ -52,8 +53,8 @@ export default function Avisos({ usuarioId }: { usuarioId: string }) {
 
   return (
     <div className="relative">
-      <button onClick={abrir} className="relative rounded-md px-2 py-1 hover:bg-gray-100" title="Avisos">
-        🔔
+      <button onClick={abrir} className="relative flex h-8 w-8 items-center justify-center rounded-lg text-[#163A6B] hover:bg-gray-100" title="Avisos">
+        <Icone nome="bell-outline" tamanho={21} />
         {naoLidos.length > 0 && (
           <span className="absolute -right-1 -top-1 rounded-full bg-red-600 px-1.5 text-xs font-semibold text-white">{naoLidos.length}</span>
         )}
