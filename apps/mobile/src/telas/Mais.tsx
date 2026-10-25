@@ -1,11 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
 import Icone, { NomeIcone } from '../componentes/Icone';
 import { buscarAtualizacaoAgora, DATA_ATUALIZACAO, VERSAO_APP } from '../lib/atualizacao';
 import { cores, fundoDe, sombra } from '../lib/estilo';
+import { minhaFoto } from '../lib/foto';
 import { Tema, TEMAS, temaAtual, trocarTema } from '../lib/tema';
 import { supabase } from '../lib/supabase';
 import { descreverVeiculo, MeuVeiculo, meuVeiculo } from '../lib/veiculo';
@@ -18,7 +19,9 @@ const iniciais = (nome: string) => nome.split(/\s+/).filter(Boolean).slice(0, 2)
 export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
   const [veiculo, setVeiculo] = useState<MeuVeiculo | null>(null);
   const [auxiliares, setAuxiliares] = useState<string[]>([]);
+  const [foto, setFoto] = useState<string | null>(null);
   useEffect(() => {
+    minhaFoto(setFoto).catch(() => {});
     AsyncStorage.getItem('meus-auxiliares').then((c) => c && setAuxiliares(JSON.parse(c).map((a: { nome: string }) => a.nome)));
     supabase.rpc('meus_auxiliares').then(({ data, error }) => {
       if (error || !data) return;
@@ -46,7 +49,7 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
       <ScrollView>
         <Cabecalho titulo="Menu" estendido={44} />
         <Pressable style={({ pressed }) => [s.perfil, pressed && { opacity: 0.9 }]} onPress={() => abrir('perfil')}>
-          <View style={s.avatar}><Text style={s.avatarTexto}>{iniciais(nome)}</Text></View>
+          {foto ? <Image source={{ uri: foto }} style={s.avatar} /> : <View style={s.avatar}><Text style={s.avatarTexto}>{iniciais(nome)}</Text></View>}
           <View style={{ flex: 1 }}>
             <Text style={s.nome} numberOfLines={1}>{nome || 'Técnico'}</Text>
             <Text style={s.detalhe}>{cargo ?? 'Técnico de campo'} · Multivale Backbone</Text>

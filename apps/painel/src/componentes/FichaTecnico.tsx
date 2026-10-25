@@ -79,6 +79,28 @@ export default function FichaTecnico({ id, fechar, aoSalvar }: { id: string; fec
   const [pdf, setPdf] = useState<File | null>(null);
   const [enviandoCurso, setEnviandoCurso] = useState(false);
   const [versaoCursos, setVersaoCursos] = useState(0);
+  const [foto, setFoto] = useState<string | null>(null);
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
+
+  // Foto do crachá: o técnico pode trocar pelo app; aqui o supervisor também pode enviar.
+  useEffect(() => {
+    supabase.from("usuarios").select("foto").eq("id", id).single().then(async ({ data }) => {
+      if (!data?.foto) return setFoto(null);
+      const { data: link } = await supabase.storage.from("documentos-tecnico").createSignedUrl(data.foto, 600);
+      setFoto(link?.signedUrl ?? null);
+    });
+  }, [id, enviandoFoto]);
+
+  async function enviarFoto(arquivo: File) {
+    if (!arquivo.type.startsWith("image/")) return setErro("Escolha uma imagem (JPG ou PNG).");
+    setEnviandoFoto(true);
+    const caminho = `${id}/foto.jpg`;
+    const envio = await supabase.storage.from("documentos-tecnico").upload(caminho, arquivo, { contentType: arquivo.type, upsert: true });
+    if (envio.error) { setEnviandoFoto(false); return setErro(envio.error.message); }
+    const { error } = await supabase.from("usuarios").update({ foto: caminho, foto_em: new Date().toISOString() }).eq("id", id);
+    if (error) setErro(error.message);
+    setEnviandoFoto(false);
+  }
 
   useEffect(() => {
     supabase.from("tecnico_cursos").select("id, tipo, curso, instituicao, carga_horaria, data_conclusao, validade, arquivo").eq("usuario_id", id)
@@ -151,6 +173,12 @@ export default function FichaTecnico({ id, fechar, aoSalvar }: { id: string; fec
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={fechar}>
       <form className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()} onSubmit={salvar}>
         <div className="mb-2 flex items-center">
+          <label className="relative mr-3 grid h-14 w-14 cursor-pointer place-items-center overflow-hidden rounded-full bg-gray-100 text-[10px] text-gray-500"
+            title="Trocar foto do crachá">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {foto ? <img src={foto} alt="Foto" className="h-full w-full object-cover" /> : enviandoFoto ? "Enviando…" : "+ Foto"}
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && enviarFoto(e.target.files[0])} />
+          </label>
           <h2 className="mr-auto text-lg font-semibold">Ficha do técnico</h2>
           <button type="button" className="text-2xl leading-none text-gray-500" onClick={fechar} aria-label="Fechar">×</button>
         </div>

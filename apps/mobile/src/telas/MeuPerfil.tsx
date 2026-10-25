@@ -1,11 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ReactNode, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, LayoutAnimation, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import Cabecalho, { FundoDegrade } from '../componentes/Cabecalho';
 import Icone, { NomeIcone } from '../componentes/Icone';
 import { abrirPdf, Curso, meusCursos, situacaoCurso } from '../lib/cursos';
 import { cores, sombra } from '../lib/estilo';
+import { minhaFoto, trocarFoto } from '../lib/foto';
 import { supabase } from '../lib/supabase';
 import { descreverVeiculo, MeuVeiculo, meuVeiculo } from '../lib/veiculo';
 
@@ -23,6 +24,12 @@ const CAMPOS = 'id, nome, cargo, matricula, papel, ativo, telefone, cpf, rg, doc
   + 'cnh_numero, cnh_categoria, cnh_validade, contato_emergencia, telefone_emergencia, tamanho_camisa, tamanho_calca, tamanho_calcado, '
   + 'inicio_jornada, fim_jornada, fim_jornada_sexta, regime_horas, tipo_sanguineo, alergias, escolaridade, formacao, pis, observacao';
 const CACHE = 'meu-perfil';
+// Só o que não é dado pessoal fica guardado no celular; CPF, RG, endereço etc. vêm do servidor na hora e somem ao fechar a tela.
+const GUARDAVEIS: (keyof Ficha)[] = ['id', 'nome', 'cargo', 'matricula', 'papel', 'ativo', 'inicio_jornada', 'fim_jornada', 'fim_jornada_sexta',
+  'tamanho_camisa', 'tamanho_calca', 'tamanho_calcado'];
+const soGuardaveis = (f: Ficha) => Object.fromEntries(GUARDAVEIS.map((k) => [k, f[k]]));
+// Mostra só o finalzinho até o técnico tocar em "mostrar".
+const mascarar = (v: string | null | undefined) => (v ? `•••••• ${v.replace(/\s/g, '').slice(-2)}` : null);
 
 const dataBr = (d: string | null) => (d ? d.slice(0, 10).split('-').reverse().join('/') : null);
 const iniciais = (nome: string) => nome.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'T';
@@ -35,6 +42,9 @@ export default function MeuPerfil({ voltar }: { voltar: () => void }) {
   const [auxiliares, setAuxiliares] = useState<string[]>([]);
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [abrindo, setAbrindo] = useState<string | null>(null);
+  const [foto, setFoto] = useState<string | null>(null);
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
+  const [verDados, setVerDados] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(CACHE).then((c) => c && setFicha((f) => f ?? JSON.parse(c)));
@@ -42,6 +52,7 @@ export default function MeuPerfil({ voltar }: { voltar: () => void }) {
     AsyncStorage.getItem('meus-auxiliares').then((c) => c && setAuxiliares(JSON.parse(c).map((a: { nome: string }) => a.nome))).catch(() => {});
     meuVeiculo(false).then(setVeiculo).catch(() => {});
     meusCursos(setCursos).catch(() => {});
+    minhaFoto(setFoto).catch(() => {});
     (async () => {
       const { data: sessao } = await supabase.auth.getSession();
       const id = sessao.session?.user.id;
@@ -49,12 +60,30 @@ export default function MeuPerfil({ voltar }: { voltar: () => void }) {
       const { data } = await supabase.from('usuarios').select(CAMPOS).eq('id', id).maybeSingle();
       if (data) {
         setFicha(data as unknown as Ficha);
-        AsyncStorage.setItem(CACHE, JSON.stringify(data));
+        AsyncStorage.setItem(CACHE, JSON.stringify(soGuardaveis(data as unknown as Ficha)));
       }
       const emp = await supabase.from('config_empresa').select('razao_social').maybeSingle();
       if (emp.data?.razao_social) setEmpresa(emp.data.razao_social);
     })();
   }, []);
+
+  function pedirFoto() {
+    const usar = async (origem: 'camera' | 'galeria') => {
+      setEnviandoFoto(true);
+      try {
+        const nova = await trocarFoto(origem);
+        if (nova) setFoto(nova);
+      } catch (e) {
+        Alert.alert('Foto não enviada', (e as Error).message);
+      }
+      setEnviandoFoto(false);
+    };
+    Alert.alert('Foto do crachá', 'Use uma foto de rosto, de frente e com fundo claro.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Galeria', onPress: () => usar('galeria') },
+      { text: 'Câmera', onPress: () => usar('camera') },
+    ]);
+  }
 
   const cnhVencida = !!ficha?.cnh_validade && new Date(`${ficha.cnh_validade}T23:59:59`) < new Date();
   const papel = ficha?.papel === 'auxiliar' ? 'Auxiliar técnico' : 'Técnico de campo';
@@ -71,9 +100,13 @@ export default function MeuPerfil({ voltar }: { voltar: () => void }) {
             <Text style={s.empresa} numberOfLines={1}>{(empresa ?? 'Multivale Engenharia').toUpperCase()}</Text>
             <Text style={s.setor}>Backbone · Fibra óptica</Text>
           </View>
-          <View style={s.avatarBorda}>
-            <View style={s.avatar}><Text style={s.avatarTexto}>{iniciais(ficha?.nome ?? '')}</Text></View>
-          </View>
+          <Pressable style={s.avatarBorda} onPress={pedirFoto} disabled={enviandoFoto} accessibilityLabel="Trocar foto">
+            {foto ? <Image source={{ uri: foto }} style={s.avatar} />
+              : <View style={s.avatar}><Text style={s.avatarTexto}>{iniciais(ficha?.nome ?? '')}</Text></View>}
+            <View style={s.camera}>
+              {enviandoFoto ? <ActivityIndicator size="small" color="#fff" /> : <Icone nome="camera" tamanho={16} cor="#fff" />}
+            </View>
+          </Pressable>
           <Text style={s.nome}>{ficha?.nome ?? '—'}</Text>
           <Text style={s.cargo}>{ficha?.cargo || papel}</Text>
           <View style={s.chips}>
@@ -86,11 +119,15 @@ export default function MeuPerfil({ voltar }: { voltar: () => void }) {
             </View>
           </View>
           <View style={s.crachaGrade}>
-            <Dado rotulo="CPF" valor={ficha?.cpf ?? ficha?.documento} />
-            <Dado rotulo="RG" valor={ficha?.rg} />
-            <Dado rotulo="Admissão" valor={dataBr(ficha?.data_admissao ?? null)} />
-            <Dado rotulo="Telefone" valor={ficha?.telefone} />
+            <Dado rotulo="CPF" valor={verDados ? ficha?.cpf ?? ficha?.documento : mascarar(ficha?.cpf ?? ficha?.documento)} />
+            <Dado rotulo="RG" valor={verDados ? ficha?.rg : mascarar(ficha?.rg)} />
+            <Dado rotulo="Admissão" valor={verDados ? dataBr(ficha?.data_admissao ?? null) : mascarar(ficha?.data_admissao)} />
+            <Dado rotulo="Telefone" valor={verDados ? ficha?.telefone : mascarar(ficha?.telefone)} />
           </View>
+          <Pressable style={s.mostrar} onPress={() => setVerDados((v) => !v)}>
+            <Icone nome={verDados ? 'eye-off-outline' : 'eye-outline'} tamanho={16} cor={cores.primaria} />
+            <Text style={s.mostrarTexto}>{verDados ? 'Ocultar dados' : 'Mostrar dados'}</Text>
+          </Pressable>
           <View style={s.crachaRodape}>
             <Icone nome="shield-check-outline" tamanho={14} cor={cores.apagado} />
             <Text style={s.rodapeTexto}>ID {ficha?.id.slice(0, 8).toUpperCase() ?? '—'} · válido enquanto ativo</Text>
@@ -103,7 +140,7 @@ export default function MeuPerfil({ voltar }: { voltar: () => void }) {
           const icone: NomeIcone = tipo === 'licenca' ? 'file-certificate-outline' : tipo === 'nr' ? 'shield-account-outline' : 'school-outline';
           if (!lista.length && tipo === 'licenca') return null;
           return (
-            <Grupo key={tipo} titulo={titulo} icone={icone}>
+            <Grupo key={tipo} titulo={titulo} icone={icone} resumo={lista.length ? `${lista.length} ${lista.length === 1 ? 'item' : 'itens'}` : 'Nenhum'}>
               {lista.length ? lista.map((c) => {
                 const sit = situacaoCurso(c);
                 const cor = sit === 'vencido' ? cores.perigo : sit === 'vence' ? cores.alerta : sit === 'ok' ? cores.sucesso : cores.suave;
@@ -135,14 +172,14 @@ export default function MeuPerfil({ voltar }: { voltar: () => void }) {
           );
         })}
 
-        <Grupo titulo="DOCUMENTOS" icone="card-account-details-outline">
+        <Grupo titulo="DOCUMENTOS" icone="card-account-details-outline" resumo="Nascimento, CNH, PIS">
           <Linha rotulo="Data de nascimento" valor={dataBr(ficha?.data_nascimento ?? null)} />
           <Linha rotulo="CNH" valor={[ficha?.cnh_numero, ficha?.cnh_categoria && `cat. ${ficha.cnh_categoria}`].filter(Boolean).join(' · ') || null} />
           <Linha rotulo="Validade da CNH" valor={dataBr(ficha?.cnh_validade ?? null)} alerta={cnhVencida ? 'Vencida' : undefined} />
           <Linha rotulo="PIS / NIT" valor={ficha?.pis} />
         </Grupo>
 
-        <Grupo titulo="INFORMAÇÕES COMPLEMENTARES" icone="information-outline">
+        <Grupo titulo="INFORMAÇÕES COMPLEMENTARES" icone="information-outline" resumo="Saúde e formação">
           <Linha rotulo="Tipo sanguíneo" valor={ficha?.tipo_sanguineo} />
           <Linha rotulo="Alergias / restrições" valor={ficha?.alergias} />
           <Linha rotulo="Escolaridade" valor={ficha?.escolaridade} />
@@ -150,27 +187,26 @@ export default function MeuPerfil({ voltar }: { voltar: () => void }) {
           <Linha rotulo="Observações" valor={ficha?.observacao} />
         </Grupo>
 
-        <Grupo titulo="CONTATO" icone="phone-outline">
+        <Grupo titulo="CONTATO" icone="phone-outline" resumo="E-mail, endereço, emergência">
           <Linha rotulo="E-mail" valor={ficha?.email_contato} />
           <Linha rotulo="Endereço" valor={ficha?.endereco} />
           <Linha rotulo="Emergência" valor={[ficha?.contato_emergencia, ficha?.telefone_emergencia].filter(Boolean).join(' · ') || null} />
         </Grupo>
 
-        <Grupo titulo="EQUIPE E VEÍCULO" icone="account-group-outline">
+        <Grupo titulo="EQUIPE E VEÍCULO" icone="account-group-outline" resumo="Veículo, auxiliar, jornada">
           <Linha rotulo="Veículo" valor={veiculo ? descreverVeiculo(veiculo) : null} />
           <Linha rotulo="Auxiliar" valor={auxiliares.join(', ') || null} />
           <Linha rotulo="Jornada" valor={ficha?.inicio_jornada
             ? `Seg–Qui ${hhmm(ficha.inicio_jornada)} às ${hhmm(ficha.fim_jornada)} · Sex até ${hhmm(ficha.fim_jornada_sexta)}` : null} />
-          <Linha rotulo="Horas extras" valor={ficha?.regime_horas ? (ficha.regime_horas === 'banco_horas' ? 'Banco de horas' : 'Hora extra') : null} />
         </Grupo>
 
-        <Grupo titulo="UNIFORME E EPI" icone="tshirt-crew-outline">
+        <Grupo titulo="UNIFORME E EPI" icone="tshirt-crew-outline" resumo="Tamanhos">
           <Linha rotulo="Camisa" valor={ficha?.tamanho_camisa} />
           <Linha rotulo="Calça" valor={ficha?.tamanho_calca} />
           <Linha rotulo="Calçado" valor={ficha?.tamanho_calcado} />
         </Grupo>
 
-        <Text style={s.nota}>Os dados são cadastrados pelo supervisor no painel. Se algo estiver errado ou em branco, avise o supervisor.</Text>
+        <Text style={s.nota}>Toque em um grupo para ver os dados. Os dados pessoais não ficam gravados no celular. Se algo estiver errado ou em branco, avise o supervisor.</Text>
       </ScrollView>
     </View>
   );
@@ -185,15 +221,22 @@ function Dado({ rotulo, valor }: { rotulo: string; valor: string | null | undefi
   );
 }
 
-function Grupo({ titulo, icone, children }: { titulo: string; icone: NomeIcone; children: ReactNode }) {
+// Grupo fechado por padrão: o conteúdo só aparece quando o técnico toca no título.
+function Grupo({ titulo, icone, resumo, children }: { titulo: string; icone: NomeIcone; resumo: string; children: ReactNode }) {
+  const [aberto, setAberto] = useState(false);
   return (
-    <>
-      <View style={s.secao}>
-        <Icone nome={icone} tamanho={15} cor={cores.suave} />
-        <Text style={s.secaoTexto}>{titulo}</Text>
-      </View>
-      <View style={s.grupo}>{children}</View>
-    </>
+    <View style={s.grupo}>
+      <Pressable style={({ pressed }) => [s.grupoTopo, pressed && { backgroundColor: cores.selecionado }]}
+        onPress={() => { LayoutAnimation.easeInEaseOut(); setAberto((a) => !a); }}>
+        <View style={s.grupoIcone}><Icone nome={icone} tamanho={18} cor={cores.primaria} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.secaoTexto}>{titulo}</Text>
+          <Text style={s.grupoResumo}>{aberto ? 'Toque para ocultar' : resumo}</Text>
+        </View>
+        <Icone nome={aberto ? 'chevron-up' : 'lock-outline'} tamanho={20} cor={cores.apagado} />
+      </Pressable>
+      {aberto ? <View style={s.grupoCorpo}>{children}</View> : null}
+    </View>
   );
 }
 
@@ -231,9 +274,16 @@ const s = StyleSheet.create({
   crachaRodape: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'stretch', justifyContent: 'center',
     backgroundColor: '#F7F8FA', paddingVertical: 10, borderTopWidth: 1, borderTopColor: cores.linha },
   rodapeTexto: { fontSize: 11.5, color: cores.apagado, letterSpacing: 0.3 },
-  secao: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 20, marginTop: 22, marginBottom: 8 },
-  secaoTexto: { color: cores.suave, fontSize: 12, fontWeight: '700', letterSpacing: 0.6 },
-  grupo: { backgroundColor: cores.cartao, marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', ...sombra },
+  secaoTexto: { color: cores.texto, fontSize: 12.5, fontWeight: '700', letterSpacing: 0.5 },
+  grupo: { backgroundColor: cores.cartao, marginHorizontal: 16, marginTop: 12, borderRadius: 18, overflow: 'hidden', ...sombra },
+  grupoTopo: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 13 },
+  grupoIcone: { width: 36, height: 36, borderRadius: 12, backgroundColor: cores.selecionado, alignItems: 'center', justifyContent: 'center' },
+  grupoResumo: { fontSize: 12, color: cores.apagado, marginTop: 2 },
+  grupoCorpo: { borderTopWidth: 1, borderTopColor: cores.linha },
+  camera: { position: 'absolute', right: 4, bottom: 4, width: 30, height: 30, borderRadius: 15, backgroundColor: cores.primaria,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: cores.cartao },
+  mostrar: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, marginBottom: 6 },
+  mostrarTexto: { fontSize: 13, fontWeight: '700', color: cores.primaria },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: cores.linha },
   linhaRotulo: { fontSize: 13.5, color: cores.suave },
   linhaValor: { fontSize: 14, fontWeight: '600', color: cores.texto, textAlign: 'right', flexShrink: 1 },
