@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, AppState, FlatList, Linking, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, FlatList, Linking, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
 import Icone, { iconeDoTipo, NomeIcone } from '../componentes/Icone';
@@ -21,7 +21,7 @@ import {
 import { abrirAjusteBateria, garantirRastreio, SituacaoRastreio } from '../lib/rastreio';
 import { inventarioLocal, pendenciasInventario, precisaFoto } from '../lib/inventario';
 import { supabase } from '../lib/supabase';
-import { meuVeiculo } from '../lib/veiculo';
+import { MeuVeiculo, meuVeiculo } from '../lib/veiculo';
 import { OrdemServico, rotuloDaOs } from '../lib/tipos';
 
 type Props = { nome: string; abrirOS: (os: OrdemServico) => void; abrirInventario: () => void; iniciarAtividade: () => void };
@@ -52,6 +52,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   const [filtro, setFiltro] = useState<Grupo | null>(null);
   const [agora, setAgora] = useState(Date.now());
   const [placa, setPlaca] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
   const [inventarioFaltam, setInventarioFaltam] = useState(0);
   const [rastreio, setRastreio] = useState<SituacaoRastreio | null>(null);
 
@@ -149,7 +150,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   }, [ordens]);
 
   async function confirmarKm() {
-    if (!jornada) return;
+    if (!jornada || ocupado) return;
     const valor = parseInt(km, 10);
     if (Number.isNaN(valor)) return Alert.alert(jornada.expedienteId ? 'Informe o km final do odômetro' : 'Informe o km inicial do odômetro');
     if (jornada.expedienteId && jornada.kmInicial != null && valor < jornada.kmInicial) {
@@ -161,6 +162,22 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
         [{ text: 'Corrigir', onPress: () => ok(false) }, { text: 'Confirmar', onPress: () => ok(true) }]));
       if (!seguir) return;
     }
+    await concluirExpediente(valor);
+  }
+
+  // Abre ou fecha o expediente (km = null quando o técnico não tem veículo vinculado).
+  async function concluirExpediente(valor: number | null) {
+    if (!jornada) return;
+    setOcupado(true);
+    try {
+      await registrarExpediente(valor);
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function registrarExpediente(valor: number | null) {
+    if (!jornada) return;
     if (jornada.expedienteId) {
       setJornada(await encerrarExpediente(jornada, valor));
     } else {
@@ -186,7 +203,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   }
 
   async function pedirExpediente() {
-    if (!jornada) return;
+    if (!jornada || ocupado) return;
     if (jornada.expedienteId) {
       // Status mais recente de cada O.S.: o que ainda está na fila (offline) vale mais que o do servidor.
       const status = new Map(ordens.map((o) => [o.id, o.status as string]));
@@ -211,8 +228,26 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
         return Alert.alert('Expediente bloqueado', `Hoje está na sua escala como ${rotuloEscala[bloqueio.tipo].toLowerCase()}.`);
       }
     }
-    setKmAnterior(await ultimoKm());
+    // Km só para quem tem veículo vinculado (do celular se o servidor demorar).
+    setOcupado(true);
+    const veiculo = await Promise.race([
+      meuVeiculo().catch(() => meuVeiculo(false)),
+      new Promise<MeuVeiculo | null>((ok) => setTimeout(() => meuVeiculo(false).then(ok), 2500)),
+    ]);
+    setOcupado(false);
+    setPlaca(veiculo?.placa ?? null);
+    if (!veiculo) {
+      if (jornada.expedienteId) {
+        const seguir = await new Promise<boolean>((ok) => Alert.alert('Encerrar expediente?', 'O trajeto do dia deixa de ser registrado.',
+          [{ text: 'Cancelar', style: 'cancel', onPress: () => ok(false) }, { text: 'Encerrar', style: 'destructive', onPress: () => ok(true) }]));
+        if (!seguir) return;
+      }
+      return concluirExpediente(null);
+    }
+    // Mostra o campo na hora; o km anterior aparece quando chegar.
+    setKmAnterior(null);
     setPedindoKm(true);
+    ultimoKm().then(setKmAnterior).catch(() => {});
   }
 
   async function alternarRefeicao() {
@@ -278,7 +313,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
 
         {emExpediente ? (
           <View style={s.metas}>
-            {jornada?.kmInicial != null ? (
+            {placa && jornada?.kmInicial != null ? (
               <View style={s.meta}><Icone nome="speedometer" tamanho={15} cor={cores.apagado} /><Text style={s.metaTexto}>km {jornada.kmInicial.toLocaleString('pt-BR')}</Text></View>
             ) : null}
             <View style={s.meta}>
@@ -302,17 +337,25 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
               <Pressable style={[s.botao, s.botaoSecundario]} onPress={() => { setPedindoKm(false); setKm(''); }}>
                 <Text style={[s.botaoTexto, { color: cores.texto }]}>Cancelar</Text>
               </Pressable>
-              <Pressable style={[s.botao, { backgroundColor: emExpediente ? cores.perigo : cores.sucesso }]} onPress={confirmarKm}>
-                <Icone nome={emExpediente ? 'stop-circle-outline' : 'play-circle-outline'} tamanho={20} cor="#fff" />
-                <Text style={s.botaoTexto}>{emExpediente ? 'Encerrar' : 'Iniciar'}</Text>
+              <Pressable style={[s.botao, { backgroundColor: emExpediente ? cores.perigo : cores.sucesso }]} onPress={confirmarKm} disabled={ocupado}>
+                {ocupado ? <ActivityIndicator color="#fff" /> : (
+                  <>
+                    <Icone nome={emExpediente ? 'stop-circle-outline' : 'play-circle-outline'} tamanho={20} cor="#fff" />
+                    <Text style={s.botaoTexto}>{emExpediente ? 'Encerrar' : 'Iniciar'}</Text>
+                  </>
+                )}
               </Pressable>
             </View>
           </View>
         ) : !emExpediente ? (
           <View style={s.botoes}>
-            <Pressable style={[s.botao, { backgroundColor: cores.sucesso }]} onPress={pedirExpediente}>
-              <Icone nome="play-circle-outline" tamanho={20} cor="#fff" />
-              <Text style={s.botaoTexto}>Iniciar expediente</Text>
+            <Pressable style={[s.botao, { backgroundColor: cores.sucesso }]} onPress={pedirExpediente} disabled={ocupado}>
+              {ocupado ? <ActivityIndicator color="#fff" /> : (
+                <>
+                  <Icone nome="play-circle-outline" tamanho={20} cor="#fff" />
+                  <Text style={s.botaoTexto}>Iniciar expediente</Text>
+                </>
+              )}
             </Pressable>
           </View>
         ) : emRefeicao ? (
@@ -333,8 +376,8 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
                 <Icone nome="silverware-fork-knife" tamanho={21} cor={cores.alerta} />
               </Pressable>
             ) : null}
-            <Pressable style={[s.quadrado, { backgroundColor: '#FDECEC' }]} onPress={pedirExpediente} accessibilityLabel="Encerrar expediente">
-              <Icone nome="power" tamanho={21} cor={cores.perigo} />
+            <Pressable style={[s.quadrado, { backgroundColor: '#FDECEC' }]} onPress={pedirExpediente} disabled={ocupado} accessibilityLabel="Encerrar expediente">
+              {ocupado ? <ActivityIndicator color={cores.perigo} /> : <Icone nome="power" tamanho={21} cor={cores.perigo} />}
             </Pressable>
           </View>
         )}

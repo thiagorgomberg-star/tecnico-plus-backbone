@@ -53,8 +53,10 @@ export async function carregarEscala(): Promise<ItemEscala[]> {
 }
 
 // Folga programada, férias ou atestado hoje impedem iniciar o expediente.
+// Usa o que está no celular se o servidor não responder em 2,5 s (sinal fraco não trava o início).
 export async function bloqueioDeHoje(): Promise<ItemEscala | null> {
-  const escala = await carregarEscala();
+  const cache = AsyncStorage.getItem(CACHE).then((c): ItemEscala[] => (c ? JSON.parse(c) : []));
+  const escala = await Promise.race([carregarEscala(), new Promise<ItemEscala[]>((ok) => setTimeout(() => cache.then(ok), 2500))]);
   const hoje = hojeLocal();
   return escala.find((e) => e.data === hoje && BLOQUEIAM.includes(e.tipo)) ?? null;
 }

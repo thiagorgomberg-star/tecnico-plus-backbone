@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { randomUUID } from 'expo-crypto';
 
 import { enfileirar } from './fila';
-import { posicaoAtual } from './localizacao';
+import { posicaoRapida } from './localizacao';
 import { iniciarRastreio, pararRastreio } from './rastreio';
 import { ponto, supabase } from './supabase';
 import { meuVeiculo } from './veiculo';
@@ -44,8 +44,13 @@ async function gravar(j: Jornada) {
   return j;
 }
 
-export async function iniciarExpediente(kmInicial: number) {
-  const pos = await posicaoAtual();
+// Espera no máximo `ms` por uma consulta ao servidor (sinal fraco não pode travar o expediente).
+const comLimite = <T,>(p: PromiseLike<T>, ms: number): Promise<T | undefined> =>
+  Promise.race([Promise.resolve(p), new Promise<undefined>((ok) => setTimeout(() => ok(undefined), ms))]);
+
+// km só existe quando o técnico tem veículo vinculado; sem veículo vai null.
+export async function iniciarExpediente(kmInicial: number | null) {
+  const pos = await posicaoRapida();
   const id = randomUUID();
   const inicio = new Date().toISOString();
   await enfileirar({
@@ -61,7 +66,7 @@ export async function iniciarExpediente(kmInicial: number) {
       linhas: [{ expediente_id: id, registrado_em: inicio, posicao: ponto(pos.latitude, pos.longitude), precisao_m: pos.accuracy }],
     });
   }
-  await AsyncStorage.setItem(CHAVE_ULTIMO_KM, String(kmInicial));
+  if (kmInicial != null) await AsyncStorage.setItem(CHAVE_ULTIMO_KM, String(kmInicial));
   const jornada = await gravar({ expedienteId: id, inicioExpediente: inicio, kmInicial, inicioRefeicao: null });
   const rastreando = await iniciarRastreio();
   return { jornada, rastreando };
@@ -73,8 +78,9 @@ const CHAVE_ULTIMO_KM = 'ultimo-km';
 export async function ultimoKm(): Promise<number | null> {
   let servidor: number | null | undefined;
   try {
-    const { data, error } = await supabase.from('expedientes').select('km_inicial, km_final')
-      .or('km_inicial.not.is.null,km_final.not.is.null').order('inicio', { ascending: false }).limit(1);
+    const r = await comLimite(supabase.from('expedientes').select('km_inicial, km_final')
+      .or('km_inicial.not.is.null,km_final.not.is.null').order('inicio', { ascending: false }).limit(1), 3000);
+    const { data, error } = r ?? { data: null, error: true };
     if (!error) servidor = data?.[0] ? (data[0].km_final ?? data[0].km_inicial) : null;
   } catch {
     // sem internet
@@ -85,12 +91,11 @@ export async function ultimoKm(): Promise<number | null> {
   return kms.length ? Math.max(...kms) : null;
 }
 
-export async function encerrarExpediente(j: Jornada, kmFinal: number) {
+export async function encerrarExpediente(j: Jornada, kmFinal: number | null) {
   if (!j.expedienteId) return j;
-  await AsyncStorage.setItem(CHAVE_ULTIMO_KM, String(kmFinal));
+  if (kmFinal != null) await AsyncStorage.setItem(CHAVE_ULTIMO_KM, String(kmFinal));
   if (j.inicioRefeicao) await encerrarRefeicao(j);
-  await pararRastreio();
-  const pos = await posicaoAtual();
+  const [pos] = await Promise.all([posicaoRapida(), pararRastreio()]);
   await enfileirar({
     tipo: 'atualizar',
     tabela: 'expedientes',
@@ -102,7 +107,7 @@ export async function encerrarExpediente(j: Jornada, kmFinal: number) {
 
 // A refeição vale mesmo com uma O.S. em execução: o banco pausa a O.S. e retoma depois.
 export async function iniciarRefeicao(j: Jornada) {
-  const pos = await posicaoAtual();
+  const pos = await posicaoRapida();
   const inicio = new Date().toISOString();
   await enfileirar({
     tipo: 'rpc',

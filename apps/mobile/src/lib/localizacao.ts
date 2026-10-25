@@ -10,6 +10,20 @@ export async function posicaoAtual() {
   return coords;
 }
 
+// Posição para início/fim de expediente sem deixar o técnico esperando: usa a última posição recente
+// do celular; senão tenta uma leitura nova por no máximo `limiteMs`; senão a última conhecida (ou null).
+export async function posicaoRapida(limiteMs = 4000) {
+  const { status } = await Location.requestForegroundPermissionsAsync();
+  if (status !== 'granted') return null;
+  const recente = await Location.getLastKnownPositionAsync({ maxAge: 2 * 60_000, requiredAccuracy: 150 }).catch(() => null);
+  if (recente) return recente.coords;
+  const nova = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).then((p) => p.coords).catch(() => null);
+  const limite = new Promise<null>((ok) => setTimeout(() => ok(null), limiteMs));
+  const pos = await Promise.race([nova, limite]);
+  if (pos) return pos;
+  return (await Location.getLastKnownPositionAsync().catch(() => null))?.coords ?? null;
+}
+
 // Endereço a partir das coordenadas. Precisa de internet: offline (ou demorando) devolve null.
 export async function enderecoDe(latitude: number, longitude: number, limiteMs = 2500) {
   try {
