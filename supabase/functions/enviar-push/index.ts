@@ -12,6 +12,7 @@ const titulos: Record<string, string> = {
   encerrar_jornada: "Lembrete de jornada",
   os_visualizada: "O.S. visualizada",
   pausa_solicitada: "Pedido de pausa",
+  backlog_proximo: "Ocorrência perto de você",
 };
 
 type Conta = { client_email: string; private_key: string; project_id: string };

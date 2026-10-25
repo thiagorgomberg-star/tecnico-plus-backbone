@@ -21,6 +21,11 @@ const esc = (t: unknown) =>
   String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const quando = (v: string | null | undefined) =>
   v ? new Date(v).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+// Tempo entre o cadastro da O.S. e a correção, para mostrar ao parceiro quanto tempo o problema levou para ser resolvido.
+const prazoCorrecao = (de: string, ate: string) => {
+  const h = Math.max(0, (new Date(ate).getTime() - new Date(de).getTime()) / 3_600_000);
+  return h < 48 ? `${Math.round(h)} h` : `${Math.floor(h / 24)} dias e ${Math.round(h % 24)} h`;
+};
 const fmt = (n: number) => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
 
 // Imagem embutida no PDF (funciona para arquivo do celular e para link do servidor).
@@ -124,6 +129,9 @@ export async function compartilharRelatorio(os: OrdemServico) {
   const pares = Array.from({ length: Math.max(antes.length, depois.length) }, (_, i) => [antes[i], depois[i]?.src] as const);
   const figura = (src: string | undefined, legenda: string) => (src ? `<figure><img src="${src}"><figcaption>${legenda}</figcaption></figure>` : '<div class="vazio">—</div>');
   const secaoAntesDepois = antes.length ? `<h2>Antes × Depois</h2>
+  <div class="ad-datas"><div><div class="l">O.S. cadastrada em</div>${quando(extra?.criado_em)}</div>
+    <div><div class="l">Executada em</div>${quando(extra?.concluida_em ?? extra?.iniciada_em)}</div>
+    ${extra?.criado_em && (extra.concluida_em ?? extra.iniciada_em) ? `<div><div class="l">Tempo até a correção</div>${prazoCorrecao(extra.criado_em, (extra.concluida_em ?? extra.iniciada_em)!)}</div>` : ''}</div>
   <p class="s">Antes: fotos da abertura (vistoria ou ocorrência informada). Depois: correção executada no mesmo ângulo.</p>
   <table class="ad"><tr><th>ANTES</th><th>DEPOIS</th></tr>${pares.map(([a, d], i) =>
     `<tr><td>${figura(a, `Antes ${i + 1}`)}</td><td>${figura(d, `Depois ${i + 1}${depois[i] ? ` · ${quando(depois[i].tiradaEm)}` : ''}`)}</td></tr>`).join('')}</table>` : '';
@@ -173,7 +181,7 @@ export async function compartilharRelatorio(os: OrdemServico) {
     table { width: 100%; border-collapse: collapse; } td { padding: 3px 0; border-bottom: 1px solid #eee; } .d { text-align: right; font-weight: bold; }
     .s { color: #6b7280; } .fotos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .fotos img { width: 100%; border: 1px solid #ddd; } .ad td { width: 50%; vertical-align: top; } .ad img { width: 100%; border: 1px solid #ddd; }
-    .ad th { text-align: center; font-size: 9pt; } .vazio { text-align: center; color: #9ca3af; padding: 24px 0; } figure { margin: 0; break-inside: avoid; } figcaption { font-size: 8pt; color: #6b7280; }
+    .ad th { text-align: center; font-size: 9pt; } .ad-datas { display: flex; gap: 24px; margin: 6px 0; } .ad-datas .l { font-size: 8pt; color: #6b7280; } .vazio { text-align: center; color: #9ca3af; padding: 24px 0; } figure { margin: 0; break-inside: avoid; } figcaption { font-size: 8pt; color: #6b7280; }
     pre { white-space: pre-wrap; font-family: inherit; margin: 0; }
   </style></head><body>
   <header>${logo ? `<img src="${logo}">` : ''}<div class="t"><h1>Relatório de atendimento</h1>

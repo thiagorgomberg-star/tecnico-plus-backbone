@@ -44,6 +44,7 @@ export default function App() {
   const [camera, setCamera] = useState<Camera | null>(null);
   const [tela, setTela] = useState<'inicio' | 'rotas' | 'escala' | 'preventiva' | 'despesas' | 'frota' | 'inventario' | 'perfil' | 'evento'>('inicio');
   const [aba, setAba] = useState<Aba>('atividades');
+  const [backlogPedido, setBacklogPedido] = useState<string | null>(null);
   const [pendentes, setPendentes] = useState(0);
 
   useEffect(() => {
@@ -104,6 +105,7 @@ export default function App() {
       if (!osId) return;
       const { data } = await supabase.from('ordens_servico').select('*').eq('id', osId).maybeSingle();
       if (data) setOsAberta(data);
+      else { setTela('inicio'); setAba('atividades'); setBacklogPedido(osId); } // ainda no backlog: abre a ficha dele
     };
     const aoTocar = Notifications.addNotificationResponseReceivedListener(abrirDaNotificacao);
     // App estava fechado e foi aberto pelo toque na notificação.
@@ -175,7 +177,8 @@ export default function App() {
     conteudo = (
       <>
         <View style={{ flex: 1 }}>
-          {aba === 'atividades' ? <Atividades nome={perfil.nome} abrirOS={setOsAberta} abrirInventario={() => setTela('inventario')} iniciarAtividade={() => setTela('preventiva')} informarEvento={() => setTela('evento')} /> : null}
+          {aba === 'atividades' ? <Atividades nome={perfil.nome} abrirOS={setOsAberta} abrirInventario={() => setTela('inventario')} iniciarAtividade={() => setTela('preventiva')} informarEvento={() => setTela('evento')}
+            backlogPedido={backlogPedido} backlogAberto={() => setBacklogPedido(null)} /> : null}
           {aba === 'estoque' ? <Estoque euId={euId} /> : null}
           {aba === 'mais' ? <Mais nome={perfil.nome} cargo={perfil.cargo} pendentes={pendentes} abrir={setTela} sair={sair} /> : null}
         </View>

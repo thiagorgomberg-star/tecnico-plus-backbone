@@ -3,6 +3,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, FlatList, Linking, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
+import BacklogMapa from '../componentes/BacklogMapa';
 import DetalheBacklog from '../componentes/DetalheBacklog';
 import Icone, { iconeDoTipo, NomeIcone } from '../componentes/Icone';
 import { LINK_APK, VERSAO_APP, versaoPublicada } from '../lib/atualizacao';
@@ -20,7 +21,7 @@ import {
   ultimoKm,
 } from '../lib/jornada';
 import { abrirAjusteBateria, garantirRastreio, SituacaoRastreio } from '../lib/rastreio';
-import { assumirBacklog, backlogGuardado, buscarBacklog, ItemBacklog } from '../lib/backlog';
+import { assumirBacklog, backlogGuardado, buscarBacklog, compartilharBacklogKmz, ItemBacklog } from '../lib/backlog';
 import { posicaoRapida } from '../lib/localizacao';
 import { distanciaKm, navegarAte } from '../lib/navegacao';
 import { inventarioLocal, pendenciasInventario, precisaFoto } from '../lib/inventario';
@@ -28,7 +29,10 @@ import { supabase } from '../lib/supabase';
 import { MeuVeiculo, meuVeiculo } from '../lib/veiculo';
 import { OrdemServico, rotuloDaOs } from '../lib/tipos';
 
-type Props = { nome: string; abrirOS: (os: OrdemServico) => void; abrirInventario: () => void; iniciarAtividade: () => void; informarEvento: () => void };
+type Props = {
+  nome: string; abrirOS: (os: OrdemServico) => void; abrirInventario: () => void; iniciarAtividade: () => void; informarEvento: () => void;
+  backlogPedido?: string | null; backlogAberto?: () => void; // O.S. do backlog vinda de uma notificação
+};
 
 const CACHE_OS = 'ordens-cache';
 const PESO_PRIORIDADE = { emergencia: 0, alta: 1, media: 2, baixa: 3 };
@@ -48,7 +52,7 @@ const duracao = (ms: number) => {
 };
 
 // Tela principal do técnico: cartão do expediente sobre o topo e as O.S. separadas em abas.
-export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtividade, informarEvento }: Props) {
+export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtividade, informarEvento, backlogPedido, backlogAberto }: Props) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
   const [pendentes, setPendentes] = useState(0);
@@ -70,6 +74,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   const [assumindo, setAssumindo] = useState<string | null>(null);
   const [ordemBacklog, setOrdemBacklog] = useState<OrdemBacklog>('distancia');
   const [detalhe, setDetalhe] = useState<string | null>(null);
+  const [noMapa, setNoMapa] = useState(false);
 
   // Backlog: o técnico não recebe aviso em tempo real dessas O.S., então confere a cada 2 min e ao voltar para o app.
   useEffect(() => {
@@ -311,6 +316,16 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
 
   useEffect(() => setFiltro(null), [emExpediente]);
 
+  // Notificação de ocorrência perto: abre a aba Backlog já com a ficha da O.S.
+  useEffect(() => {
+    if (!backlogPedido) return;
+    buscarBacklog().then((b) => b && setBacklog(b)).catch(() => {});
+    setNoMapa(false);
+    setFiltro('backlog');
+    setDetalhe(backlogPedido);
+    backlogAberto?.();
+  }, [backlogPedido]);
+
   // Distância até cada O.S. do backlog (a posição é lida só quando o técnico abre a aba).
   useEffect(() => {
     if (aba === 'backlog' && !posicao) posicaoRapida().then((p) => p && setPosicao({ lat: p.latitude, lng: p.longitude })).catch(() => {});
@@ -489,7 +504,17 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
           );
         })}
       </View>
-      {aba === 'backlog' && backlog.length > 1 ? (
+      {aba === 'backlog' && backlog.length > 0 ? (
+        <View style={s.ordenar}>
+          {([[false, 'Lista', 'format-list-bulleted'], [true, 'Mapa', 'map-outline']] as const).map(([mapa, rotulo, icone]) => (
+            <Pressable key={rotulo} style={[s.chip, noMapa === mapa && s.chipAtivo]} onPress={() => setNoMapa(mapa)}>
+              <Icone nome={icone} tamanho={15} cor={noMapa === mapa ? '#fff' : cores.texto2} />
+              <Text style={[s.chipTexto, noMapa === mapa && { color: '#fff' }]}>{rotulo}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+      {aba === 'backlog' && backlog.length > 1 && !noMapa ? (
         <View style={s.ordenar}>
           <Text style={s.ordenarRotulo}>Ordenar</Text>
           {ORDENS_BACKLOG.map((o) => {
@@ -503,6 +528,10 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
           })}
         </View>
       ) : null}
+      {aba === 'backlog' && noMapa && backlog.length > 0 ? (
+        <BacklogMapa itens={backlogOrdenado} posicao={posicao} abrir={setDetalhe}
+          exportar={() => compartilharBacklogKmz(backlogOrdenado).catch((e) => Alert.alert('Não foi possível gerar o KMZ', (e as Error).message))} />
+      ) : null}
     </View>
   );
 
@@ -510,10 +539,10 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
     <>
     <FlatList
       style={{ flex: 1, backgroundColor: cores.fundo }}
-      data={(aba === 'backlog' ? backlogOrdenado : grupos.find((g) => g.chave === aba)?.ordens ?? []) as (OrdemServico | ItemBacklog)[]}
+      data={(aba === 'backlog' ? (noMapa ? [] : backlogOrdenado) : grupos.find((g) => g.chave === aba)?.ordens ?? []) as (OrdemServico | ItemBacklog)[]}
       keyExtractor={(os) => os.id}
       ListHeaderComponent={topo}
-      ListEmptyComponent={<Text style={s.vazio}>{aba === 'andamento' ? 'Nenhuma atividade em andamento.' : aba === 'pendente' ? 'Nenhuma atividade pendente.' : aba === 'backlog' ? 'Nenhum serviço no backlog agora.' : 'Nenhuma atividade fechada nos últimos 7 dias.'}</Text>}
+      ListEmptyComponent={aba === 'backlog' && noMapa && backlog.length > 0 ? undefined : <Text style={s.vazio}>{aba === 'andamento' ? 'Nenhuma atividade em andamento.' : aba === 'pendente' ? 'Nenhuma atividade pendente.' : aba === 'backlog' ? 'Nenhum serviço no backlog agora.' : 'Nenhuma atividade fechada nos últimos 7 dias.'}</Text>}
       refreshControl={<RefreshControl refreshing={carregando} onRefresh={carregar} />}
       renderItem={({ item }) => (aba === 'backlog'
         ? <CartaoBacklog b={item as ItemBacklog & { distancia: number | null }} assumir={assumir} abrir={setDetalhe} ocupado={assumindo === item.id} />

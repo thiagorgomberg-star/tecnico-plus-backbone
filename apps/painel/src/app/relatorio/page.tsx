@@ -33,6 +33,12 @@ type Relatorio = {
 const quando = (v: string | null | undefined) => (v ? new Date(v).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—");
 const fmt = (n: number) => Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 
+// Tempo entre o cadastro da O.S. e a correção (mostra ao parceiro quanto tempo o problema levou para ser resolvido).
+function prazoCorrecao(de: string, ate: string) {
+  const h = Math.max(0, (new Date(ate).getTime() - new Date(de).getTime()) / 3_600_000);
+  return h < 48 ? `${Math.round(h)} h` : `${Math.floor(h / 24)} dias e ${Math.round(h % 24)} h`;
+}
+
 function duracao(inicio: string | null, fim: string | null) {
   if (!inicio || !fim) return "—";
   const min = Math.round((new Date(fim).getTime() - new Date(inicio).getTime()) / 60000);
@@ -259,6 +265,13 @@ function Conteudo() {
       {antes.length ? (
         <section className="mt-6">
           <h2 className={titulo}>Antes × Depois</h2>
+          <div className="mt-2 flex flex-wrap gap-6">
+            <div><div className="text-xs text-gray-500">O.S. cadastrada em</div><div className="font-semibold">{quando(os.criado_em)}</div></div>
+            <div><div className="text-xs text-gray-500">Executada em</div><div className="font-semibold">{quando(os.concluida_em ?? os.iniciada_em)}</div></div>
+            {(os.concluida_em ?? os.iniciada_em) ? (
+              <div><div className="text-xs text-gray-500">Tempo até a correção</div><div className="font-semibold">{prazoCorrecao(os.criado_em, (os.concluida_em ?? os.iniciada_em)!)}</div></div>
+            ) : null}
+          </div>
           <p className="mt-1 text-xs text-gray-500">Antes: fotos da abertura (vistoria ou ocorrência informada). Depois: correção executada no mesmo ângulo.</p>
           <div className="mt-2 grid grid-cols-2 gap-3 text-center text-xs font-bold text-gray-600"><div>ANTES</div><div>DEPOIS</div></div>
           {Array.from({ length: Math.max(antes.length, depois.length) }, (_, i) => (

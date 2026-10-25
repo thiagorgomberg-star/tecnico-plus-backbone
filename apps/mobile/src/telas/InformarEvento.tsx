@@ -5,7 +5,9 @@ import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, ScrollView, St
 import Cabecalho from '../componentes/Cabecalho';
 import Icone from '../componentes/Icone';
 import { cores, sombra } from '../lib/estilo';
+import { ocorrenciasProximas, Proxima } from '../lib/backlog';
 import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
+import { idadeOs } from '../lib/formato';
 import { enderecoDe, posicaoAtual } from '../lib/localizacao';
 import { navegarAte } from '../lib/navegacao';
 import CameraOS from './CameraOS';
@@ -33,6 +35,7 @@ export default function InformarEvento({ usuario, voltar }: { usuario: { nome: s
   const [registrado, setRegistrado] = useState(false);
   const [camera, setCamera] = useState(false);
   const [fotos, setFotos] = useState(0);
+  const [proximas, setProximas] = useState<Proxima[]>([]);
 
   useEffect(() => {
     const assinatura = BackHandler.addEventListener('hardwareBackPress', () => { sair(); return true; });
@@ -55,6 +58,7 @@ export default function InformarEvento({ usuario, voltar }: { usuario: { nome: s
     }
     setLocal({ lat: pos.latitude, lng: pos.longitude, precisao: pos.accuracy ?? null, quando: new Date().toISOString() });
     setCapturando(false);
+    ocorrenciasProximas(pos.latitude, pos.longitude).then(setProximas).catch(() => {});
     const texto = await enderecoDe(pos.latitude, pos.longitude, 5000);
     if (texto) setEndereco((e) => e || texto);
   }
@@ -89,6 +93,13 @@ export default function InformarEvento({ usuario, voltar }: { usuario: { nome: s
     if (!(await registrar())) return;
     if (fotos === 0) return Alert.alert('Falta a foto', 'Fotografe a ocorrência: as fotos orientam quem for executar.', [{ text: 'Fotografar', onPress: () => setCamera(true) }]);
     Alert.alert('Ocorrência informada', 'A O.S. foi para o Backlog. Você ou outro técnico pode assumir e iniciar a execução.', [{ text: 'OK', onPress: voltar }]);
+  }
+
+  function descartarDuplicada() {
+    Alert.alert('Descartar esta ocorrência?', 'Ela já está registrada na O.S. aberta perto daqui. Nada será enviado.', [
+      { text: 'Voltar', style: 'cancel' },
+      { text: 'Descartar', style: 'destructive', onPress: voltar },
+    ]);
   }
 
   function sair() {
@@ -149,6 +160,23 @@ export default function InformarEvento({ usuario, voltar }: { usuario: { nome: s
               </View>
             </>
           ) : <Text style={s.ajuda}>Fique no ponto da ocorrência e toque no botão. Funciona sem internet.</Text>}
+          {proximas.length && !registrado ? (
+            <View style={s.duplicada}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Icone nome="content-duplicate" tamanho={18} cor={cores.alerta} />
+                <Text style={s.duplicadaTitulo}>Já existe O.S. aberta a menos de 200 m</Text>
+              </View>
+              {proximas.map((o) => (
+                <Text key={o.id} style={s.duplicadaItem}>
+                  #{o.numero} · {o.titulo} · {Math.round(o.distancia_m)} m · aberta há {idadeOs(o.criado_em).texto}{o.tecnico ? ` · com ${o.tecnico}` : ' · no backlog'}
+                </Text>
+              ))}
+              <Text style={s.duplicadaAjuda}>Se for o mesmo problema, não precisa informar de novo. Se for outro, continue normalmente.</Text>
+              <Pressable style={[s.secundario, { flex: 0, marginTop: 10, backgroundColor: '#fff' }]} onPress={descartarDuplicada}>
+                <Text style={s.secundarioTexto}>É a mesma, descartar</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <TextInput style={s.campo} editable={!bloqueado} value={endereco} onChangeText={setEndereco} multiline
             placeholder="Endereço / referência" placeholderTextColor={cores.apagado} />
         </View>
@@ -196,6 +224,10 @@ const s = StyleSheet.create({
   secundario: { flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', height: 40, borderRadius: 12, backgroundColor: cores.selecionado },
   secundarioTexto: { color: cores.primaria, fontWeight: '700', fontSize: 13.5 },
   ajuda: { fontSize: 13, color: cores.suave, marginTop: 6 },
+  duplicada: { marginTop: 12, padding: 12, borderRadius: 14, backgroundColor: '#FFF4E5', borderWidth: 1, borderColor: '#F5D7A8' },
+  duplicadaTitulo: { fontSize: 14, fontWeight: '800', color: '#7A4B00' },
+  duplicadaItem: { fontSize: 13, color: cores.texto, marginTop: 6 },
+  duplicadaAjuda: { fontSize: 12.5, color: '#7A4B00', marginTop: 8 },
   rodape: { backgroundColor: cores.cartao, borderTopWidth: 1, borderTopColor: cores.borda, padding: 12 },
   concluir: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, height: 52, borderRadius: 14 },
 });

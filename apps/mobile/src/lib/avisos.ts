@@ -25,6 +25,7 @@ const titulos: Record<string, string> = {
   encerrar_jornada: 'Lembrete de jornada',
   os_visualizada: 'O.S. visualizada',
   pausa_solicitada: 'Pedido de pausa',
+  backlog_proximo: 'Ocorrência perto de você',
 };
 
 // Registra o token do Firebase deste celular para o usuário logado: o servidor manda a notificação
