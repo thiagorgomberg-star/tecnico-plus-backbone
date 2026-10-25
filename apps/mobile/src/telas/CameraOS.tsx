@@ -21,6 +21,8 @@ type Props = {
   fechar: () => void;
   // Fotos de uma caixa (ou da tela do OTDR de uma fibra) em vez das fotos antes/depois da O.S.
   caixa?: { id: string; tipo: 'foto_caixa' | 'foto_otdr' | 'foto_bandeja' | 'foto_olt'; fibra?: number; bandeja?: number; titulo: string };
+  // Fotos de um poste/ocorrência da Vistoria Backbone MG.
+  ponto?: { id: string; titulo: string };
   // Foto única fora da O.S. (ex.: Inventário Matinal): entrega a foto com máscara e fecha a câmera.
   unica?: { titulo: string; aoSalvar: (foto: { arquivo: string; tiradaEm: string; latitude: number | null; longitude: number | null }) => void };
 };
@@ -32,8 +34,9 @@ const LARGURA_FINAL = 1600;
 type FotoCrua = Omit<DadosMascara, 'tiradaEm'> & {
   tiradaEm: string;
   osId: string;
-  tipoAnexo: 'foto_antes' | 'foto_depois' | 'foto_caixa' | 'foto_otdr' | 'foto_bandeja' | 'foto_olt';
+  tipoAnexo: 'foto_antes' | 'foto_depois' | 'foto_caixa' | 'foto_otdr' | 'foto_bandeja' | 'foto_olt' | 'foto_ponto';
   caixaId?: string;
+  pontoId?: string;
   fibra?: number;
   bandeja?: number;
 };
@@ -79,7 +82,7 @@ function distancia(a: { latitude: number; longitude: number }, b: { latitude: nu
   return Math.hypot(dx, dy);
 }
 
-export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar, caixa, unica }: Props) {
+export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar, caixa, ponto, unica }: Props) {
   const [permissao, pedirPermissao] = useCameraPermissions();
   const camera = useRef<CameraView>(null);
   const mascara = useRef<RefMascara>(null);
@@ -189,8 +192,9 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
         uri: arquivo.uri,
         tiradaEm: new Date().toISOString(),
         osId,
-        tipoAnexo: caixa?.tipo ?? tipo,
+        tipoAnexo: ponto ? 'foto_ponto' : caixa?.tipo ?? tipo,
         caixaId: caixa?.id,
+        pontoId: ponto?.id,
         fibra: caixa?.fibra,
         bandeja: caixa?.bandeja,
       };
@@ -223,6 +227,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
         osId: atual.osId,
         tipoAnexo: atual.tipoAnexo,
         caixaId: atual.caixaId,
+        pontoId: atual.pontoId,
         fibra: atual.fibra,
         bandeja: atual.bandeja,
         arquivo: destino.uri,
@@ -235,7 +240,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
       await alterarCruas((l) => l.filter((f) => f.uri !== atual.uri));
       try { new File(atual.uri).delete(); } catch { /* já removida */ }
       // Só conta aqui a foto que é deste alvo; as retomadas de outra O.S./caixa vão para a fila delas.
-      if (atual.osId === osId && atual.caixaId === caixa?.id && atual.fibra === caixa?.fibra && atual.bandeja === caixa?.bandeja) {
+      if (atual.osId === osId && atual.caixaId === caixa?.id && atual.pontoId === ponto?.id && atual.fibra === caixa?.fibra && atual.bandeja === caixa?.bandeja) {
         setMiniaturas((m) => [destino.uri, ...m]);
       }
     } catch (e) {
@@ -273,7 +278,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
         <Text style={[estilos.texto, { color: total >= minimo ? '#8BE28F' : '#FFD54F' }]}>
           {total}/{minimo} fotos{fila.length ? ` · gravando ${fila.length}` : ''}
         </Text>
-        {caixa || unica ? <Text style={estilos.texto}>{caixa?.titulo ?? unica?.titulo}</Text> : (
+        {caixa || ponto || unica ? <Text style={estilos.texto}>{caixa?.titulo ?? ponto?.titulo ?? unica?.titulo}</Text> : (
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {(['foto_antes', 'foto_depois'] as const).map((t) => (
             <Pressable key={t} onPress={() => setTipo(t)} style={[estilos.chip, tipo === t && { backgroundColor: cores.primaria }]}>

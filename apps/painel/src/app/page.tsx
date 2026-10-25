@@ -22,12 +22,13 @@ import Login from "@/componentes/Login";
 import OrdensServico from "@/componentes/OrdensServico";
 import RotasEventos from "@/componentes/RotasEventos";
 import TecnicosAoVivo from "@/componentes/TecnicosAoVivo";
+import VistoriaMG from "@/componentes/VistoriaMG";
 import { supabase } from "@/lib/supabase";
 import { Tecnico } from "@/lib/tipos";
 
 type Perfil = { nome: string; papel: string };
 
-type AbaPainel = "os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas" | "indicadores" | "despesas" | "horas" | "analise" | "console" | "ferramental" | "config" | "frota";
+type AbaPainel = "os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas" | "indicadores" | "despesas" | "horas" | "analise" | "console" | "ferramental" | "config" | "frota" | "vistoria";
 
 // Abas na ordem do menu (padrão Oracle Field Service: console de despacho primeiro).
 // Cor do painel escolhida pelo supervisor (fica salva no navegador).
@@ -58,6 +59,7 @@ const GRUPOS: [string, [AbaPainel, string][]][] = [
   ["Rede", [
     ["caixas", "Caixas e fibras"],
     ["rotas", "Rotas e eventos"],
+    ["vistoria", "Vistoria Backbone MG"],
   ]],
   ["Gestão", [
     ["indicadores", "Indicadores"],
@@ -167,7 +169,7 @@ export default function Painel() {
           ))}
         </nav>
       <main className={`mx-auto w-full min-w-0 flex-1 p-4 sm:p-6 ${["console", "analise", "campo"].includes(aba) ? "max-w-none" : "max-w-6xl"}`}>
-        {aba === "console" ? <ConsoleDespacho tecnicos={tecnicos} /> : aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "indicadores" ? <Indicadores /> : aba === "despesas" ? <Despesas tecnicos={tecnicos} /> : aba === "horas" ? <Horas /> : aba === "analise" ? <Analise /> : aba === "ferramental" ? <Ferramental tecnicos={tecnicos} /> : aba === "frota" ? <Frota tecnicos={tecnicos} /> : aba === "config" ? (
+        {aba === "console" ? <ConsoleDespacho tecnicos={tecnicos} /> : aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "vistoria" ? <VistoriaMG /> : aba === "indicadores" ? <Indicadores /> : aba === "despesas" ? <Despesas tecnicos={tecnicos} /> : aba === "horas" ? <Horas /> : aba === "analise" ? <Analise /> : aba === "ferramental" ? <Ferramental tecnicos={tecnicos} /> : aba === "frota" ? <Frota tecnicos={tecnicos} /> : aba === "config" ? (
           <div className="grid gap-6"><ConfigEmpresa /><section className="max-w-md rounded-xl border border-gray-200 bg-white p-5">
             <h2 className="mb-1 text-lg font-semibold">Configurações</h2>
             <p className="mb-4 text-sm text-gray-500">Cor do painel (fica salva neste navegador).</p>

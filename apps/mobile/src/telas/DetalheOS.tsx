@@ -5,6 +5,7 @@ import Cabecalho from '../componentes/Cabecalho';
 import Icone, { iconeDoTipo, NomeIcone } from '../componentes/Icone';
 import Assinatura from '../componentes/Assinatura';
 import CaixasOS from '../componentes/CaixasOS';
+import PontosVistoria from '../componentes/PontosVistoria';
 import ExecucaoOS from '../componentes/ExecucaoOS';
 import MaterialApoio from '../componentes/MaterialApoio';
 import { cores, corDoStatus, fundoDe } from '../lib/estilo';
@@ -17,14 +18,16 @@ import { compartilharOsApresentacao } from '../lib/osApresentacao';
 import { compartilharRelatorio } from '../lib/relatorioPdf';
 import { ponto, supabase } from '../lib/supabase';
 import { OrdemServico, proximaAcao, rotuloDaOs, rotuloStatus, StatusOS, variosDias } from '../lib/tipos';
+import { ehVistoriaMg, PontoVistoria as Ponto } from '../lib/vistoria';
 import CaixaEmenda from './CaixaEmenda';
+import PontoVistoria from './PontoVistoria';
 
 type Evento = { id: number; status_novo: StatusOS; criado_em: string };
 type Props = {
   os: OrdemServico; euId: string | null; usuario: { nome: string; cargo: string | null };
   voltar: () => void; abrirCamera: (fotosJaFeitas: number) => void;
 };
-type Aba = 'detalhes' | 'execucao' | 'caixas' | 'fotos' | 'historico';
+type Aba = 'detalhes' | 'execucao' | 'postes' | 'caixas' | 'fotos' | 'historico';
 
 const MINIMO_FOTOS = 10;
 // Campo que guarda a hora real de cada etapa (enviada mesmo se a ação foi offline).
@@ -49,6 +52,9 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [caixaAberta, setCaixaAberta] = useState<{ caixa: Caixa | null; daOs: Caixa[] } | null>(null);
   const [versaoCaixas, setVersaoCaixas] = useState(0);
+  const [pontoAberto, setPontoAberto] = useState<{ ponto: Ponto | null; categoria: 'poste' | 'ocorrencia'; daOs: Ponto[] } | null>(null);
+  const [versaoPontos, setVersaoPontos] = useState(0);
+  const vistoriaMg = ehVistoriaMg(os.tipo);
   const [assinando, setAssinando] = useState(false);
   const [assinadoPor, setAssinadoPor] = useState<string | null>(null);
 
@@ -194,6 +200,13 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
     );
   }
 
+  if (pontoAberto) {
+    return (
+      <PontoVistoria osId={os.id} ponto={pontoAberto.ponto} categoria={pontoAberto.categoria} daOs={pontoAberto.daOs}
+        podeEditar={podeEditar} usuario={usuario} voltar={() => { setPontoAberto(null); setVersaoPontos((v) => v + 1); }} />
+    );
+  }
+
   const sla = os.sla_limite && !['concluida', 'baixada', 'cancelada'].includes(os.status) ? textoSla(os.sla_limite) : null;
   const corSla = !sla ? cores.suave : sla.nivel === 'ok' ? cores.sucesso : sla.nivel === 'alerta' ? cores.alerta : cores.perigo;
   const corStatus = corDoStatus[os.status] ?? cores.suave;
@@ -235,7 +248,8 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
 
       <View style={s.abas}>
         {([
-          ['detalhes', 'Detalhes', 'information-outline'], ['execucao', 'Execução', 'wrench-outline'], ['caixas', 'Caixas', 'package-variant'],
+          ['detalhes', 'Detalhes', 'information-outline'], ['execucao', 'Execução', 'wrench-outline'],
+          ...(vistoriaMg ? [['postes', 'Postes', 'transmission-tower']] : []), ['caixas', 'Caixas', 'package-variant'],
           ['fotos', `Fotos ${totalFotos}/${MINIMO_FOTOS}`, 'camera-outline'], ['historico', 'Histórico', 'history'],
         ] as [Aba, string, NomeIcone][]).map(([valor, rotulo, icone]) => (
           <Pressable key={valor} style={[s.aba, aba === valor && s.abaAtiva]} onPress={() => setAba(valor)}>
@@ -278,6 +292,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
                 aoTocar={podeFotografar ? () => abrirCamera(totalFotos) : () => setAba('fotos')} />
               <Acao icone="draw-pen" rotulo={assinadoPor ? 'Assinado' : 'Assinatura'} cor={cores.texto2} feito={!!assinadoPor}
                 aoTocar={podeEditar ? () => setAssinando(true) : undefined} />
+              {vistoriaMg ? <Acao icone="transmission-tower" rotulo="Postes" cor={cores.primaria} aoTocar={() => setAba('postes')} /> : null}
               <Acao icone="package-variant" rotulo="Caixas" cor={cores.texto2} aoTocar={() => setAba('caixas')} />
               <Acao icone="wrench-outline" rotulo="Execução" cor={cores.texto2} aoTocar={() => setAba('execucao')} />
               {!['baixada', 'cancelada'].includes(os.status) ? (
@@ -320,6 +335,11 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
               </View>
             ) : null}
           </>
+        ) : null}
+
+        {aba === 'postes' ? (
+          <PontosVistoria osId={os.id} podeEditar={podeEditar} versao={versaoPontos}
+            abrir={(ponto, categoria, daOs) => setPontoAberto({ ponto, categoria, daOs })} />
         ) : null}
 
         {aba === 'caixas' ? (

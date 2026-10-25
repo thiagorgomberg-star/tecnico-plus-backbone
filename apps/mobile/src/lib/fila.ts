@@ -13,9 +13,10 @@ export type ItemFila =
       tipo: 'foto';
       id: string;
       osId: string;
-      tipoAnexo: 'foto_antes' | 'foto_depois' | 'foto_caixa' | 'foto_otdr' | 'foto_bandeja' | 'foto_olt' | 'assinatura';
+      tipoAnexo: 'foto_antes' | 'foto_depois' | 'foto_caixa' | 'foto_otdr' | 'foto_bandeja' | 'foto_olt' | 'foto_ponto' | 'assinatura';
       descricao?: string;
       caixaId?: string;
+      pontoId?: string; // poste/ocorrência da Vistoria Backbone MG
       fibra?: number;
       bandeja?: number;
       arquivo: string;
@@ -101,6 +102,7 @@ async function enviar(item: ItemFila) {
         descricao: item.descricao ?? null,
         tirada_em: item.tiradaEm,
         caixa_id: item.caixaId ?? null,
+        ...(item.pontoId ? { ponto_id: item.pontoId } : {}),
         fibra: item.fibra ?? null,
         ...(item.bandeja ? { bandeja: item.bandeja } : {}),
         posicao:
