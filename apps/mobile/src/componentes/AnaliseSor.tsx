@@ -42,7 +42,8 @@ export default function AnaliseSor({ curva, extensaoKm, fechar }: {
         }
         setSor(lerSor(await arquivo.bytes()));
       } catch (e) {
-        setErro((e as Error).message || 'Arquivo .SOR inválido.');
+        const msg = (e as Error).message || '';
+        setErro(/DataView|bounds|bytes/i.test(msg) ? 'Não foi possível ler esta curva: o arquivo parece incompleto ou num formato .SOR que o app ainda não reconhece.' : msg || 'Arquivo .SOR inválido.');
       }
     })();
   }, [curva?.caminho, curva?.uri]);

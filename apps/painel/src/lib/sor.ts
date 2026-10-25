@@ -134,7 +134,7 @@ export function lerSor(dados: ArrayBuffer | Uint8Array): Sor {
   if (onda) s.comprimentoOndaNm = onda;
   l.i32();
   if (v2) l.i32();
-  const nPulsos = l.u16();
+  const nPulsos = Math.min(l.u16(), 10);
   const pulsos = Array.from({ length: nPulsos }, () => l.u16());
   const espacamentos = Array.from({ length: nPulsos }, () => l.u32());
   const pontos = Array.from({ length: nPulsos }, () => l.u32());
@@ -150,7 +150,11 @@ export function lerSor(dados: ArrayBuffer | Uint8Array): Sor {
   const fator = (1e-4 * VELOCIDADE_LUZ) / s.indiceRefracao;
   ir('KeyEvents');
   const nEventos = l.u16();
-  for (let i = 0; i < nEventos; i++) {
+  // Alguns OTDRs gravam campos a mais ou a menos por evento: se o bloco acabar antes, fica com os eventos já lidos.
+  const fimEventos = blocos.KeyEvents.pos + blocos.KeyEvents.tam;
+  for (let i = 0; i < nEventos && l.pos < fimEventos; i++) {
+    const inicioEvento = l.pos;
+    try {
     const numero = l.u16();
     const distanciaKm = l.u32() * fator;
     const inclinacao = l.i16() / 1000;
@@ -164,8 +168,13 @@ export function lerSor(dados: ArrayBuffer | Uint8Array): Sor {
       reflexivo: codigo[0] === '1' || codigo[0] === '2', fimDeFibra: codigo[1] === 'E', manual: codigo[1] === 'A' || codigo[1] === 'M',
       codigo, comentario,
     });
+    } catch {
+      l.pos = inicioEvento;
+      break;
+    }
   }
   try {
+    if (l.pos + 14 > fimEventos) throw new Error();
     s.perdaTotalDb = l.i32() / 1000;
     l.i32();
     l.u32();

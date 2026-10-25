@@ -41,8 +41,10 @@ export default function AnalisarCurva({ voltar }: { voltar: () => void }) {
     const a = r.assets[0];
     const origem = new File(a.uri);
     let nome = a.name;
+    let bytes: Uint8Array;
     try {
-      const sor = lerSor(await origem.bytes());
+      bytes = await origem.bytes();
+      const sor = lerSor(bytes);
       // Sem o nome original, identifica pela própria curva (cabo, fibra, onda e data).
       if (!/\.sor$/i.test(a.name)) {
         nome = [sor.cabo, sor.fibra, `${sor.comprimentoOndaNm} nm`, sor.data?.toLocaleDateString('pt-BR')].filter(Boolean).join(' · ') || a.name;
@@ -53,7 +55,7 @@ export default function AnalisarCurva({ voltar }: { voltar: () => void }) {
     }
     if (!pasta().exists) pasta().create({ intermediates: true });
     const destino = new File(pasta(), `${Date.now()}_${a.name.replace(/[^\w.-]+/g, '_')}`);
-    origem.copy(destino);
+    destino.write(bytes);
     const nova = [{ arquivo: destino.name, nome, em: new Date().toISOString() }, ...lista];
     for (const velha of nova.slice(LIMITE)) {
       const f = new File(pasta(), velha.arquivo);
