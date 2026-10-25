@@ -11,10 +11,9 @@ import { cores, estilo } from '../lib/estilo';
 import { lerSor } from '../lib/sor';
 
 // Curvas que o técnico analisa no próprio celular: não vão para o servidor nem para nenhuma rota.
-// Ficam só as 5 últimas; a 6ª apaga a mais antiga.
+// Ficam guardadas até o técnico apagar pela lixeira (com dupla confirmação).
 type Guardada = { arquivo: string; nome: string; em: string };
 const CHAVE = 'minhas-curvas';
-const LIMITE = 5;
 const pasta = () => new Directory(Paths.document, 'minhas-curvas');
 
 export default function AnalisarCurva({ voltar }: { voltar: () => void }) {
@@ -57,22 +56,23 @@ export default function AnalisarCurva({ voltar }: { voltar: () => void }) {
     const destino = new File(pasta(), `${Date.now()}_${a.name.replace(/[^\w.-]+/g, '_')}`);
     destino.write(bytes);
     const nova = [{ arquivo: destino.name, nome, em: new Date().toISOString() }, ...lista];
-    for (const velha of nova.slice(LIMITE)) {
-      const f = new File(pasta(), velha.arquivo);
-      if (f.exists) f.delete();
-    }
-    await salvar(nova.slice(0, LIMITE));
+    await salvar(nova);
     setAberta({ nome, uri: destino.uri });
   }
 
   function apagar(g: Guardada) {
+    const excluir = () => {
+      const f = new File(pasta(), g.arquivo);
+      if (f.exists) f.delete();
+      salvar(lista.filter((x) => x.arquivo !== g.arquivo));
+    };
     Alert.alert('Apagar curva?', g.nome, [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Apagar', style: 'destructive', onPress: () => {
-        const f = new File(pasta(), g.arquivo);
-        if (f.exists) f.delete();
-        salvar(lista.filter((x) => x.arquivo !== g.arquivo));
-      } },
+      { text: 'Apagar', style: 'destructive', onPress: () => Alert.alert(
+        'Confirma de novo?', 'A curva será apagada deste celular e não dá para recuperar.', [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Sim, apagar', style: 'destructive', onPress: excluir },
+        ]) },
     ]);
   }
 
@@ -90,9 +90,9 @@ export default function AnalisarCurva({ voltar }: { voltar: () => void }) {
             </Pressable>
             <Text style={s.aviso}>
               A análise é feita no próprio celular e a curva não é enviada ao sistema nem ligada a nenhuma rota.
-              Ficam guardadas só as {LIMITE} últimas: a próxima apaga a mais antiga.
+              As curvas ficam guardadas aqui até você apagar na lixeira.
             </Text>
-            {lista.length ? <Text style={s.secao}>ÚLTIMAS CURVAS ({lista.length}/{LIMITE})</Text> : null}
+            {lista.length ? <Text style={s.secao}>MINHAS CURVAS ({lista.length})</Text> : null}
           </View>
         )}
         renderItem={({ item }) => (
