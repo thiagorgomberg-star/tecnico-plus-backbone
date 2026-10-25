@@ -10,7 +10,7 @@ import { Tema, TEMAS, temaAtual, trocarTema } from '../lib/tema';
 import { supabase } from '../lib/supabase';
 import { descreverVeiculo, MeuVeiculo, meuVeiculo } from '../lib/veiculo';
 
-type Destino = 'preventiva' | 'escala' | 'rotas' | 'despesas' | 'frota' | 'inventario';
+type Destino = 'preventiva' | 'escala' | 'rotas' | 'despesas' | 'frota' | 'inventario' | 'perfil';
 type Props = { nome: string; cargo: string | null; pendentes: number; abrir: (d: Destino) => void; sair: () => void };
 
 const iniciais = (nome: string) => nome.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'T';
@@ -45,7 +45,7 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
     <View style={{ flex: 1, backgroundColor: cores.fundo }}>
       <ScrollView>
         <Cabecalho titulo="Menu" estendido={44} />
-        <View style={s.perfil}>
+        <Pressable style={({ pressed }) => [s.perfil, pressed && { opacity: 0.9 }]} onPress={() => abrir('perfil')}>
           <View style={s.avatar}><Text style={s.avatarTexto}>{iniciais(nome)}</Text></View>
           <View style={{ flex: 1 }}>
             <Text style={s.nome} numberOfLines={1}>{nome || 'Técnico'}</Text>
@@ -53,7 +53,8 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
             {veiculo ? <Text style={[s.detalhe, { color: cores.texto, fontWeight: '600' }]}>Veículo: {descreverVeiculo(veiculo)}</Text> : null}
             {auxiliares.length ? <Text style={[s.detalhe, { color: cores.texto, fontWeight: '600' }]}>Auxiliar: {auxiliares.join(', ')}</Text> : null}
           </View>
-        </View>
+          <View style={s.verCracha}><Icone nome="badge-account-horizontal-outline" tamanho={20} cor={cores.primaria} /><Text style={s.verCrachaTexto}>Crachá</Text></View>
+        </Pressable>
         <Text style={s.secao}>CAMPO</Text>
         <View style={s.grupo}>
         {item('toolbox-outline', 'Inventário Matinal', 'Foto de cada ferramenta e EPI a cada 30 dias', () => abrir('inventario'), '#7A5AA6')}
@@ -92,6 +93,8 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
 const s = StyleSheet.create({
   perfil: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: cores.cartao, padding: 16, marginHorizontal: 16, marginTop: -44,
     borderRadius: 20, shadowColor: '#0F2747', shadowOpacity: 0.14, shadowRadius: 18, shadowOffset: { width: 0, height: 6 }, elevation: 5 },
+  verCracha: { alignItems: 'center', gap: 2 },
+  verCrachaTexto: { fontSize: 11, fontWeight: '700', color: cores.primaria },
   grupo: { backgroundColor: cores.cartao, marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', ...sombra },
   avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: cores.primaria, alignItems: 'center', justifyContent: 'center' },
   avatarTexto: { color: '#fff', fontSize: 19, fontWeight: '700' },
