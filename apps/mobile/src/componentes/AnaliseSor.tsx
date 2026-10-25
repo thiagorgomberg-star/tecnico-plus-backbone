@@ -101,10 +101,25 @@ export default function AnaliseSor({ curva, extensaoKm, trecho, fechar }: {
               <Indicador rotulo="EVENTOS" valor={`${sor.eventos.length}`} alerta={analise.criticos > 0}
                 extra={`${analise.criticos} crítico · ${analise.atencao} atenção`} />
             </View>
-            <Text style={s.info}>
-              {[sor.fabricante, sor.equipamento].filter(Boolean).join(' ')} · {sor.comprimentoOndaNm} nm · pulso {sor.pulsoNs} ns
-              {sor.data ? ` · ${sor.data.toLocaleDateString('pt-BR')}` : ''}{sor.localA || sor.localB ? ` · ${sor.localA || '?'} → ${sor.localB || '?'}` : ''}
-            </Text>
+            {sor.localA || sor.localB ? (
+              <View style={s.rota}>
+                <View style={{ flex: 1 }}><Text style={s.rotaRotulo}>ORIGEM (A)</Text><Text style={s.rotaPonta}>{sor.localA || '—'}</Text></View>
+                <View style={{ alignItems: 'center' }}>
+                  <Icone nome="arrow-right-bold" tamanho={22} cor="#fff" />
+                  <Text style={s.rotaRotulo}>{km(analise.comprimentoKm)}</Text>
+                </View>
+                <View style={{ flex: 1, alignItems: 'flex-end' }}><Text style={s.rotaRotulo}>FIM (B)</Text><Text style={s.rotaPonta}>{sor.localB || '—'}</Text></View>
+              </View>
+            ) : null}
+            <View style={s.grade}>
+              {([
+                ['OTDR', [sor.fabricante, sor.equipamento].filter(Boolean).join(' ')], ['ONDA', `${sor.comprimentoOndaNm} nm`],
+                ['PULSO', `${sor.pulsoNs} ns`], ['IOR', sor.indiceRefracao.toFixed(4)], ['RESOLUÇÃO', `${fmt(sor.resolucaoM)} m`],
+                ['CABO', sor.cabo], ['FIBRA', sor.fibra], ['MEDIDA EM', sor.data?.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })],
+              ] as [string, string | undefined][]).filter(([, v]) => v).map(([r, v]) => (
+                <View key={r} style={s.dado}><Text style={s.indRotulo}>{r}</Text><Text style={s.dadoValor} numberOfLines={2}>{v}</Text></View>
+              ))}
+            </View>
 
             {sor.traco.length ? (
               <View style={s.cartao}>
@@ -272,6 +287,11 @@ function Traco({ sor, niveis, largura, selecionado, selecionar, janela, setJanel
 const s = StyleSheet.create({
   tela: { flex: 1, backgroundColor: cores.fundo },
   topo: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: cores.cabecalho, paddingHorizontal: 16, paddingTop: 44, paddingBottom: 16 },
+  rota: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: cores.cabecalho, borderRadius: 14, padding: 14 },
+  rotaRotulo: { color: 'rgba(255,255,255,0.7)', fontSize: 10.5, fontWeight: '700', letterSpacing: 0.5 },
+  rotaPonta: { color: '#fff', fontSize: 17, fontWeight: '800', marginTop: 2 },
+  dado: { width: '31.5%', backgroundColor: cores.cartao, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: cores.borda },
+  dadoValor: { fontSize: 13.5, fontWeight: '700', color: cores.texto, marginTop: 2 },
   pdf: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: 10, height: 36 },
   pdfTexto: { color: '#fff', fontWeight: '800', fontSize: 13 },
   topoTitulo: { color: '#fff', fontSize: 18, fontWeight: '800' },

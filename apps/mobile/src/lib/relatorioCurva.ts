@@ -60,7 +60,7 @@ export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm:
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     @page { size: A4; margin: 12mm; }
-    body { font-family: sans-serif; font-size: 10.5pt; color: #1f2937; }
+    body { font-family: sans-serif; font-size: 10.5pt; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     header { display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
     header img { height: 44px; } header .t { flex: 1; } header h1 { margin: 0; font-size: 16pt; }
     h2 { color: #0572CE; border-bottom: 2px solid #0572CE; font-size: 10pt; text-transform: uppercase; margin: 16px 0 6px; padding-bottom: 2px; }
@@ -70,6 +70,11 @@ export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm:
     table { width: 100%; border-collapse: collapse; font-size: 9pt; } td, th { padding: 4px 3px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
     th { color: #6b7280; font-weight: normal; font-size: 8.5pt; } tr { break-inside: avoid; }
     .selo { border-radius: 10px; padding: 1px 7px; font-weight: bold; font-size: 8.5pt; white-space: nowrap; }
+    .info { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; } .info div { border: 1px solid #e5e7eb; border-radius: 6px; padding: 5px 6px; }
+    .info b { display: block; font-size: 10pt; }
+    .rota { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding: 10px 14px; border-radius: 8px; background: #163A6B; color: #fff; }
+    .rota > div { flex: 1; } .rota .l { color: #BFD3EE; display: block; } .rota b { font-size: 14pt; }
+    .rota .seta { flex: 0 0 auto; text-align: center; font-size: 20pt; line-height: 1; } .rota .seta span { display: block; font-size: 8.5pt; color: #BFD3EE; }
     .det { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; } figure { margin: 0; break-inside: avoid; } figcaption { font-size: 8.5pt; margin-bottom: 3px; }
   </style></head><body>
   <header>${logo ? `<img src="${logo}">` : ''}<div class="t"><h1>Análise de curva OTDR</h1>
@@ -84,8 +89,14 @@ export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm:
     <div><span class="l">ORL</span><b>${s.orlDb ? `${fmt(s.orlDb)} dB` : '—'}</b></div>
     <div class="${a.criticos ? 'alerta' : ''}"><span class="l">Eventos</span><b>${s.eventos.length}</b><span class="l">${a.criticos} crítico(s) · ${a.atencao} atenção</span></div>
   </div>
-  <p class="s" style="font-size:9pt">${esc([s.fabricante, s.equipamento].filter(Boolean).join(' '))} · ${s.comprimentoOndaNm} nm · pulso ${s.pulsoNs} ns · IOR ${s.indiceRefracao.toFixed(4)} · resolução ${fmt(s.resolucaoM)} m
-    ${s.cabo ? ` · cabo ${esc(s.cabo)}` : ''}${s.fibra ? ` · fibra ${esc(s.fibra)}` : ''}${s.localA || s.localB ? ` · ${esc(s.localA || '?')} → ${esc(s.localB || '?')}` : ''}${s.data ? ` · medida em ${s.data.toLocaleString('pt-BR')}` : ''}</p>
+  ${s.localA || s.localB ? `<div class="rota"><div><span class="l">ORIGEM (A)</span><b>${esc(s.localA || '—')}</b></div>
+    <div class="seta">→<span>${km(a.comprimentoKm)}</span></div><div style="text-align:right"><span class="l">FIM (B)</span><b>${esc(s.localB || '—')}</b></div></div>` : ''}
+  <h2>Medição</h2>
+  <div class="info">${[
+    ['OTDR', [s.fabricante, s.equipamento].filter(Boolean).join(' ')], ['Comprimento de onda', `${s.comprimentoOndaNm} nm`],
+    ['Pulso', `${s.pulsoNs} ns`], ['Índice de refração (IOR)', s.indiceRefracao.toFixed(4)], ['Resolução', `${fmt(s.resolucaoM)} m`],
+    ['Cabo', s.cabo], ['Fibra', s.fibra], ['Medida em', s.data?.toLocaleString('pt-BR')], ['Série do OTDR', s.serie], ['Operador', s.operador],
+  ].filter(([, v]) => v).map(([r, v]) => `<div><span class="l">${r}</span><b>${esc(v)}</b></div>`).join('')}</div>
   <h2>Curva</h2>
   ${svgTraco(s, niveis, 0, fimVista, 960, 300)}
   ${detalhes ? `<h2>Detalhe dos eventos que pedem ação</h2><div class="det">${detalhes}</div>` : ''}
