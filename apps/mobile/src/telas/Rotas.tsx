@@ -1,9 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { randomUUID } from 'expo-crypto';
-import { File } from 'expo-file-system';
-import { requireOptionalNativeModule } from 'expo-modules-core';
-import { ActivityIndicator, Alert, FlatList, Linking, Pressable, Text, View } from 'react-native';
+import { Alert, FlatList, Linking, Pressable, Text, View } from 'react-native';
 
 import AnaliseSor from '../componentes/AnaliseSor';
 
@@ -28,7 +25,6 @@ export default function Rotas({ voltar }: { voltar: () => void }) {
   const [curvas, setCurvas] = useState<Curva[]>([]);
   const [aberta, setAberta] = useState<string | null>(null);
   const [analise, setAnalise] = useState<(Curva & { extensaoKm: number | null }) | null>(null);
-  const [enviando, setEnviando] = useState<string | null>(null);
 
   function carregarCurvas() {
     supabase.rpc('curvas_trecho', { p_limite: 5 }).then(({ data }) => {
@@ -64,47 +60,6 @@ export default function Rotas({ voltar }: { voltar: () => void }) {
     abrirLink(data.signedUrl);
   }
 
-  // Envia curvas do OTDR (PDF ou .SOR) do celular para o trecho. Precisa de internet.
-  async function enviarCurva(rota: Rota) {
-    // O seletor de arquivos só existe a partir do APK novo; nos antigos o botão avisa.
-    if (!requireOptionalNativeModule('ExpoDocumentPicker')) {
-      return Alert.alert('Atualize o app', 'Para enviar curvas pelo celular é preciso instalar a versão nova do APK. Pelo painel já funciona.');
-    }
-    const Seletor: typeof import('expo-document-picker') = require('expo-document-picker');
-    const r = await Seletor.getDocumentAsync({ type: ['application/pdf', 'application/octet-stream', '*/*'], multiple: true, copyToCacheDirectory: true });
-    if (r.canceled) return;
-    const validos = r.assets.filter((a) => /\.(sor|pdf)$/i.test(a.name));
-    if (!validos.length) return Alert.alert('Arquivo não aceito', 'Envie a curva em PDF ou .SOR.');
-    setEnviando(rota.id);
-    const { data: sessao } = await supabase.auth.getSession();
-    const hoje = new Date().toISOString().slice(0, 10);
-    const falhas: string[] = [];
-    let ultimoSor: Curva | null = null;
-    for (const a of validos) {
-      const nomeSeguro = a.name.normalize('NFD').replace(/[^\w.-]+/g, '_');
-      const caminho = `${rota.id}/${hoje}_${randomUUID().slice(0, 8)}_${nomeSeguro}`;
-      const tipo = /\.pdf$/i.test(a.name) ? 'application/pdf' : 'application/octet-stream';
-      const { error: erroUp } = await supabase.storage.from('curvas').upload(caminho, await new File(a.uri).arrayBuffer(), { contentType: tipo });
-      if (erroUp) { falhas.push(a.name); continue; }
-      const fibra = a.name.match(/(?:^|[^a-z])(?:fo|fibra|f)[ _-]?(\d{1,3})(?!\d)/i)?.[1];
-      const { error } = await supabase.from('rota_curvas').insert({
-        rota_id: rota.id, tirada_em: hoje, caminho_arquivo: caminho, nome_arquivo: a.name,
-        fibra: fibra ? Number(fibra) : null, enviado_por: sessao.session?.user.id,
-      });
-      if (error) { falhas.push(a.name); continue; }
-      if (/\.sor$/i.test(a.name)) {
-        ultimoSor = { rota_id: rota.id, origem: 'arquivo', tirada_em: hoje, bucket: 'curvas', caminho, nome: a.name,
-          fibra: fibra ? Number(fibra) : null, ponta: null, os_numero: null, total: 0, ultima_em: hoje };
-      }
-    }
-    setEnviando(null);
-    carregarCurvas();
-    setAberta(rota.id);
-    if (falhas.length) Alert.alert('Algumas curvas não subiram', `${falhas.join(', ')}\n\nVerifique a internet e tente de novo.`);
-    // .SOR enviado já abre a análise dos eventos.
-    if (ultimoSor) setAnalise({ ...ultimoSor, extensaoKm: rota.extensao_km });
-  }
-
   return (
     <View style={estilo.tela}>
       <Cabecalho titulo="Rotas do backbone" subtitulo="KMZ e curvas OTDR por trecho" voltar={voltar} />
@@ -135,10 +90,6 @@ export default function Rotas({ voltar }: { voltar: () => void }) {
                     <Text style={{ color: cores.primaria, fontWeight: '600' }}>Abrir KMZ</Text>
                   </Pressable>
                 ) : <Text style={{ color: cores.apagado, fontSize: 13 }}>KMZ ainda não cadastrado</Text>}
-                <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} disabled={!!enviando} onPress={() => enviarCurva(item)}>
-                  {enviando === item.id ? <ActivityIndicator size="small" color={cores.primaria} /> : <Icone nome="upload" cor={cores.primaria} />}
-                  <Text style={{ color: cores.primaria, fontWeight: '600' }}>Enviar curva</Text>
-                </Pressable>
                 {lista.length > 0 && (
                   <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} onPress={() => setAberta(aberta === item.id ? null : item.id)}>
                     <Icone nome="chart-bell-curve" cor={cores.primaria} />
