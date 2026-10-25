@@ -8,21 +8,21 @@ import { aoMudarFila, itensPendentes } from '../lib/fila';
 import { enderecoDe, posicaoAtual } from '../lib/localizacao';
 import { supabase } from '../lib/supabase';
 import {
-  ESTADOS_BASE, ESTAIS, excluirPonto, GRAVIDADES, MATERIAIS, OCORRENCIAS, Opcao, PontoVistoria, proximoPoste, salvarPonto, TIPOS_VIA,
+  ESTADOS_BASE, ESTAIS, excluirPonto, GRAVIDADES, MATERIAIS, OCORRENCIAS, Opcao, PontoVistoria as Ponto, proximoPoste, salvarPonto, TIPOS_VIA,
 } from '../lib/vistoria';
 import CameraOS from './CameraOS';
 
 type Props = {
   osId: string;
-  ponto: PontoVistoria | null;       // null: ponto novo
+  ponto: Ponto | null;       // null: ponto novo
   categoria: 'poste' | 'ocorrencia'; // usado quando é novo
-  daOs: PontoVistoria[];             // já lançados (número do próximo poste e via do anterior)
+  daOs: Ponto[];             // já lançados (número do próximo poste e via do anterior)
   podeEditar: boolean;
   usuario: { nome: string; cargo: string | null };
   voltar: () => void;
 };
 
-function novoPonto(osId: string, categoria: 'poste' | 'ocorrencia', daOs: PontoVistoria[]): PontoVistoria {
+function novoPonto(osId: string, categoria: 'poste' | 'ocorrencia', daOs: Ponto[]): Ponto {
   // Herda do último ponto o que costuma se repetir ao longo da rota (via e material do poste).
   const anterior = [...daOs].reverse().find((p) => p.categoria === 'poste') ?? daOs[daOs.length - 1];
   return {
@@ -40,7 +40,7 @@ function novoPonto(osId: string, categoria: 'poste' | 'ocorrencia', daOs: PontoV
 // Registro de um poste ou de uma ocorrência na Vistoria Backbone MG: GPS, situação, via e fotos (funciona offline).
 export default function PontoVistoria({ osId, ponto: inicial, categoria, daOs, podeEditar, usuario, voltar }: Props) {
   const [nova, setNova] = useState(!inicial);
-  const [p, setP] = useState<PontoVistoria>(() => inicial ?? novoPonto(osId, categoria, daOs));
+  const [p, setP] = useState<Ponto>(() => inicial ?? novoPonto(osId, categoria, daOs));
   const [lancados, setLancados] = useState(daOs);
   const [capturando, setCapturando] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -48,7 +48,7 @@ export default function PontoVistoria({ osId, ponto: inicial, categoria, daOs, p
   const [fotos, setFotos] = useState(0);
   const enderecoAuto = useRef('');
   const poste = p.categoria === 'poste';
-  const mudar = (campos: Partial<PontoVistoria>) => setP((x) => ({ ...x, ...campos }));
+  const mudar = (campos: Partial<Ponto>) => setP((x) => ({ ...x, ...campos }));
 
   useEffect(() => {
     const assinatura = BackHandler.addEventListener('hardwareBackPress', () => {
