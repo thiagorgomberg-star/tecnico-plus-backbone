@@ -327,7 +327,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
             <Info icone="draw-pen" rotulo="Assinatura do responsável no local" valor={assinadoPor ? `Assinado por ${assinadoPor}` : 'Ainda não colhida.'} />
             </View>
 
-            {os.origem_ponto_id ? <FotosReferencia osId={os.id} /> : null}
+            {os.origem_ponto_id || os.informado_por ? <FotosReferencia osId={os.id} /> : null}
             <MaterialApoio osId={os.id} />
 
             <Assinatura osId={os.id} aberta={assinando} fechar={() => setAssinando(false)} aoSalvar={setAssinadoPor} />
@@ -359,7 +359,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
             <Text style={s.valor}>
               de no mínimo {MINIMO_FOTOS} fotos na horizontal{fotosNaFila > 0 ? ` · ${fotosNaFila} aguardando internet` : ''}
             </Text>
-            {os.origem_ponto_id ? <Text style={[s.valor, { marginTop: 8 }]}>As fotos da vistoria aparecem na câmera como guia: repita o mesmo ângulo.</Text> : null}
+            {os.origem_ponto_id || os.informado_por ? <Text style={[s.valor, { marginTop: 8 }]}>As fotos da vistoria aparecem na câmera como guia: repita o mesmo ângulo.</Text> : null}
             {podeFotografar ? (
               <Pressable style={[s.botaoBloco, { backgroundColor: cores.primaria }]} onPress={() => abrirCamera(totalFotos)}>
                 <Text style={s.botaoTexto}>Tirar fotos</Text>
@@ -368,7 +368,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
           </View>
         ) : null}
 
-        {aba === 'fotos' && os.origem_ponto_id ? <FotosReferencia osId={os.id} /> : null}
+        {aba === 'fotos' && (os.origem_ponto_id || os.informado_por) ? <FotosReferencia osId={os.id} /> : null}
 
         {aba === 'historico' ? (
           <View style={s.bloco}>

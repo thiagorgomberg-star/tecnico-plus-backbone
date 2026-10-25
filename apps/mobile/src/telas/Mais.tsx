@@ -11,7 +11,7 @@ import { Tema, TEMAS, temaAtual, trocarTema } from '../lib/tema';
 import { supabase } from '../lib/supabase';
 import { descreverVeiculo, MeuVeiculo, meuVeiculo } from '../lib/veiculo';
 
-type Destino = 'preventiva' | 'escala' | 'rotas' | 'despesas' | 'frota' | 'inventario' | 'perfil';
+type Destino = 'preventiva' | 'escala' | 'rotas' | 'despesas' | 'frota' | 'inventario' | 'perfil' | 'evento';
 type Props = { nome: string; cargo: string | null; pendentes: number; abrir: (d: Destino) => void; sair: () => void };
 
 const iniciais = (nome: string) => nome.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'T';
@@ -60,6 +60,7 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
         </Pressable>
         <Text style={s.secao}>CAMPO</Text>
         <View style={s.grupo}>
+        {item('alert-octagon-outline', 'Informar evento', 'Viu um problema na rede? Registre com foto e localização: vira O.S. no backlog', () => abrir('evento'), cores.perigo)}
         {item('toolbox-outline', 'Inventário Matinal', 'Foto de cada ferramenta e EPI a cada 30 dias', () => abrir('inventario'), '#7A5AA6')}
         {item('car-outline', 'Frota', 'Meu veículo: abastecimento, pedágio e manutenção', () => abrir('frota'), '#227E9E')}
         {item('receipt-text-outline', 'Despesas', 'Ferramentas, material, alimentação: foto do comprovante e valores', () => abrir('despesas'), cores.alerta)}

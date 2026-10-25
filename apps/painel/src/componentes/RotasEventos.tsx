@@ -5,7 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import { excluirComConfirmacao } from "@/lib/excluir";
 import { supabase } from "@/lib/supabase";
 
-type Rota = { id: string; trecho: string; descricao: string | null; link_kmz: string; ativo: boolean };
+type Rota = { id: string; trecho: string; descricao: string | null; link_kmz: string; ativo: boolean; regiao: string };
+const REGIOES = ["MG", "SP"];
 type Curva = {
   rota_id: string; origem: "arquivo" | "campo"; tirada_em: string; bucket: string; caminho: string; nome: string;
   fibra: number | null; ponta: string | null; observacao: string | null; os_numero: number | null; enviado_por: string | null;
@@ -65,12 +66,13 @@ export default function RotasEventos() {
   const [trecho, setTrecho] = useState("");
   const [link, setLink] = useState("");
   const [descricao, setDescricao] = useState("");
+  const [regiao, setRegiao] = useState("MG");
   const [curvas, setCurvas] = useState<Curva[]>([]);
   const [versao, setVersao] = useState(0);
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
 
   useEffect(() => {
-    supabase.from("rotas").select("*").order("trecho").then(({ data }) => setRotas(data ?? []));
+    supabase.from("rotas").select("*").order("regiao").order("trecho").then(({ data }) => setRotas(data ?? []));
     supabase.rpc("curvas_trecho", { p_limite: 10 }).then(({ data }) => setCurvas((data as Curva[]) ?? []));
     supabase.from("eventos_mapa").select("*").order("evento_localizado_em", { ascending: false })
       .then(({ data }) => setEventos(data ?? []));
@@ -78,7 +80,7 @@ export default function RotasEventos() {
 
   async function adicionar(e: React.FormEvent) {
     e.preventDefault();
-    const { error } = await supabase.from("rotas").insert({ trecho: trecho.trim(), link_kmz: link.trim(), descricao: descricao.trim() || null });
+    const { error } = await supabase.from("rotas").insert({ trecho: trecho.trim(), link_kmz: link.trim(), descricao: descricao.trim() || null, regiao: regiao.trim().toUpperCase() || "MG" });
     if (error) return alert(error.message);
     setTrecho(""); setLink(""); setDescricao("");
     recarregar();
@@ -116,9 +118,12 @@ export default function RotasEventos() {
             ⚠ {atrasados.length} trecho(s) há mais de {DIAS_CURVA} dias sem curva nova: {atrasados.map((r) => r.trecho).join(", ")}
           </div>
         )}
-        <form onSubmit={adicionar} className="grid gap-2 border-b border-gray-100 p-4 sm:grid-cols-[1fr_2fr_1fr_auto]">
-          <input className={campo} placeholder="Trecho (ex.: Arujá - Guararema)" value={trecho} onChange={(e) => setTrecho(e.target.value)} required />
-          <input className={campo} placeholder="Link do KMZ no Google Drive" type="url" value={link} onChange={(e) => setLink(e.target.value)} required />
+        <p className="px-4 pt-3 text-xs text-gray-500">Os trechos aparecem no app para escolher ao abrir vistoria e preventiva. Só o supervisor inclui ou exclui.</p>
+        <form onSubmit={adicionar} className="grid gap-2 border-b border-gray-100 p-4 sm:grid-cols-[110px_1fr_2fr_1fr_auto]">
+          <input className={campo} list="regioes-rota" placeholder="Região" title="Região (MG, SP ou outra)" value={regiao} onChange={(e) => setRegiao(e.target.value)} required />
+          <datalist id="regioes-rota">{[...new Set([...REGIOES, ...rotas.map((r) => r.regiao)])].map((r) => <option key={r} value={r} />)}</datalist>
+          <input className={campo} placeholder="Trecho (ex.: BB-16 · Pouso Alegre × Cambuí)" value={trecho} onChange={(e) => setTrecho(e.target.value)} required />
+          <input className={campo} placeholder="Link do KMZ no Google Drive (opcional)" type="url" value={link} onChange={(e) => setLink(e.target.value)} />
           <input className={campo} placeholder="Observação (opcional)" value={descricao} onChange={(e) => setDescricao(e.target.value)} />
           <button className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800">Adicionar</button>
         </form>
@@ -204,9 +209,10 @@ function TrechoCurvas({ rota, curvas, alternar, recarregar }: { rota: Rota; curv
   return (
     <li className={`border-b border-gray-100 p-4 text-sm last:border-0 ${atrasado ? "bg-red-50/40" : ""}`}>
       <div className="flex flex-wrap items-center gap-3">
+        <span className="rounded-md bg-[#163A6B]/10 px-2 py-0.5 text-xs font-bold text-[#163A6B]">{rota.regiao}</span>
         <span className={`font-medium ${rota.ativo ? "" : "text-gray-400 line-through"}`}>{rota.trecho}</span>
         {rota.descricao && <span className="text-gray-500">{rota.descricao}</span>}
-        <a className="text-blue-700 hover:underline" href={rota.link_kmz} target="_blank" rel="noreferrer">KMZ</a>
+        {rota.link_kmz ? <a className="text-blue-700 hover:underline" href={rota.link_kmz} target="_blank" rel="noreferrer">KMZ</a> : <span className="text-xs text-gray-400">sem KMZ</span>}
         {dias == null ? (
           <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">⚠ sem curvas</span>
         ) : dias > DIAS_CURVA ? (

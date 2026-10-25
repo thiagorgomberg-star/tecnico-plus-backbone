@@ -27,7 +27,7 @@ import { supabase } from '../lib/supabase';
 import { MeuVeiculo, meuVeiculo } from '../lib/veiculo';
 import { OrdemServico, rotuloDaOs } from '../lib/tipos';
 
-type Props = { nome: string; abrirOS: (os: OrdemServico) => void; abrirInventario: () => void; iniciarAtividade: () => void };
+type Props = { nome: string; abrirOS: (os: OrdemServico) => void; abrirInventario: () => void; iniciarAtividade: () => void; informarEvento: () => void };
 
 const CACHE_OS = 'ordens-cache';
 const PESO_PRIORIDADE = { emergencia: 0, alta: 1, media: 2, baixa: 3 };
@@ -41,7 +41,7 @@ const duracao = (ms: number) => {
 };
 
 // Tela principal do técnico: cartão do expediente sobre o topo e as O.S. separadas em abas.
-export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtividade }: Props) {
+export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtividade, informarEvento }: Props) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
   const [pendentes, setPendentes] = useState(0);
@@ -465,6 +465,16 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
           );
         })}
       </View>
+      {aba === 'backlog' ? (
+        <Pressable style={({ pressed }) => [s.informar, pressed && { opacity: 0.85 }]} onPress={informarEvento}>
+          <View style={s.informarIcone}><Icone nome="alert-octagon-outline" tamanho={22} cor={cores.perigo} /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.informarTitulo}>Informar evento</Text>
+            <Text style={s.informarTexto}>Viu um problema na rede? Registre com foto e localização.</Text>
+          </View>
+          <Icone nome="chevron-right" tamanho={22} cor={cores.apagado} />
+        </Pressable>
+      ) : null}
     </View>
   );
 
@@ -587,6 +597,11 @@ function CartaoBacklog({ b, assumir, ocupado }: { b: ItemBacklog & { distancia: 
 }
 
 const s = StyleSheet.create({
+  informar: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: cores.cartao, marginHorizontal: 16, marginTop: 12,
+    borderRadius: 18, padding: 14, borderWidth: 1, borderColor: '#F6D3D3', ...sombra },
+  informarIcone: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#FDECEC', alignItems: 'center', justifyContent: 'center' },
+  informarTitulo: { fontSize: 15, fontWeight: '800', color: cores.texto },
+  informarTexto: { fontSize: 12.5, color: cores.suave, marginTop: 2 },
   backlogDescricao: { fontSize: 13, color: cores.suave, marginTop: 8 },
   backlogBotoes: { flexDirection: 'row', gap: 8, marginTop: 12 },
   backlogBotao: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: 12 },

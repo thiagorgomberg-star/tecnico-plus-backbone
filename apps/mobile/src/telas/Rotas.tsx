@@ -76,10 +76,12 @@ export default function Rotas({ voltar }: { voltar: () => void }) {
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', gap: 16, marginTop: 10 }}>
-                <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} onPress={() => abrirLink(item.link_kmz)}>
-                  <Icone nome="map-marker-path" cor={cores.primaria} />
-                  <Text style={{ color: cores.primaria, fontWeight: '600' }}>Abrir KMZ</Text>
-                </Pressable>
+                {item.link_kmz ? (
+                  <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} onPress={() => abrirLink(item.link_kmz)}>
+                    <Icone nome="map-marker-path" cor={cores.primaria} />
+                    <Text style={{ color: cores.primaria, fontWeight: '600' }}>Abrir KMZ</Text>
+                  </Pressable>
+                ) : <Text style={{ color: cores.apagado, fontSize: 13 }}>KMZ ainda não cadastrado</Text>}
                 {lista.length > 0 && (
                   <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} onPress={() => setAberta(aberta === item.id ? null : item.id)}>
                     <Icone nome="chart-bell-curve" cor={cores.primaria} />

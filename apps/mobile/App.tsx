@@ -27,6 +27,7 @@ import Login from './src/telas/Login';
 import Mais from './src/telas/Mais';
 import Despesas from './src/telas/Despesas';
 import Inventario from './src/telas/Inventario';
+import InformarEvento from './src/telas/InformarEvento';
 import MeuPerfil from './src/telas/MeuPerfil';
 import MinhaEscala from './src/telas/MinhaEscala';
 import NovaPreventiva from './src/telas/NovaPreventiva';
@@ -41,7 +42,7 @@ export default function App() {
   const [perfil, setPerfil] = useState<Perfil>({ nome: '', cargo: null });
   const [osAberta, setOsAberta] = useState<OrdemServico | null>(null);
   const [camera, setCamera] = useState<Camera | null>(null);
-  const [tela, setTela] = useState<'inicio' | 'rotas' | 'escala' | 'preventiva' | 'despesas' | 'frota' | 'inventario' | 'perfil'>('inicio');
+  const [tela, setTela] = useState<'inicio' | 'rotas' | 'escala' | 'preventiva' | 'despesas' | 'frota' | 'inventario' | 'perfil' | 'evento'>('inicio');
   const [aba, setAba] = useState<Aba>('atividades');
   const [pendentes, setPendentes] = useState(0);
 
@@ -164,6 +165,8 @@ export default function App() {
     conteudo = <Despesas modo="frota" voltar={() => setTela('inicio')} />;
   } else if (tela === 'inventario') {
     conteudo = <Inventario voltar={() => setTela('inicio')} usuario={perfil} />;
+  } else if (tela === 'evento') {
+    conteudo = <InformarEvento usuario={perfil} voltar={() => setTela('inicio')} />;
   } else if (tela === 'perfil') {
     conteudo = <MeuPerfil voltar={() => setTela('inicio')} />;
   } else if (tela === 'escala') {
@@ -172,7 +175,7 @@ export default function App() {
     conteudo = (
       <>
         <View style={{ flex: 1 }}>
-          {aba === 'atividades' ? <Atividades nome={perfil.nome} abrirOS={setOsAberta} abrirInventario={() => setTela('inventario')} iniciarAtividade={() => setTela('preventiva')} /> : null}
+          {aba === 'atividades' ? <Atividades nome={perfil.nome} abrirOS={setOsAberta} abrirInventario={() => setTela('inventario')} iniciarAtividade={() => setTela('preventiva')} informarEvento={() => setTela('evento')} /> : null}
           {aba === 'estoque' ? <Estoque euId={euId} /> : null}
           {aba === 'mais' ? <Mais nome={perfil.nome} cargo={perfil.cargo} pendentes={pendentes} abrir={setTela} sair={sair} /> : null}
         </View>

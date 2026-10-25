@@ -14,6 +14,13 @@ type Ocorrencia = {
   criado_em: string; iniciada_em: string | null; concluida_em: string | null; sla_limite: string | null;
   trecho: string | null; tecnico: string | null; latitude: number | null; longitude: number | null; caixas: number;
 };
+// Eventos capturados em campo fora das O.S. (view mapa_eventos): informados pelo técnico e anotados na vistoria.
+type EventoCampo = {
+  fonte: "informado" | "vistoria"; id: string; descricao: string; gravidade: string | null; criado_em: string; tecnico: string | null;
+  situacao: string; os_numero: number | null; latitude: number | null; longitude: number | null;
+};
+type Fonte = "os" | "informado" | "vistoria";
+const FONTES: [Fonte, string, string][] = [["os", "O.S.", "#2a78d6"], ["informado", "Eventos informados", "#d0453b"], ["vistoria", "Anotados na vistoria", "#7a5aa6"]];
 type Gasto = { data: string; categoria: string; valor: number; tecnico: string; status: string; os_id: string | null };
 
 // Paleta categórica de referência (ordem fixa, validada para barras empilhadas) e rampa sequencial azul.
@@ -37,6 +44,8 @@ export default function Analise() {
   const [tecnico, setTecnico] = useState("");
   const [modo, setModo] = useState<"calor" | "pontos">("calor");
   const [os, setOs] = useState<Ocorrencia[]>([]);
+  const [eventos, setEventos] = useState<EventoCampo[]>([]);
+  const [fontes, setFontes] = useState<Fonte[]>(["os", "informado", "vistoria"]);
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [meses, setMeses] = useState<string[]>([]);
   const divMapa = useRef<HTMLDivElement>(null);
@@ -54,6 +63,8 @@ export default function Analise() {
         setMeses(lista);
         setOs((data as Ocorrencia[]) ?? []);
       });
+    supabase.from("mapa_eventos").select("*").gte("criado_em", desde).limit(10000)
+      .then(({ data }) => setEventos((data as EventoCampo[]) ?? []));
     supabase.from("despesas_planilha").select("data, categoria, valor, tecnico, status, os_id").gte("data", desde.slice(0, 10)).neq("status", "recusada")
       .limit(10000).then(({ data }) => setGastos((data as Gasto[]) ?? []));
   }, [dias]);
@@ -65,6 +76,7 @@ export default function Analise() {
 
   const filtradas = useMemo(() => os.filter((o) =>
     (!tipo || o.tipo === tipo) && (!trecho || o.trecho === trecho) && (!tecnico || o.tecnico === tecnico)), [os, tipo, trecho, tecnico]);
+  const eventosFiltrados = useMemo(() => eventos.filter((e) => !tecnico || e.tecnico === tecnico), [eventos, tecnico]);
   const gastosFiltrados = useMemo(() => gastos.filter((g) => !tecnico || g.tecnico === tecnico), [gastos, tecnico]);
 
   const r = useMemo(() => {
@@ -131,7 +143,7 @@ export default function Analise() {
           if (!p) return;
           const div = document.createElement("div");
           div.style.fontSize = "12px";
-          div.textContent = `O.S. ${p.numero} · ${p.tipo} · ${p.data}${p.trecho ? ` · ${p.trecho}` : ""}`;
+          div.textContent = String(p.texto);
           new Popup().setLngLat(e.lngLat).setDOMContent(div).addTo(m);
         });
         m.on("mouseenter", "pontos", () => { m.getCanvas().style.cursor = "pointer"; });
@@ -150,24 +162,30 @@ export default function Analise() {
   useEffect(() => {
     const m = mapa.current;
     if (!m || !mapaPronto) return;
-    const comLocal = filtradas.filter((o) => o.latitude != null && o.longitude != null);
+    const daOs = fontes.includes("os") ? filtradas.filter((o) => o.latitude != null && o.longitude != null).map((o) => ({
+      lon: o.longitude!, lat: o.latitude!,
+      texto: `O.S. ${o.numero} · ${o.tipo} · ${new Date(o.criado_em).toLocaleDateString("pt-BR")}${o.trecho ? ` · ${o.trecho}` : ""}`,
+      cor: SERIES[TIPOS_OS.indexOf(o.tipo)] ?? "#52514e",
+    })) : [];
+    const deCampo = eventosFiltrados.filter((e) => fontes.includes(e.fonte) && e.latitude != null && e.longitude != null).map((e) => ({
+      lon: e.longitude!, lat: e.latitude!,
+      texto: `${e.fonte === "informado" ? "Evento informado" : "Vistoria"} · ${e.descricao} · ${new Date(e.criado_em).toLocaleDateString("pt-BR")}${e.tecnico ? ` · ${e.tecnico}` : ""}${e.os_numero ? ` · O.S. ${e.os_numero}` : ""}`,
+      cor: FONTES.find(([f]) => f === e.fonte)![2],
+    }));
+    const comLocal = [...daOs, ...deCampo];
     (m.getSource("ocorrencias") as GeoJSONSource).setData({
       type: "FeatureCollection",
       features: comLocal.map((o) => ({
-        type: "Feature", geometry: { type: "Point", coordinates: [o.longitude!, o.latitude!] },
-        properties: {
-          numero: o.numero, tipo: o.tipo, trecho: o.trecho, data: new Date(o.criado_em).toLocaleDateString("pt-BR"),
-          cor: SERIES[TIPOS_OS.indexOf(o.tipo)] ?? "#52514e",
-        },
+        type: "Feature", geometry: { type: "Point", coordinates: [o.lon, o.lat] }, properties: { texto: o.texto, cor: o.cor },
       })),
     });
     m.setLayoutProperty("calor", "visibility", modo === "calor" ? "visible" : "none");
     m.setLayoutProperty("pontos", "visibility", modo === "pontos" ? "visible" : "none");
     if (comLocal.length) {
-      const lons = comLocal.map((o) => o.longitude!), lats = comLocal.map((o) => o.latitude!);
+      const lons = comLocal.map((o) => o.lon), lats = comLocal.map((o) => o.lat);
       m.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 40, maxZoom: 12, duration: 0 });
     }
-  }, [filtradas, modo, mapaPronto]);
+  }, [filtradas, eventosFiltrados, fontes, modo, mapaPronto]);
 
   async function exportar() {
     const cab = ["O.S.", "Ticket", "Tipo", "Situação", "Título", "Trecho", "Técnico", "Aberta em", "Iniciada em", "Concluída em",
@@ -223,7 +241,18 @@ export default function Analise() {
 
       <section className="rounded-xl border border-gray-200 bg-white">
         <div className="flex items-center gap-2 border-b border-gray-200 p-3">
-          <h3 className="mr-auto font-semibold">Mapa de calor das ocorrências</h3>
+          <h3 className="mr-auto font-semibold">Mapa de calor dos eventos de campo</h3>
+          {FONTES.map(([f, rotulo, cor]) => {
+            const ligado = fontes.includes(f);
+            const total = f === "os" ? filtradas.filter((o) => o.latitude != null).length : eventosFiltrados.filter((e) => e.fonte === f).length;
+            return (
+              <button key={f} onClick={() => setFontes((l) => (ligado ? l.filter((x) => x !== f) : [...l, f]))}
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${ligado ? "border-transparent bg-[#163A6B] text-white" : "border-gray-300 text-gray-500"}`}>
+                <span className="h-2 w-2 rounded-full" style={{ background: cor }} />{rotulo} {total}
+              </button>
+            );
+          })}
+          <span className="mx-1 h-5 w-px bg-gray-200" />
           {(["calor", "pontos"] as const).map((m) => (
             <button key={m} onClick={() => setModo(m)}
               className={`rounded-md px-3 py-1.5 text-sm ${modo === m ? "bg-gray-100 font-medium" : "text-gray-600"}`}>
@@ -239,9 +268,16 @@ export default function Analise() {
               <span className="flex h-3 w-40 overflow-hidden rounded">{RAMPA.map((c) => <span key={c} className="flex-1" style={{ background: c }} />)}</span>
               <span>Mais ocorrências</span>
             </>
-          ) : TIPOS_OS.map((t, i) => (
-            <span key={t} className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: SERIES[i] }} />{t}</span>
-          ))}
+          ) : (
+            <>
+              {fontes.includes("os") && TIPOS_OS.map((t, i) => (
+                <span key={t} className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: SERIES[i] ?? "#52514e" }} />{t}</span>
+              ))}
+              {FONTES.filter(([f]) => f !== "os" && fontes.includes(f)).map(([f, rotulo, cor]) => (
+                <span key={f} className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: cor }} />{rotulo}</span>
+              ))}
+            </>
+          )}
           <span className="ml-auto">Usa o ponto marcado em campo; sem ele, o local da O.S.</span>
         </div>
       </section>

@@ -13,7 +13,7 @@ import { ponto, supabase } from '../lib/supabase';
 import { OrdemServico } from '../lib/tipos';
 import { ehVistoria, TRECHOS_VISTORIA, VISTORIA_MG, VISTORIA_SP } from '../lib/vistoria';
 
-type Rota = { id: string; trecho: string };
+type Rota = { id: string; trecho: string; regiao?: string | null };
 const TIPOS = ['Preventiva rede', 'Preventiva site', VISTORIA_MG, VISTORIA_SP];
 const CACHE_ROTAS = 'rotas-cache';
 const CACHE_ATIVIDADES = 'atividades-preventiva-cache';
@@ -42,7 +42,7 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
 
   useEffect(() => {
     AsyncStorage.getItem(CACHE_ROTAS).then((c) => c && setRotas(JSON.parse(c)));
-    supabase.from('rotas').select('id, trecho, descricao, link_kmz').eq('ativo', true).order('trecho').then(({ data }) => {
+    supabase.from('rotas').select('id, trecho, descricao, link_kmz, regiao').eq('ativo', true).order('trecho').then(({ data }) => {
       if (!data) return;
       setRotas(data);
       AsyncStorage.setItem(CACHE_ROTAS, JSON.stringify(data));
@@ -58,6 +58,14 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
   const doTipo = lista.filter((a) => a.tipo === tipo);
   const vistoriaMg = ehVistoria(tipo);
   const vistoria = TRECHOS_VISTORIA[tipo];
+  // Trechos cadastrados pelo supervisor (painel > Rotas e eventos), os da região da vistoria primeiro.
+  // Sem nenhum cadastrado ainda, usa a lista padrão.
+  const siglaRegiao = tipo === VISTORIA_SP ? 'SP' : 'MG';
+  const trechosVistoria: { id: string | null; trecho: string; regiao: string | null }[] = rotas.length
+    ? [...rotas].sort((a, b) => Number((b.regiao ?? 'MG') === siglaRegiao) - Number((a.regiao ?? 'MG') === siglaRegiao)
+      || (a.regiao ?? '').localeCompare(b.regiao ?? '') || a.trecho.localeCompare(b.trecho))
+      .map((r) => ({ id: r.id, trecho: r.trecho, regiao: r.regiao ?? null }))
+    : (vistoria?.trechos ?? []).map((t) => ({ id: null, trecho: t, regiao: siglaRegiao }));
   const marcar = (nome: string) => setMarcadas((m) => (m.includes(nome) ? m.filter((x) => x !== nome) : [...m, nome]));
 
   // Captura a posição (funciona sem internet) e preenche o endereço (com internet; offline, as coordenadas).
@@ -87,7 +95,7 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
 
   async function iniciar() {
     if (!vistoriaMg && rotas.length > 0 && !rotaId) return Alert.alert('Escolha o trecho', 'Informe em qual trecho do backbone é a preventiva.');
-    if (!local.trim()) return Alert.alert(vistoriaMg ? 'Escolha o trecho' : 'Informe o local', vistoriaMg ? `Toque no trecho de ${vistoria?.regiao} que será vistoriado.` : tipo === 'Preventiva site' ? 'Nome do site/POP.' : 'Ponto ou trecho atendido.');
+    if (!local.trim()) return Alert.alert(vistoriaMg ? 'Escolha o trecho' : 'Informe o local', vistoriaMg ? 'Toque no trecho que será vistoriado.' : tipo === 'Preventiva site' ? 'Nome do site/POP.' : 'Ponto ou trecho atendido.');
     if (!endereco.trim()) return Alert.alert('Informe o endereço ou referência', 'Ex.: km, cidade, rodovia.');
     const escolhidas = doTipo.filter((a) => marcadas.includes(a.nome)).map((a) => `• ${a.nome}`);
     const descricao = [...escolhidas, atividades.trim()].filter(Boolean).join('\n');
@@ -117,7 +125,7 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
       descricao,
       ticket_acionamento: ticket.trim() || null,
       observacao_tecnico: observacao.trim() || null,
-      rota_id: vistoriaMg ? null : rotaId,
+      rota_id: rotaId,
       tecnico_id: usuario,
       criada_por: usuario,
       iniciada_em: agora,
@@ -163,11 +171,13 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
 
         {vistoriaMg ? (
           <>
-            <Text style={s.rotulo}>Trecho de {vistoria?.regiao} *</Text>
+            <Text style={s.rotulo}>Trecho *</Text>
             <View style={s.chips}>
-              {vistoria?.trechos.map((t) => (
-                <Pressable key={t} style={chip(local === t)} onPress={() => setLocal(t)}>
-                  <Text style={[s.chipTexto, local === t && { color: '#fff' }]}>{t}</Text>
+              {trechosVistoria.map((t) => (
+                <Pressable key={t.id ?? t.trecho} style={chip(local === t.trecho)} onPress={() => { setLocal(t.trecho); setRotaId(t.id); }}>
+                  <Text style={[s.chipTexto, local === t.trecho && { color: '#fff' }]}>
+                    {t.regiao && t.regiao !== siglaRegiao ? `${t.regiao} · ` : ''}{t.trecho}
+                  </Text>
                 </Pressable>
               ))}
             </View>
