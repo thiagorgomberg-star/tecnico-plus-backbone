@@ -11,7 +11,7 @@ type ComLocal = CaixaRede & { latitude?: number | null; longitude?: number | nul
 type Item = ComLocal & { lat: number; lng: number; distancia: number | null };
 const COR_TIPO: Record<string, string> = { emenda: '#1F6FD1', entroncamento: '#7A5AA6', dgo: '#163A6B', site: '#227E9E' };
 const ALTURA = 380;
-const MARGEM = 30;
+const MARGEM = 44;
 const fmtKm = (k: number) => (k < 1 ? `${Math.round(k * 1000)} m` : `${k.toFixed(1).replace('.', ',')} km`);
 
 // Mapa das caixas já cadastradas na rede (desenhado no próprio app, funciona sem internet com o que está guardado).
@@ -177,7 +177,7 @@ const s = StyleSheet.create({
   topoSub: { color: 'rgba(255,255,255,0.75)', fontSize: 12.5, marginTop: 2 },
   cartao: { backgroundColor: cores.cartao, borderRadius: 18, margin: 16, marginBottom: 0, overflow: 'hidden', paddingBottom: 12, ...sombra },
   vazio: { color: cores.suave, padding: 24, textAlign: 'center' },
-  zoom: { position: 'absolute', right: 10, top: 10, gap: 8 },
+  zoom: { position: 'absolute', right: 10, bottom: 34, gap: 8 },
   zoomBotao: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', ...sombra },
   legenda: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingHorizontal: 14, paddingTop: 10 },
   legendaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },

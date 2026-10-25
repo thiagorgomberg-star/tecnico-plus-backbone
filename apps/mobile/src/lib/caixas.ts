@@ -75,13 +75,19 @@ export function proximaTag(tipo: string, conhecidas: { identificacao: string }[]
 }
 
 // Caixas já cadastradas na rede (para escolher a caixa anterior). Guarda no celular para usar offline.
-export async function caixasDaRede(): Promise<CaixaRede[]> {
-  const { data } = await supabase.from('caixas_mapa').select(CAMPOS).order('atualizado_em', { ascending: false }).limit(300);
-  if (data) {
-    await AsyncStorage.setItem(CHAVE_REDE, JSON.stringify(data));
-    return data as unknown as CaixaRede[];
-  }
-  return ler<CaixaRede[]>(CHAVE_REDE, []);
+// Caixas da rede: entrega na hora as guardadas no celular (sem sinal é o que vale) e, se o servidor responder, atualiza.
+export async function caixasDaRede(aoAtualizar?: (c: CaixaRede[]) => void): Promise<CaixaRede[]> {
+  const guardadas = await ler<CaixaRede[]>(CHAVE_REDE, []);
+  aoAtualizar?.(guardadas);
+  try {
+    const { data } = await supabase.from('caixas_mapa').select(CAMPOS).order('atualizado_em', { ascending: false }).limit(1000);
+    if (data) {
+      await AsyncStorage.setItem(CHAVE_REDE, JSON.stringify(data));
+      aoAtualizar?.(data as unknown as CaixaRede[]);
+      return data as unknown as CaixaRede[];
+    }
+  } catch { /* sem sinal */ }
+  return guardadas;
 }
 
 export async function salvarCaixa(caixa: Caixa, nova: boolean) {

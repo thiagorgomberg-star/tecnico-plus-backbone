@@ -102,7 +102,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   }, [voltar]);
 
   useEffect(() => {
-    caixasDaRede().then(setRede);
+    caixasDaRede(setRede).catch(() => undefined);
     if (nova) {
       capturar();
       if (ultima && ultima.saidas.length) escolherOrigem(ultima, 1);
