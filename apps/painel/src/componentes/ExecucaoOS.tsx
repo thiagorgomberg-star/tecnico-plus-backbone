@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { supabase } from "@/lib/supabase";
 
-type Item = { id: string; nome: string; unidade: string; categoria: "servico" | "material" };
+type Item = { id: string; nome: string; unidade: string; categoria: "servico" | "material"; aprovado?: boolean };
 type Lancamento = { id: string; quantidade: number; observacao: string | null; lancado_em: string; item: Item | null; autor: { nome: string } | null };
 type Apoio = { tecnico_id: string; tecnico: { nome: string } | null };
 type Pessoa = { id: string; nome: string };
@@ -21,7 +21,7 @@ export default function ExecucaoOS({ osId, responsavelId }: { osId: string; resp
 
   useEffect(() => {
     supabase.from("os_servicos_executados")
-      .select("id, quantidade, observacao, lancado_em, item:itens_execucao(id, nome, unidade, categoria), autor:usuarios!os_servicos_executados_lancado_por_fkey(nome)")
+      .select("id, quantidade, observacao, lancado_em, item:itens_execucao(id, nome, unidade, categoria, aprovado), autor:usuarios!os_servicos_executados_lancado_por_fkey(nome)")
       .eq("os_id", osId).order("lancado_em")
       .then(({ data }) => setLancamentos((data as unknown as Lancamento[]) ?? []));
     supabase.from("os_tecnicos_apoio").select("tecnico_id, tecnico:usuarios!os_tecnicos_apoio_tecnico_id_fkey(nome)").eq("os_id", osId)
@@ -108,7 +108,7 @@ export default function ExecucaoOS({ osId, responsavelId }: { osId: string; resp
                 <tbody>
                   {doTipo.map((l) => (
                     <tr key={l.id} className="border-b border-gray-100 last:border-0">
-                      <td className="py-1.5">{l.item?.nome}{l.observacao ? <span className="text-gray-500"> · {l.observacao}</span> : null}</td>
+                      <td className="py-1.5">{l.item?.nome}{l.item?.aprovado === false ? <span className="ml-1 rounded bg-amber-100 px-1 text-xs text-amber-800">aguardando aprovação</span> : null}{l.observacao ? <span className="text-gray-500"> · {l.observacao}</span> : null}</td>
                       <td className="py-1.5 text-right font-medium">{fmt(l.quantidade)} {l.item?.unidade}</td>
                       <td className="py-1.5 pl-3 text-xs text-gray-500">{l.autor?.nome}</td>
                       <td className="py-1.5 pl-2 text-right">

@@ -5,7 +5,10 @@ import { useCallback, useEffect, useState } from "react";
 import { excluirComConfirmacao } from "@/lib/excluir";
 import { supabase } from "@/lib/supabase";
 
-type Item = { id: string; nome: string; unidade: string; categoria: "servico" | "material"; ordem: number; ativo: boolean };
+type Item = {
+  id: string; nome: string; unidade: string; categoria: "servico" | "material"; ordem: number; ativo: boolean; aprovado: boolean;
+  sugerido_em: string | null; autor: { nome: string } | null; os: { numero: number } | null;
+};
 
 const CATEGORIAS = [
   { valor: "servico" as const, rotulo: "Serviços executados" },
@@ -13,6 +16,7 @@ const CATEGORIAS = [
 ];
 
 // Lista que o técnico usa para lançar o que executou e o que gastou na O.S.
+// Itens cadastrados pelo técnico em campo chegam como "aguardando aprovação" (já lançados na O.S.).
 export default function Catalogo() {
   const [itens, setItens] = useState<Item[]>([]);
   const [form, setForm] = useState({ categoria: "servico" as Item["categoria"], nome: "", unidade: "un" });
@@ -20,14 +24,16 @@ export default function Catalogo() {
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
 
   useEffect(() => {
-    supabase.from("itens_execucao").select("*").order("ordem").order("nome")
+    supabase.from("itens_execucao")
+      .select("*, autor:usuarios!itens_execucao_sugerido_por_fkey(nome), os:ordens_servico!itens_execucao_sugerido_os_fkey(numero)")
+      .order("ordem").order("nome")
       .then(({ data }) => setItens(data ?? []));
   }, [versao]);
 
   async function incluir(e: React.FormEvent) {
     e.preventDefault();
     const ordem = Math.max(0, ...itens.filter((i) => i.categoria === form.categoria).map((i) => i.ordem)) + 1;
-    const { error } = await supabase.from("itens_execucao").insert({ ...form, nome: form.nome.trim(), unidade: form.unidade.trim(), ordem });
+    const { error } = await supabase.from("itens_execucao").insert({ ...form, nome: form.nome.trim().toUpperCase(), unidade: form.unidade.trim(), ordem });
     if (error) return alert(error.message.includes("duplicate") ? "Já existe um item com esse nome." : error.message);
     setForm({ ...form, nome: "" });
     recarregar();
@@ -40,6 +46,8 @@ export default function Catalogo() {
   }
 
   const campo = "rounded-lg border border-gray-300 p-2";
+  const pendentes = itens.filter((i) => !i.aprovado && i.ativo);
+  const aprovados = itens.filter((i) => i.aprovado || !i.ativo);
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white">
@@ -59,15 +67,36 @@ export default function Catalogo() {
         <button className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800">Incluir</button>
       </form>
 
+      {pendentes.length ? (
+        <div className="border-b border-amber-200 bg-amber-50 p-4">
+          <h3 className="text-sm font-semibold text-amber-900">Aguardando aprovação ({pendentes.length})</h3>
+          <p className="text-xs text-amber-800">Cadastrados pelo técnico em campo e já lançados na O.S. Corrija o nome ou a unidade se precisar e aprove. Recusar tira o item da lista.</p>
+          <ul className="mt-2 space-y-1.5">
+            {pendentes.map((i) => (
+              <li key={i.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-white p-2 text-sm">
+                <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">{i.categoria === "servico" ? "Serviço" : "Material"}</span>
+                <input className="min-w-48 flex-1 rounded border border-gray-200 px-1.5 py-1 uppercase" defaultValue={i.nome}
+                  onBlur={(e) => e.target.value.trim() && e.target.value.trim().toUpperCase() !== i.nome && atualizar(i, { nome: e.target.value.trim().toUpperCase() })} />
+                <input className="w-16 rounded border border-gray-200 px-1.5 py-1" defaultValue={i.unidade}
+                  onBlur={(e) => e.target.value.trim() && e.target.value !== i.unidade && atualizar(i, { unidade: e.target.value.trim() })} />
+                <span className="text-xs text-gray-500">{i.autor?.nome ?? "—"}{i.os ? ` · O.S. #${i.os.numero}` : ""}{i.sugerido_em ? ` · ${new Date(i.sugerido_em).toLocaleDateString("pt-BR")}` : ""}</span>
+                <button className="rounded-lg bg-green-700 px-3 py-1 text-xs font-semibold text-white hover:bg-green-800" onClick={() => atualizar(i, { aprovado: true })}>Aprovar</button>
+                <button className="rounded-lg border border-gray-300 px-3 py-1 text-xs hover:bg-gray-50" onClick={() => atualizar(i, { ativo: false })}>Recusar</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="grid gap-px bg-gray-100 md:grid-cols-2">
         {CATEGORIAS.map((c) => (
           <div key={c.valor} className="bg-white">
             <h3 className="px-4 pt-4 text-sm font-semibold text-gray-600">{c.rotulo}</h3>
             <ul className="p-2">
-              {itens.filter((i) => i.categoria === c.valor).length === 0 && (
+              {aprovados.filter((i) => i.categoria === c.valor).length === 0 && (
                 <li className="p-2 text-sm text-gray-500">Nenhum item.</li>
               )}
-              {itens.filter((i) => i.categoria === c.valor).map((i) => (
+              {aprovados.filter((i) => i.categoria === c.valor).map((i) => (
                 <li key={i.id} className="flex items-center gap-2 rounded p-2 text-sm hover:bg-gray-50">
                   <input className={`flex-1 rounded border border-transparent px-1 hover:border-gray-200 ${i.ativo ? "" : "text-gray-400 line-through"}`}
                     defaultValue={i.nome} onBlur={(e) => e.target.value.trim() && e.target.value !== i.nome && atualizar(i, { nome: e.target.value.trim() })} />

@@ -7,14 +7,16 @@ import { cores } from '../lib/estilo';
 import { enfileirar } from '../lib/fila';
 import { supabase } from '../lib/supabase';
 
-type Item = { id: string; nome: string; unidade: string; categoria: 'servico' | 'material' };
+type Item = { id: string; nome: string; unidade: string; categoria: 'servico' | 'material'; aprovado?: boolean };
 type Lancamento = { id: string; item_id: string; quantidade: number; observacao: string | null };
 type Pessoa = { id: string; nome: string };
 
 const CACHE_CATALOGO = 'catalogo-execucao';
 const CACHE_TECNICOS = 'tecnicos-ativos';
+const UNIDADES = ['un', 'm', 'km', 'pç', 'cx', 'rolo', 'kg', 'h'];
 
 // Serviços executados, materiais utilizados e técnicos de apoio da O.S. Tudo funciona sem internet.
+// Item que não está na lista: o técnico cadastra (CAIXA ALTA) e lança; ele fica aguardando a aprovação do supervisor.
 export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; podeEditar: boolean; euId: string | null }) {
   const [catalogo, setCatalogo] = useState<Item[]>([]);
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
@@ -24,6 +26,7 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
   const [itemId, setItemId] = useState<string | null>(null);
   const [quantidade, setQuantidade] = useState('');
   const [busca, setBusca] = useState('');
+  const [novo, setNovo] = useState<{ nome: string; unidade: string } | null>(null);
   const cacheOs = `execucao-${osId}`;
 
   useEffect(() => {
@@ -36,7 +39,7 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
         setApoio(salvo.apoio ?? []);
       }
     });
-    supabase.from('itens_execucao').select('id, nome, unidade, categoria').eq('ativo', true).order('ordem').then(({ data }) => {
+    supabase.from('itens_execucao').select('id, nome, unidade, categoria, aprovado').eq('ativo', true).order('ordem').then(({ data }) => {
       if (!data) return;
       setCatalogo(data);
       AsyncStorage.setItem(CACHE_CATALOGO, JSON.stringify(data));
@@ -67,12 +70,28 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
 
   async function lancar() {
     const valor = Number(quantidade.replace(',', '.'));
-    if (!escolhido) return Alert.alert('Escolha o item da lista');
-    if (!(valor > 0)) return Alert.alert('Informe a quantidade', `Em ${escolhido.unidade}.`);
-    const linha = { id: randomUUID(), os_id: osId, item_id: escolhido.id, quantidade: valor, observacao: null };
+    let item = escolhido;
+    if (novo) {
+      const nome = novo.nome.trim().toUpperCase();
+      if (!nome) return Alert.alert(`Escreva o nome do ${categoria === 'servico' ? 'serviço' : 'material'}`);
+      if (!(valor > 0)) return Alert.alert('Informe a quantidade', `Em ${novo.unidade}.`);
+      // Se já existe com o mesmo nome, usa o que existe.
+      item = catalogo.find((c) => c.categoria === categoria && c.nome.trim().toUpperCase() === nome) ?? null;
+      if (!item) {
+        item = { id: randomUUID(), nome, unidade: novo.unidade, categoria, aprovado: false };
+        await enfileirar({ tipo: 'rpc', nome: 'sugerir_item', args: { p_id: item.id, p_nome: nome, p_unidade: novo.unidade, p_categoria: categoria, p_os: osId } });
+        const lista = [...catalogo, item];
+        setCatalogo(lista);
+        AsyncStorage.setItem(CACHE_CATALOGO, JSON.stringify(lista));
+      }
+    }
+    if (!item) return Alert.alert('Escolha o item da lista');
+    if (!(valor > 0)) return Alert.alert('Informe a quantidade', `Em ${item.unidade}.`);
+    const linha = { id: randomUUID(), os_id: osId, item_id: item.id, quantidade: valor, observacao: null };
     await enfileirar({ tipo: 'inserir', tabela: 'os_servicos_executados', linha });
     setLancamentos((l) => [...l, linha]);
     setItemId(null);
+    setNovo(null);
     setQuantidade('');
     setBusca('');
   }
@@ -113,7 +132,10 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
             const item = porId.get(l.item_id);
             return (
               <Pressable key={l.id} style={s.linha} onLongPress={podeEditar ? () => remover(l) : undefined}>
-                <Text style={s.linhaNome}>{item?.nome ?? 'Item'}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.linhaNome}>{(item?.nome ?? 'Item').toUpperCase()}</Text>
+                  {item?.aprovado === false ? <Text style={s.pendente}>AGUARDANDO APROVAÇÃO DO SUPERVISOR</Text> : null}
+                </View>
                 <Text style={s.linhaQtd}>{fmt(l.quantidade)} {item?.unidade}</Text>
                 {podeEditar ? (
                   <Pressable hitSlop={10} onPress={() => remover(l)}><Text style={s.remover}>✕</Text></Pressable>
@@ -129,7 +151,7 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
           <Text style={s.blocoTitulo}>LANÇAR</Text>
           <View style={s.segmento}>
             {(['servico', 'material'] as const).map((c) => (
-              <Pressable key={c} style={[s.segmentoItem, categoria === c && s.segmentoAtivo]} onPress={() => { setCategoria(c); setItemId(null); }}>
+              <Pressable key={c} style={[s.segmentoItem, categoria === c && s.segmentoAtivo]} onPress={() => { setCategoria(c); setItemId(null); setNovo(null); }}>
                 <Text style={[s.segmentoTexto, categoria === c && { color: '#fff' }]}>{c === 'servico' ? 'Serviço' : 'Material'}</Text>
               </Pressable>
             ))}
@@ -139,13 +161,40 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
           ) : null}
           <View style={s.chips}>
             {opcoes.map((c) => (
-              <Pressable key={c.id} style={[s.chip, itemId === c.id && s.chipAtivo]} onPress={() => setItemId(c.id)}>
-                <Text style={[s.chipTexto, itemId === c.id && { color: '#fff' }]}>{c.nome}</Text>
+              <Pressable key={c.id} style={[s.chip, itemId === c.id && s.chipAtivo, c.aprovado === false && s.chipPendente]}
+                onPress={() => { setItemId(c.id); setNovo(null); }}>
+                <Text style={[s.chipTexto, itemId === c.id && { color: '#fff' }]}>{c.nome.toUpperCase()}{c.aprovado === false ? ' ⏳' : ''}</Text>
               </Pressable>
             ))}
-            {opcoes.length === 0 ? <Text style={s.vazio}>Nenhum item cadastrado pelo supervisor.</Text> : null}
+            {opcoes.length === 0 && !busca ? <Text style={s.vazio}>Nenhum item na lista.</Text> : null}
+            <Pressable style={[s.chip, s.chipNovo, novo && s.chipAtivo]}
+              onPress={() => { setItemId(null); setNovo({ nome: busca.toUpperCase(), unidade: categoria === 'servico' ? 'un' : 'm' }); }}>
+              <Text style={[s.chipTexto, { color: novo ? '#fff' : cores.primaria, fontWeight: '700' }]}>
+                + {categoria === 'servico' ? 'NOVO SERVIÇO' : 'NOVO MATERIAL'}
+              </Text>
+            </Pressable>
           </View>
-          {escolhido ? (
+          {novo ? (
+            <View style={s.novo}>
+              <Text style={s.blocoTitulo}>{categoria === 'servico' ? 'NOVO SERVIÇO' : 'NOVO MATERIAL'} · VAI PARA APROVAÇÃO DO SUPERVISOR</Text>
+              <TextInput style={s.campo} value={novo.nome} autoCapitalize="characters" autoFocus
+                onChangeText={(v) => setNovo({ ...novo, nome: v.toUpperCase() })}
+                placeholder={categoria === 'servico' ? 'EX.: REPUXE DE CABO' : 'EX.: ALÇA PREFORMADA 12MM'} />
+              <View style={[s.chips, { marginTop: 8 }]}>
+                {UNIDADES.map((u) => (
+                  <Pressable key={u} style={[s.chip, novo.unidade === u && s.chipAtivo]} onPress={() => setNovo({ ...novo, unidade: u })}>
+                    <Text style={[s.chipTexto, novo.unidade === u && { color: '#fff' }]}>{u}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                <TextInput style={[s.campo, { flex: 1, marginTop: 0 }]} keyboardType="decimal-pad" value={quantidade} onChangeText={setQuantidade}
+                  placeholder={`Quantidade (${novo.unidade})`} />
+                <Pressable style={s.botao} onPress={lancar}><Text style={s.botaoTexto}>Lançar</Text></Pressable>
+              </View>
+            </View>
+          ) : null}
+          {escolhido && !novo ? (
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
               <TextInput style={[s.campo, { flex: 1, marginTop: 0 }]} keyboardType="decimal-pad" value={quantidade} onChangeText={setQuantidade}
                 placeholder={`Quantidade (${escolhido.unidade})`} autoFocus />
@@ -180,7 +229,11 @@ const s = StyleSheet.create({
   blocoTitulo: { fontSize: 12, fontWeight: '700', color: cores.suave, letterSpacing: 0.5, marginBottom: 6 },
   vazio: { color: cores.suave, fontSize: 14 },
   linha: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F1EFED' },
-  linhaNome: { flex: 1, fontSize: 15, color: cores.texto },
+  linhaNome: { fontSize: 15, color: cores.texto },
+  pendente: { fontSize: 11, fontWeight: '700', color: cores.alerta, marginTop: 2 },
+  chipPendente: { borderStyle: 'dashed', borderColor: cores.alerta },
+  chipNovo: { borderColor: cores.primaria, borderStyle: 'dashed' },
+  novo: { marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: '#F6F8FB', borderWidth: 1, borderColor: cores.borda },
   linhaQtd: { fontSize: 15, fontWeight: '700', color: cores.texto, marginRight: 12 },
   remover: { color: cores.perigo, fontSize: 16 },
   segmento: { flexDirection: 'row', borderWidth: 1, borderColor: cores.primaria, borderRadius: 6, overflow: 'hidden', marginBottom: 8 },

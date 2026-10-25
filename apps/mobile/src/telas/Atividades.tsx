@@ -75,6 +75,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   const [ordemBacklog, setOrdemBacklog] = useState<OrdemBacklog>('distancia');
   const [detalhe, setDetalhe] = useState<string | null>(null);
   const [noMapa, setNoMapa] = useState(false);
+  const [aguardandoExpediente, setAguardandoExpediente] = useState<ItemBacklog | null>(null);
 
   // Backlog: o técnico não recebe aviso em tempo real dessas O.S., então confere a cada 2 min e ao voltar para o app.
   useEffect(() => {
@@ -256,6 +257,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
     } else {
       const bloqueio = await bloqueioDeHoje();
       if (bloqueio) {
+        setAguardandoExpediente(null);
         return Alert.alert('Expediente bloqueado', `Hoje está na sua escala como ${rotuloEscala[bloqueio.tipo].toLowerCase()}.`);
       }
     }
@@ -314,7 +316,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   const abas = [...grupos.map((g) => ({ chave: g.chave, rotulo: g.rotulo, cor: g.cor, total: g.ordens.length })),
     { chave: 'backlog' as Grupo, rotulo: 'Backlog', cor: cores.alerta, total: backlog.length }];
 
-  useEffect(() => setFiltro(null), [emExpediente]);
+  useEffect(() => setFiltro((f) => (f === 'pendente' ? f : null)), [emExpediente]); // mantém Pendentes logo após assumir do backlog
 
   // Notificação de ocorrência perto: abre a aba Backlog já com a ficha da O.S.
   useEffect(() => {
@@ -342,31 +344,47 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   }, [backlog, posicao, ordemBacklog]);
   const itemDetalhe = backlogOrdenado.find((b) => b.id === detalhe) ?? null;
 
+  // Fora do expediente: primeiro pergunta se quer iniciar o expediente; só depois de confirmado (e do km, se tiver
+  // veículo) a O.S. é assumida.
   function assumir(b: ItemBacklog) {
+    if (!emExpediente) {
+      return Alert.alert('Iniciar expediente?', `Você está fora do expediente. Para atender a O.S. #${b.numero} é preciso iniciar o expediente. Deseja iniciar agora?`, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Iniciar expediente', onPress: () => { setDetalhe(null); setAguardandoExpediente(b); pedirExpediente(); } },
+      ]);
+    }
     Alert.alert(`Assumir O.S. #${b.numero}?`, `${b.titulo}\n\nEla sai do backlog, passa para você e o supervisor é avisado.`, [
       { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Assumir', onPress: async () => {
-          setAssumindo(b.id);
-          try {
-            await assumirBacklog(b.id);
-            setBacklog((l) => l.filter((x) => x.id !== b.id));
-            setDetalhe(null);
-            setFiltro('pendente');
-            carregar();
-            Alert.alert('O.S. assumida', 'Ela já está em Pendentes. Quer abrir a rota agora?', [
-              { text: 'Depois', style: 'cancel' },
-              { text: 'Abrir rota', onPress: () => navegarAte(b, `Ir até a O.S. #${b.numero}`) },
-            ]);
-          } catch (e) {
-            Alert.alert('Não foi possível assumir', (e as Error).message);
-            buscarBacklog().then((l) => l && setBacklog(l)).catch(() => {});
-          }
-          setAssumindo(null);
-        },
-      },
+      { text: 'Assumir', onPress: () => efetivarAssumir(b) },
     ]);
   }
+
+  async function efetivarAssumir(b: ItemBacklog) {
+    setAssumindo(b.id);
+    try {
+      await assumirBacklog(b.id);
+      setBacklog((l) => l.filter((x) => x.id !== b.id));
+      setDetalhe(null);
+      setFiltro('pendente');
+      carregar();
+      Alert.alert(`O.S. #${b.numero} assumida`, 'Ela já está em Pendentes. Quer abrir a rota agora?', [
+        { text: 'Depois', style: 'cancel' },
+        { text: 'Abrir rota', onPress: () => navegarAte(b, `Ir até a O.S. #${b.numero}`) },
+      ]);
+    } catch (e) {
+      Alert.alert('Não foi possível assumir', (e as Error).message);
+      buscarBacklog().then((l) => l && setBacklog(l)).catch(() => {});
+    }
+    setAssumindo(null);
+  }
+
+  // Expediente aberto depois do "Iniciar expediente?" do backlog: agora assume a O.S.
+  useEffect(() => {
+    if (!emExpediente || !aguardandoExpediente) return;
+    const b = aguardandoExpediente;
+    setAguardandoExpediente(null);
+    efetivarAssumir(b);
+  }, [emExpediente, aguardandoExpediente]);
 
   const topo = (
     <View>
@@ -422,7 +440,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
               <Text style={[s.heroAjuda, { marginTop: 6 }]}>Km anterior: {kmAnterior.toLocaleString('pt-BR')} (último registrado)</Text>
             ) : null}
             <View style={s.botoes}>
-              <Pressable style={[s.botao, s.botaoSecundario]} onPress={() => { setPedindoKm(false); setKm(''); }}>
+              <Pressable style={[s.botao, s.botaoSecundario]} onPress={() => { setPedindoKm(false); setKm(''); setAguardandoExpediente(null); }}>
                 <Text style={[s.botaoTexto, { color: cores.texto }]}>Cancelar</Text>
               </Pressable>
               <Pressable style={[s.botao, { backgroundColor: emExpediente ? cores.perigo : cores.sucesso }]} onPress={confirmarKm} disabled={ocupado}>
