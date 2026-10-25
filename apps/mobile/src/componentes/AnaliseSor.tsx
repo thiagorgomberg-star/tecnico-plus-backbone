@@ -1,12 +1,13 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, GestureResponderEvent, Modal, PanResponder, Pressable, ScrollView, ScrollViewInstance, StyleSheet, Text, useWindowDimensions, View,
+  ActivityIndicator, Alert, GestureResponderEvent, Modal, PanResponder, Pressable, ScrollView, ScrollViewInstance, StyleSheet, Text, useWindowDimensions, View,
 } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
 import { cores, sombra } from '../lib/estilo';
 import { analisarSor, km, lerSor, Nivel, Sor, tracoJanela } from '../lib/sor';
+import { compartilharAnaliseCurva } from '../lib/relatorioCurva';
 import { supabase } from '../lib/supabase';
 import Icone from './Icone';
 
@@ -17,8 +18,8 @@ const fmt = (n: number, casas = 2) => n.toLocaleString('pt-BR', { minimumFractio
 // Análise do .SOR do OTDR no celular: resumo, traço com os eventos e o que fazer em cada um.
 // Curva do trecho (bucket): fica guardada depois da primeira abertura e abre de novo sem internet.
 // Curva do próprio celular (uri): lida direto do arquivo, totalmente offline.
-export default function AnaliseSor({ curva, extensaoKm, fechar }: {
-  curva: { nome: string; bucket?: string; caminho?: string; uri?: string } | null; extensaoKm: number | null; fechar: () => void;
+export default function AnaliseSor({ curva, extensaoKm, trecho, fechar }: {
+  curva: { nome: string; bucket?: string; caminho?: string; uri?: string } | null; extensaoKm: number | null; trecho?: string | null; fechar: () => void;
 }) {
   const [sor, setSor] = useState<Sor | null>(null);
   const [erro, setErro] = useState('');
@@ -59,6 +60,19 @@ export default function AnaliseSor({ curva, extensaoKm, fechar }: {
     if (sor?.eventos[i]) setJanela(janelaEvento(sor, sor.eventos[i].distanciaKm));
   };
 
+  const [gerando, setGerando] = useState(false);
+  async function exportar() {
+    if (!sor || !curva) return;
+    setGerando(true);
+    try {
+      await compartilharAnaliseCurva(sor, curva.nome, extensaoKm, trecho);
+    } catch (e) {
+      Alert.alert('Não foi possível gerar o PDF', (e as Error).message);
+    } finally {
+      setGerando(false);
+    }
+  }
+
   const analise = useMemo(() => (sor ? analisarSor(sor, extensaoKm) : null), [sor, extensaoKm]);
 
   return (
@@ -70,6 +84,12 @@ export default function AnaliseSor({ curva, extensaoKm, fechar }: {
             <Text style={s.topoTitulo}>Análise da curva OTDR</Text>
             <Text style={s.topoSub} numberOfLines={1}>{curva?.nome}</Text>
           </View>
+          {sor ? (
+            <Pressable style={s.pdf} onPress={exportar} disabled={gerando} hitSlop={8}>
+              {gerando ? <ActivityIndicator size="small" color="#fff" /> : <Icone nome="file-pdf-box" tamanho={22} cor="#fff" />}
+              <Text style={s.pdfTexto}>PDF</Text>
+            </Pressable>
+          ) : null}
         </View>
         {erro ? <Text style={s.erro}>{erro}</Text> : !sor || !analise ? <ActivityIndicator style={{ marginTop: 40 }} color={cores.primaria} /> : (
           <ScrollView ref={rolar} contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }}>
@@ -252,6 +272,8 @@ function Traco({ sor, niveis, largura, selecionado, selecionar, janela, setJanel
 const s = StyleSheet.create({
   tela: { flex: 1, backgroundColor: cores.fundo },
   topo: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: cores.cabecalho, paddingHorizontal: 16, paddingTop: 44, paddingBottom: 16 },
+  pdf: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: 10, height: 36 },
+  pdfTexto: { color: '#fff', fontWeight: '800', fontSize: 13 },
   topoTitulo: { color: '#fff', fontSize: 18, fontWeight: '800' },
   topoSub: { color: 'rgba(255,255,255,0.75)', fontSize: 12.5, marginTop: 2 },
   erro: { color: cores.perigo, margin: 24, textAlign: 'center' },

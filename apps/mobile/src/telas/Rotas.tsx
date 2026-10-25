@@ -24,7 +24,7 @@ export default function Rotas({ voltar }: { voltar: () => void }) {
   const [rotas, setRotas] = useState<Rota[]>([]);
   const [curvas, setCurvas] = useState<Curva[]>([]);
   const [aberta, setAberta] = useState<string | null>(null);
-  const [analise, setAnalise] = useState<(Curva & { extensaoKm: number | null }) | null>(null);
+  const [analise, setAnalise] = useState<(Curva & { extensaoKm: number | null; trecho: string }) | null>(null);
 
   function carregarCurvas() {
     supabase.rpc('curvas_trecho', { p_limite: 5 }).then(({ data }) => {
@@ -54,7 +54,7 @@ export default function Rotas({ voltar }: { voltar: () => void }) {
   }
 
   async function abrirCurva(c: Curva, rota: Rota) {
-    if (/\.sor$/i.test(c.nome)) return setAnalise({ ...c, extensaoKm: rota.extensao_km });
+    if (/\.sor$/i.test(c.nome)) return setAnalise({ ...c, extensaoKm: rota.extensao_km, trecho: rota.trecho });
     const { data, error } = await supabase.storage.from(c.bucket).createSignedUrl(c.caminho, 600);
     if (error || !data) return Alert.alert('Sem internet', 'Para abrir a curva é preciso estar conectado.');
     abrirLink(data.signedUrl);
@@ -117,7 +117,7 @@ export default function Rotas({ voltar }: { voltar: () => void }) {
           );
         }}
       />
-      <AnaliseSor curva={analise} extensaoKm={analise?.extensaoKm ?? null} fechar={() => setAnalise(null)} />
+      <AnaliseSor curva={analise} extensaoKm={analise?.extensaoKm ?? null} trecho={analise?.trecho} fechar={() => setAnalise(null)} />
     </View>
   );
 }
