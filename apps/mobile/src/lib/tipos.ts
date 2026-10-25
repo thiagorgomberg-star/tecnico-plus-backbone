@@ -28,6 +28,7 @@ export type OrdemServico = {
   pausa_solicitada_em?: string | null;
   pausa_motivo?: string | null;
   continua_em?: string | null; // pausada para continuar em outro dia (roteamento)
+  origem_ponto_id?: string | null; // gerada a partir de um ponto da vistoria (tem fotos de referência)
 };
 
 export type Expediente = {

@@ -12,6 +12,7 @@ import MascaraFoto, { DadosMascara, RefMascara } from '../componentes/MascaraFot
 import { enfileirar } from '../lib/fila';
 import { cores } from '../lib/estilo';
 import { enderecoDe } from '../lib/localizacao';
+import { referenciasLocais } from '../lib/referencia';
 
 type Props = {
   osId: string;
@@ -98,6 +99,14 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
   const endereco = useRef<{ latitude: number; longitude: number; texto: string } | null>(null);
   const consultando = useRef(false);
   const [miniaturas, setMiniaturas] = useState<string[]>([]);
+  // O.S. gerada na vistoria: as fotos do ponto servem de guia para fotografar a correção no mesmo ângulo.
+  const [referencias, setReferencias] = useState<string[]>([]);
+  const [refAtual, setRefAtual] = useState(0);
+  const [sobrepor, setSobrepor] = useState(true);
+  useEffect(() => {
+    if (!caixa && !ponto && !unica) referenciasLocais(osId).then(setReferencias).catch(() => {});
+  }, [osId, caixa, ponto, unica]);
+  const referencia = referencias[refAtual] ?? null;
   const horizontal = width > height;
   const total = fotosJaFeitas + miniaturas.length;
 
@@ -264,6 +273,20 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
   return (
     <View style={estilos.tela}>
       <CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back" pictureSize={tamanho} onCameraReady={cameraPronta} />
+      {referencia && sobrepor ? (
+        <Image source={{ uri: referencia }} style={[StyleSheet.absoluteFill, { opacity: 0.35 }]} resizeMode="cover" pointerEvents="none" />
+      ) : null}
+      {referencia ? (
+        <View style={estilos.guia}>
+          <Pressable onPress={() => setRefAtual((i) => (i + 1) % referencias.length)}>
+            <Image source={{ uri: referencia }} style={estilos.guiaFoto} />
+          </Pressable>
+          <Text style={estilos.guiaTexto}>Mesmo ângulo da vistoria{referencias.length > 1 ? ` · ${refAtual + 1}/${referencias.length} (toque p/ trocar)` : ''}</Text>
+          <Pressable style={[estilos.chip, sobrepor && { backgroundColor: cores.primaria }]} onPress={() => setSobrepor((v) => !v)}>
+            <Text style={[estilos.texto, { fontSize: 13 }]}>{sobrepor ? 'Guia ligado' : 'Guia desligado'}</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {!horizontal && (
         <View style={estilos.aviso}>
@@ -315,6 +338,9 @@ const estilos = StyleSheet.create({
   chip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.5)' },
   aviso: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', padding: 32 },
   miniaturas: { position: 'absolute', left: 16, bottom: 16, right: 120, maxHeight: 64 },
+  guia: { position: 'absolute', left: 16, top: 56, width: 180, gap: 6, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 10, padding: 8 },
+  guiaFoto: { width: 164, height: 104, borderRadius: 6, borderWidth: 2, borderColor: '#FFD54F' },
+  guiaTexto: { color: '#FFD54F', fontSize: 12, fontWeight: '700' },
   miniatura: { width: 96, height: 60, marginRight: 8, borderRadius: 4, borderWidth: 1, borderColor: '#fff' },
   disparo: { position: 'absolute', right: 24, top: '50%', marginTop: -36, width: 72, height: 72, borderRadius: 36,
     backgroundColor: '#fff', borderWidth: 4, borderColor: 'rgba(255,255,255,0.5)', alignItems: 'center', justifyContent: 'center' },

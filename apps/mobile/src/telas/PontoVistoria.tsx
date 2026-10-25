@@ -6,6 +6,7 @@ import Cabecalho from '../componentes/Cabecalho';
 import { cores } from '../lib/estilo';
 import { aoMudarFila, itensPendentes } from '../lib/fila';
 import { enderecoDe, posicaoAtual } from '../lib/localizacao';
+import { navegarAte } from '../lib/navegacao';
 import { supabase } from '../lib/supabase';
 import {
   ESTADOS_BASE, excluirPonto, GRAVIDADES, LICENCIAMENTOS, MATERIAIS, OCORRENCIAS, Opcao, PontoVistoria as Ponto, proximoPoste, salvarPonto, TIPOS_VIA,
@@ -34,7 +35,7 @@ function novoPonto(osId: string, categoria: 'poste' | 'ocorrencia', daOs: Ponto[
     estado_base: categoria === 'poste' ? 'ok' : null, inclinado: false, rachado: false,
     estai: null, precisa_troca: false,
     tipo_via: anterior?.tipo_via ?? null, licenciamento: anterior?.licenciamento ?? null, via_nome: anterior?.via_nome ?? null,
-    ocorrencia: null, gravidade: categoria === 'ocorrencia' ? 'media' : null, observacao: null,
+    ocorrencia: null, gravidade: categoria === 'ocorrencia' ? 'media' : null, observacao: null, gerar_os: false,
   };
 }
 
@@ -47,6 +48,8 @@ export default function PontoVistoria({ osId, tipoOs, ponto: inicial, categoria,
   const [salvando, setSalvando] = useState(false);
   const [camera, setCamera] = useState(false);
   const [fotos, setFotos] = useState(0);
+  // Depois de salvo com "gerar O.S.", a O.S. já existe (ou vai existir quando sincronizar): não dá para desmarcar.
+  const [osJaGerada, setOsJaGerada] = useState(!!inicial?.gerar_os);
   const enderecoAuto = useRef('');
   const poste = p.categoria === 'poste';
   const mudar = (campos: Partial<Ponto>) => setP((x) => ({ ...x, ...campos }));
@@ -123,13 +126,17 @@ export default function PontoVistoria({ osId, tipoOs, ponto: inicial, categoria,
       // Próximo poste já com o número seguinte, a mesma via e o mesmo material.
       enderecoAuto.current = '';
       setNova(true);
+      setOsJaGerada(false);
       setFotos(0);
       setP(novoPonto(osId, 'poste', todos));
       return;
     }
     setNova(false);
+    if (p.gerar_os) setOsJaGerada(true);
     if (fotos === 0) {
-      Alert.alert('Ponto salvo', 'Quer tirar a foto agora?', [
+      Alert.alert('Ponto salvo', p.gerar_os
+        ? 'A O.S. de correção vai para o backlog. Tire as fotos agora: elas servem de guia para quem for corrigir.'
+        : 'Quer tirar a foto agora?', [
         { text: 'Depois', style: 'cancel' },
         { text: 'Tirar foto', onPress: () => setCamera(true) },
       ]);
@@ -195,6 +202,13 @@ export default function PontoVistoria({ osId, tipoOs, ponto: inicial, categoria,
               </Pressable>
             ) : null}
           </View>
+          {p.latitude != null ? (
+            <View style={s.navegar}>
+              <Pressable style={[s.botaoNav, { backgroundColor: '#E8F0FE' }]} onPress={() => navegarAte({ lat: p.latitude, lng: p.longitude })}>
+                <Text style={[s.botaoNavTexto, { color: cores.primaria }]}>Navegar até o ponto (Waze / Google Maps)</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <TextInput style={s.campo} value={p.endereco ?? ''} editable={podeEditar} multiline placeholder="Endereço / referência"
             onChangeText={(t) => mudar({ endereco: t })} />
         </View>
@@ -221,7 +235,18 @@ export default function PontoVistoria({ osId, tipoOs, ponto: inicial, categoria,
           {chips(LICENCIAMENTOS, p.licenciamento, (v) => mudar({ licenciamento: v }))}
           <TextInput style={s.campo} value={p.via_nome ?? ''} editable={podeEditar} placeholder="Via / km (ex.: BR-381 km 812, SP-123, Dutra km 140)"
             onChangeText={(t) => mudar({ via_nome: t })} />
-          <Text style={s.rotulo}>OBSERVAÇÃO</Text>
+          <View style={[s.linha, { borderBottomWidth: 0, marginTop: 8 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.texto, { fontWeight: '700' }]}>Gerar O.S. de correção</Text>
+              <Text style={s.suave}>
+                {osJaGerada
+                  ? p.os_gerada_numero ? `O.S. #${p.os_gerada_numero} gerada no backlog.` : 'O.S. gerada (vai para o backlog ao sincronizar).'
+                  : 'Não corrigir agora: anota e cria uma Preventiva rede no backlog, com as fotos deste ponto como guia.'}
+              </Text>
+            </View>
+            <Switch value={!!p.gerar_os} onValueChange={(v) => mudar({ gerar_os: v })} disabled={!podeEditar || osJaGerada} />
+          </View>
+          <Text style={s.rotulo}>OBSERVAÇÃO {p.gerar_os ? '(O QUE PRECISA SER CORRIGIDO)' : ''}</Text>
           <TextInput style={[s.campo, { minHeight: 60, textAlignVertical: 'top' }]} multiline value={p.observacao ?? ''} editable={podeEditar}
             onChangeText={(t) => mudar({ observacao: t })} />
           {!nova ? (
@@ -273,5 +298,8 @@ const s = StyleSheet.create({
   botaoPequenoTexto: { color: '#fff', fontWeight: '700' },
   botao: { borderRadius: 6, paddingVertical: 14, alignItems: 'center', marginTop: 12 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  navegar: { marginTop: 8 },
+  botaoNav: { borderRadius: 6, paddingVertical: 10, alignItems: 'center' },
+  botaoNavTexto: { fontWeight: '700', fontSize: 14 },
   rodape: { flexDirection: 'row', gap: 10, backgroundColor: cores.cartao, borderTopWidth: 1, borderTopColor: cores.borda, padding: 12 },
 });
