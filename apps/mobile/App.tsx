@@ -12,6 +12,7 @@ import { cores, estilo } from './src/lib/estilo';
 import { aoMudarFila, itensPendentes, sincronizar } from './src/lib/fila';
 import { limparJornadaLocal } from './src/lib/jornada';
 import { aplicarAtualizacaoOta } from './src/lib/atualizacao';
+import { garantirRastreio } from './src/lib/rastreio';
 import { supabase } from './src/lib/supabase';
 import { esquecerDispositivo, ouvirAlertas, ouvirTrocaDeToken, prepararAvisos, registrarDispositivo, verificarAlertas } from './src/lib/avisos';
 import { OrdemServico } from './src/lib/tipos';
@@ -86,7 +87,12 @@ export default function App() {
     });
     const pararTrocaToken = ouvirTrocaDeToken();
     const pararDeOuvir = ouvirAlertas(sessao.user.id);
-    const aoVoltar = AppState.addEventListener('change', (estado) => estado === 'active' && verificarAlertas());
+    garantirRastreio().catch(() => {});
+    const aoVoltar = AppState.addEventListener('change', (estado) => {
+      if (estado !== 'active') return;
+      verificarAlertas();
+      garantirRastreio().catch(() => {});
+    });
     // Tocar na notificação abre a O.S.
     const abrirDaNotificacao = async (resposta: Notifications.NotificationResponse | null) => {
       const osId = resposta?.notification.request.content.data?.osId as string | undefined;

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, Linking, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, AppState, FlatList, Linking, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
 import Icone, { iconeDoTipo, NomeIcone } from '../componentes/Icone';
@@ -18,6 +18,7 @@ import {
   lerJornada,
   ultimoKm,
 } from '../lib/jornada';
+import { abrirAjusteBateria, garantirRastreio, SituacaoRastreio } from '../lib/rastreio';
 import { inventarioLocal, pendenciasInventario, precisaFoto } from '../lib/inventario';
 import { supabase } from '../lib/supabase';
 import { OrdemServico, rotuloDaOs } from '../lib/tipos';
@@ -43,6 +44,16 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   // Grupos recolhíveis do lobby (padrão Claro): Fechada começa recolhida.
   const [recolhidos, setRecolhidos] = useState<Record<string, boolean>>({ fechada: true });
   const [inventarioFaltam, setInventarioFaltam] = useState(0);
+  const [rastreio, setRastreio] = useState<SituacaoRastreio | null>(null);
+
+  // Confere o trajeto a cada minuto e ao voltar para o app; religa o GPS se o Android tiver parado.
+  useEffect(() => {
+    const conferir = () => garantirRastreio().then(setRastreio).catch(() => {});
+    conferir();
+    const timer = setInterval(conferir, 60_000);
+    const aoVoltar = AppState.addEventListener('change', (e) => e === 'active' && conferir());
+    return () => { clearInterval(timer); aoVoltar.remove(); };
+  }, [jornada?.expedienteId]);
 
   useEffect(() => {
     // O que está no celular aparece na hora; o servidor atualiza depois (sem internet pode demorar).
@@ -144,8 +155,15 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
           [{ text: 'Depois', style: 'cancel' }, { text: 'Fazer agora', onPress: abrirInventario }]);
       }
       if (!rastreando) {
-        Alert.alert('Localização em segundo plano', 'Para registrar o trajeto completo do dia, permita a localização "o tempo todo" nas configurações do app.');
+        Alert.alert('Localização em segundo plano', 'Para registrar o trajeto completo do dia, permita a localização "o tempo todo" nas configurações do app.',
+          [{ text: 'Depois', style: 'cancel' }, { text: 'Abrir configurações', onPress: () => Linking.openSettings() }]);
+      } else if (!(await AsyncStorage.getItem('aviso-bateria-visto'))) {
+        AsyncStorage.setItem('aviso-bateria-visto', '1');
+        Alert.alert('Não perder o trajeto', 'Para o celular não parar o GPS com o app em segundo plano, deixe o Técnico Plus sem restrição de bateria: '
+          + 'na próxima tela, escolha "Todos os apps", toque em Técnico Plus e marque "Não otimizar" (ou Bateria > "Sem restrições").',
+          [{ text: 'Depois', style: 'cancel' }, { text: 'Ajustar agora', onPress: abrirAjusteBateria }]);
       }
+      garantirRastreio().then(setRastreio).catch(() => {});
     }
     setKm('');
     setPedindoKm(false);
@@ -218,6 +236,21 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
             Inventário Matinal: {inventarioFaltam} item(ns) para fotografar. Toque para fazer.
           </Text>
           <Icone nome="chevron-right" tamanho={18} cor="#5B3A86" />
+        </Pressable>
+      ) : null}
+      {emExpediente && rastreio && rastreio.permissao !== 'sempre' ? (
+        <Pressable style={[s.faixa, { backgroundColor: '#FBE3E1' }]} onPress={() => Linking.openSettings()}>
+          <Icone nome="map-marker-off-outline" tamanho={18} cor={cores.perigo} />
+          <Text style={[s.faixaTexto, { color: cores.perigo }]}>
+            Trajeto só é gravado com o app aberto. Toque, vá em Localização e escolha "Permitir o tempo todo".
+          </Text>
+        </Pressable>
+      ) : emExpediente && rastreio?.ultimoPonto && Date.now() - rastreio.ultimoPonto > 10 * 60_000 ? (
+        <Pressable style={[s.faixa, { backgroundColor: '#FBE3E1' }]} onPress={abrirAjusteBateria}>
+          <Icone nome="map-marker-alert-outline" tamanho={18} cor={cores.perigo} />
+          <Text style={[s.faixaTexto, { color: cores.perigo }]}>
+            O celular parou o GPS por {Math.round((Date.now() - rastreio.ultimoPonto) / 60000)} min. Toque e tire o Técnico Plus da economia de bateria.
+          </Text>
         </Pressable>
       ) : null}
       {semRede ? (
