@@ -36,7 +36,8 @@ export type Sor = {
   eventos: EventoSor[];
   perdaTotalDb: number | null;
   orlDb: number | null;
-  traco: { km: number; db: number }[]; // nível do sinal retroespalhado em dB (cai ao longo da fibra)
+  traco: { km: number; db: number }[]; // nível do sinal retroespalhado em dB (cai ao longo da fibra), reduzido para desenhar
+  niveis: Float32Array; // todos os pontos do traço em dB, um a cada `resolucaoM`, para o zoom
 };
 
 class Leitor {
@@ -96,7 +97,7 @@ export function lerSor(dados: ArrayBuffer | Uint8Array): Sor {
   const s: Sor = {
     versao: v2 ? 2 : 1, equipamento: '', fabricante: '', serie: '', cabo: '', fibra: '', localA: '', localB: '', operador: '',
     comentario: '', data: null, comprimentoOndaNm: 0, pulsoNs: 0, indiceRefracao: 1.4682, resolucaoM: 0, alcanceKm: 0,
-    eventos: [], perdaTotalDb: null, orlDb: null, traco: [],
+    eventos: [], perdaTotalDb: null, orlDb: null, traco: [], niveis: new Float32Array(0),
   };
 
   if (ir('GenParams')) {
@@ -196,6 +197,7 @@ export function lerSor(dados: ArrayBuffer | Uint8Array): Sor {
         // Nível em dB: valor bruto maior = menos potência. No máximo ~1500 faixas para desenhar; cada faixa guarda o
         // mínimo e o máximo para não esconder reflexões nem quedas.
         const fs = 0.001 * escala;
+        s.niveis = Float32Array.from(brutos, (b) => (maior - b) * fs);
         const passo = Math.max(1, Math.ceil(n / 1500));
         for (let i = 0; i < n; i += passo) {
           let alto = brutos[i], baixo = brutos[i];
@@ -207,6 +209,22 @@ export function lerSor(dados: ArrayBuffer | Uint8Array): Sor {
     } catch { /* traço opcional */ }
   }
   return s;
+}
+
+// Pedaço do traço entre dois pontos (km) com no máximo ~`maxFaixas` faixas; cada faixa guarda o mínimo e o máximo.
+export function tracoJanela(s: Sor, iniKm: number, fimKm: number, maxFaixas = 600) {
+  const passoKm = s.resolucaoM / 1000;
+  if (!s.niveis.length || !passoKm) return s.traco.filter((p) => p.km >= iniKm && p.km <= fimKm);
+  const a = Math.max(0, Math.floor(iniKm / passoKm)), b = Math.min(s.niveis.length - 1, Math.ceil(fimKm / passoKm));
+  const passo = Math.max(1, Math.ceil((b - a + 1) / maxFaixas));
+  const saida: { km: number; db: number }[] = [];
+  for (let i = a; i <= b; i += passo) {
+    let alto = s.niveis[i], baixo = s.niveis[i];
+    for (let k = i; k < Math.min(b + 1, i + passo); k++) { if (s.niveis[k] > alto) alto = s.niveis[k]; if (s.niveis[k] < baixo) baixo = s.niveis[k]; }
+    saida.push({ km: i * passoKm, db: alto });
+    if (alto !== baixo) saida.push({ km: (i + passo / 2) * passoKm, db: baixo });
+  }
+  return saida;
 }
 
 export type Nivel = 'ok' | 'atencao' | 'critico';
