@@ -11,10 +11,10 @@ import { enderecoDe, posicaoAtual } from '../lib/localizacao';
 import { compartilharOsApresentacao } from '../lib/osApresentacao';
 import { ponto, supabase } from '../lib/supabase';
 import { OrdemServico } from '../lib/tipos';
-import { TRECHOS_MG, VISTORIA_MG } from '../lib/vistoria';
+import { ehVistoria, TRECHOS_VISTORIA, VISTORIA_MG, VISTORIA_SP } from '../lib/vistoria';
 
 type Rota = { id: string; trecho: string };
-const TIPOS = ['Preventiva rede', 'Preventiva site', VISTORIA_MG];
+const TIPOS = ['Preventiva rede', 'Preventiva site', VISTORIA_MG, VISTORIA_SP];
 const CACHE_ROTAS = 'rotas-cache';
 const CACHE_ATIVIDADES = 'atividades-preventiva-cache';
 
@@ -56,7 +56,8 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
   }, []);
 
   const doTipo = lista.filter((a) => a.tipo === tipo);
-  const vistoriaMg = tipo === VISTORIA_MG;
+  const vistoriaMg = ehVistoria(tipo);
+  const vistoria = TRECHOS_VISTORIA[tipo];
   const marcar = (nome: string) => setMarcadas((m) => (m.includes(nome) ? m.filter((x) => x !== nome) : [...m, nome]));
 
   // Captura a posição (funciona sem internet) e preenche o endereço (com internet; offline, as coordenadas).
@@ -86,7 +87,7 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
 
   async function iniciar() {
     if (!vistoriaMg && rotas.length > 0 && !rotaId) return Alert.alert('Escolha o trecho', 'Informe em qual trecho do backbone é a preventiva.');
-    if (!local.trim()) return Alert.alert(vistoriaMg ? 'Escolha o trecho' : 'Informe o local', vistoriaMg ? 'Toque no trecho de Minas que será vistoriado.' : tipo === 'Preventiva site' ? 'Nome do site/POP.' : 'Ponto ou trecho atendido.');
+    if (!local.trim()) return Alert.alert(vistoriaMg ? 'Escolha o trecho' : 'Informe o local', vistoriaMg ? `Toque no trecho de ${vistoria?.regiao} que será vistoriado.` : tipo === 'Preventiva site' ? 'Nome do site/POP.' : 'Ponto ou trecho atendido.');
     if (!endereco.trim()) return Alert.alert('Informe o endereço ou referência', 'Ex.: km, cidade, rodovia.');
     const escolhidas = doTipo.filter((a) => marcadas.includes(a.nome)).map((a) => `• ${a.nome}`);
     const descricao = [...escolhidas, atividades.trim()].filter(Boolean).join('\n');
@@ -154,7 +155,7 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
         <Text style={s.rotulo}>Tipo</Text>
         <View style={s.chips}>
           {TIPOS.map((t) => (
-            <Pressable key={t} style={chip(tipo === t)} onPress={() => { setTipo(t); setMarcadas([]); }}>
+            <Pressable key={t} style={chip(tipo === t)} onPress={() => { if (ehVistoria(t) || vistoriaMg) setLocal(''); setTipo(t); setMarcadas([]); }}>
               <Text style={[s.chipTexto, tipo === t && { color: '#fff' }]}>{t}</Text>
             </Pressable>
           ))}
@@ -162,9 +163,9 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
 
         {vistoriaMg ? (
           <>
-            <Text style={s.rotulo}>Trecho de Minas *</Text>
+            <Text style={s.rotulo}>Trecho de {vistoria?.regiao} *</Text>
             <View style={s.chips}>
-              {TRECHOS_MG.map((t) => (
+              {vistoria?.trechos.map((t) => (
                 <Pressable key={t} style={chip(local === t)} onPress={() => setLocal(t)}>
                   <Text style={[s.chipTexto, local === t && { color: '#fff' }]}>{t}</Text>
                 </Pressable>

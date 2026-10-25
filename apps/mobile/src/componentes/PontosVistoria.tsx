@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { cores } from '../lib/estilo';
-import { ESTADOS_BASE, OCORRENCIAS, PontoVistoria, pontosDaOs, rotuloDe, TIPOS_VIA } from '../lib/vistoria';
+import { ESTADOS_BASE, LICENCIAMENTOS, OCORRENCIAS, PontoVistoria, pontosDaOs, rotuloDe, TIPOS_VIA } from '../lib/vistoria';
 
-// Postes e ocorrências lançados na Vistoria Backbone MG, com o resumo do que já foi feito.
+// Postes e ocorrências lançados na Vistoria Backbone (MG/SP), com o resumo do que já foi feito.
 export default function PontosVistoria({ osId, podeEditar, versao, abrir }: {
   osId: string; podeEditar: boolean; versao: number;
   abrir: (ponto: PontoVistoria | null, categoria: 'poste' | 'ocorrencia', daOs: PontoVistoria[]) => void;
@@ -50,7 +50,7 @@ export default function PontosVistoria({ osId, podeEditar, versao, abrir }: {
             </View>
             <Text style={s.suave}>
               {poste ? `${rotuloDe(ESTADOS_BASE, p.estado_base)}${p.inclinado ? ' · inclinado' : ''}${p.rachado ? ' · rachado' : ''} · ` : ''}
-              {rotuloDe(TIPOS_VIA, p.tipo_via)}{p.via_nome ? ` · ${p.via_nome}` : ''}
+              {rotuloDe(TIPOS_VIA, p.tipo_via)}{p.via_nome ? ` · ${p.via_nome}` : ''}{p.licenciamento ? ` · ${rotuloDe(LICENCIAMENTOS, p.licenciamento)}` : ''}
             </Text>
             {p.latitude == null ? <Text style={[s.suave, { color: cores.perigo }]}>Sem localização</Text> : null}
           </Pressable>

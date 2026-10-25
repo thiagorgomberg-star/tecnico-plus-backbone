@@ -6,10 +6,8 @@ import { excluirComConfirmacao } from "@/lib/excluir";
 import { AbaXlsx, baixarXlsxAbas, Celula } from "@/lib/planilha";
 import { supabase } from "@/lib/supabase";
 
-// Vistoria Backbone MG: produção do dia (postes, trocas, ocorrências, caixas e km), exportação para o gerente
-// e o planejamento da vistoria com o andamento atualizado à mão.
-
-const VISTORIA = "Vistoria Backbone MG";
+// Vistoria Backbone (MG ou SP): produção do dia (postes, trocas, ocorrências, caixas e km), exportação para o gerente
+// e o planejamento da vistoria com o andamento atualizado à mão. Cada ponto diz se o trecho é licenciado.
 const FUSO = "America/Sao_Paulo";
 
 type Ponto = {
@@ -17,7 +15,7 @@ type Ponto = {
   localizada_em: string | null; criado_em: string; material: string | null; estado_base: string | null; inclinado: boolean | null;
   rachado: boolean | null; estai: string | null; precisa_troca: boolean; tipo_via: string | null; via_nome: string | null;
   ocorrencia: string | null; gravidade: string | null; observacao: string | null; latitude: number | null; longitude: number | null;
-  os_numero: number; os_titulo: string; tecnico_id: string | null; tecnico: string | null;
+  os_numero: number; os_titulo: string; tecnico_id: string | null; tecnico: string | null; licenciamento: string | null; os_tipo: string;
 };
 type OS = { id: string; numero: number; titulo: string; tecnico_id: string | null; status: string };
 type CaixaV = { id: string; os_id: string; identificacao: string; tipo: string; localizada_em: string | null; criado_em: string; endereco: string | null };
@@ -28,10 +26,11 @@ type Usuario = { id: string; nome: string };
 const ROTULOS: Record<string, string> = {
   madeira: "Madeira", eucalipto_tratado: "Eucalipto tratado", concreto: "Concreto", metalico: "Metálico", outro: "Outro",
   ok: "OK", podre: "Podre", cupim: "Cupim", erosao: "Erosão no pé", frouxo: "Frouxo", ausente: "Faltando", nao_tem: "Não precisa",
-  rodovia_federal: "Rodovia federal (DNIT)", rodovia_estadual: "Rodovia estadual (DER-MG)", concessionaria: "Rodovia concedida",
+  rodovia_federal: "Rodovia federal (DNIT)", rodovia_estadual: "Rodovia estadual (DER)", concessionaria: "Rodovia concedida",
   vicinal: "Estrada vicinal", urbana: "Área urbana", particular: "Propriedade particular",
   cabo_exposto: "Cabo exposto", flecha_baixa: "Flecha baixa", vegetacao: "Vegetação", travessia: "Travessia",
   reserva_tecnica: "Reserva técnica", cabo_danificado: "Cabo danificado", ferragem: "Ferragem / ancoragem", roedor: "Roedor",
+  licenciado: "Licenciado", sem_licenca: "Sem licenciamento",
   baixa: "Baixa", media: "Média", alta: "Alta", emenda: "Emenda", entroncamento: "Entroncamento", dgo: "DGO", site: "Site",
 };
 const rotulo = (v: string | null | undefined) => (v ? ROTULOS[v] ?? v : "");
@@ -51,9 +50,11 @@ const kmDe = (e: Expediente) => (e.km_inicial != null && e.km_final != null ? e.
 
 type LinhaProducao = {
   dia: string; tecnico: string; trechos: string[]; km: number | null; postes: number; troca: number; ocorrencias: number; alta: number; caixas: number;
+  semLicenca: number;
 };
 
-export default function VistoriaMG() {
+export default function VistoriaMG({ regiao = "MG" }: { regiao?: "MG" | "SP" }) {
+  const VISTORIA = `Vistoria Backbone ${regiao}`;
   const [de, setDe] = useState(hoje());
   const [ate, setAte] = useState(hoje());
   const [pontos, setPontos] = useState<Ponto[]>([]);
@@ -72,9 +73,9 @@ export default function VistoriaMG() {
     (async () => {
       setCarregando(true);
       const [p, o, pl, u] = await Promise.all([
-        supabase.from("vistoria_pontos_mapa").select("*").order("localizada_em").limit(10000),
+        supabase.from("vistoria_pontos_mapa").select("*").eq("os_tipo", VISTORIA).order("localizada_em").limit(10000),
         supabase.from("ordens_servico").select("id, numero, titulo, tecnico_id, status").eq("tipo", VISTORIA).limit(2000),
-        supabase.from("vistoria_planejamento").select("*").order("data").order("trecho"),
+        supabase.from("vistoria_planejamento").select("*").eq("regiao", regiao).order("data").order("trecho"),
         supabase.from("usuarios").select("id, nome"),
       ]);
       const os = (o.data as OS[]) ?? [];
@@ -96,7 +97,7 @@ export default function VistoriaMG() {
       setCarregando(false);
     })();
     return () => { ativo = false; };
-  }, [versao]);
+  }, [versao, VISTORIA, regiao]);
 
   const nomeDe = useCallback((id: string | null) => usuarios.find((u) => u.id === id)?.nome ?? "—", [usuarios]);
   const osDe = useCallback((id: string) => ordens.find((o) => o.id === id), [ordens]);
@@ -110,13 +111,14 @@ export default function VistoriaMG() {
     const mapa = new Map<string, LinhaProducao & { tecnicoId: string | null }>();
     const linha = (dia: string, tecnicoId: string | null) => {
       const chave = `${dia}|${tecnicoId}`;
-      if (!mapa.has(chave)) mapa.set(chave, { dia, tecnicoId, tecnico: nomeDe(tecnicoId), trechos: [], km: null, postes: 0, troca: 0, ocorrencias: 0, alta: 0, caixas: 0 });
+      if (!mapa.has(chave)) mapa.set(chave, { dia, tecnicoId, tecnico: nomeDe(tecnicoId), trechos: [], km: null, postes: 0, troca: 0, ocorrencias: 0, alta: 0, caixas: 0, semLicenca: 0 });
       return mapa.get(chave)!;
     };
     for (const p of pontosPeriodo) {
       const l = linha(diaDe(quando(p)), p.tecnico_id);
       const t = trechoDe(p.os_titulo);
       if (!l.trechos.includes(t)) l.trechos.push(t);
+      if (p.licenciamento === "sem_licenca") l.semLicenca++;
       if (p.categoria === "poste") { l.postes++; if (p.precisa_troca) l.troca++; } else { l.ocorrencias++; if (p.gravidade === "alta") l.alta++; }
     }
     for (const c of caixasPeriodo) {
@@ -135,7 +137,8 @@ export default function VistoriaMG() {
 
   const totais = useMemo(() => producao.reduce((t, l) => ({
     km: t.km + (l.km ?? 0), postes: t.postes + l.postes, troca: t.troca + l.troca, ocorrencias: t.ocorrencias + l.ocorrencias, alta: t.alta + l.alta, caixas: t.caixas + l.caixas,
-  }), { km: 0, postes: 0, troca: 0, ocorrencias: 0, alta: 0, caixas: 0 }), [producao]);
+    semLicenca: t.semLicenca + l.semLicenca,
+  }), { km: 0, postes: 0, troca: 0, ocorrencias: 0, alta: 0, caixas: 0, semLicenca: 0 }), [producao]);
 
   // Realizado no dia planejado (todos os técnicos), para comparar com o plano.
   const realizadoNoDia = useCallback((dia: string) => {
@@ -155,26 +158,26 @@ export default function VistoriaMG() {
     const abas: AbaXlsx[] = [
       {
         nome: "Produção do dia",
-        cabecalho: ["Data", "Técnico", "Trecho(s)", "Km rodado", "Postes vistoriados", "Postes p/ troca", "Ocorrências", "Ocorrências graves", "Caixas cadastradas"],
+        cabecalho: ["Data", "Técnico", "Trecho(s)", "Km rodado", "Postes vistoriados", "Postes p/ troca", "Ocorrências", "Ocorrências graves", "Caixas cadastradas", "Pontos sem licenciamento"],
         linhas: [
-          ...producao.map((l): Celula[] => [comoData(l.dia), l.tecnico, l.trechos.join(", "), l.km, l.postes, l.troca, l.ocorrencias, l.alta, l.caixas]),
-          ["TOTAL", "", "", totais.km, totais.postes, totais.troca, totais.ocorrencias, totais.alta, totais.caixas],
+          ...producao.map((l): Celula[] => [comoData(l.dia), l.tecnico, l.trechos.join(", "), l.km, l.postes, l.troca, l.ocorrencias, l.alta, l.caixas, l.semLicenca]),
+          ["TOTAL", "", "", totais.km, totais.postes, totais.troca, totais.ocorrencias, totais.alta, totais.caixas, totais.semLicenca],
         ],
       },
       {
         nome: "Postes",
-        cabecalho: ["Data", "Técnico", "Trecho", "O.S.", "Poste", "Material", "Base", "Inclinado", "Rachado", "Estai", "Precisa troca", "Tipo de via", "Via / km", "Coordenadas", "Mapa", "Endereço", "Observação"],
+        cabecalho: ["Data", "Técnico", "Trecho", "O.S.", "Poste", "Material", "Base", "Inclinado", "Rachado", "Estai", "Precisa troca", "Tipo de via", "Licenciamento", "Via / km", "Coordenadas", "Mapa", "Endereço", "Observação"],
         linhas: pontosPeriodo.filter((p) => p.categoria === "poste").map((p): Celula[] => [
           comoData(diaDe(quando(p))), p.tecnico ?? "", trechoDe(p.os_titulo), p.os_numero, p.identificacao ?? "", rotulo(p.material), rotulo(p.estado_base),
-          p.inclinado ? "Sim" : "Não", p.rachado ? "Sim" : "Não", rotulo(p.estai), p.precisa_troca ? "SIM" : "Não", rotulo(p.tipo_via), p.via_nome ?? "",
+          p.inclinado ? "Sim" : "Não", p.rachado ? "Sim" : "Não", rotulo(p.estai), p.precisa_troca ? "SIM" : "Não", rotulo(p.tipo_via), rotulo(p.licenciamento), p.via_nome ?? "",
           coord(p), mapa(p), p.endereco ?? "", p.observacao ?? "",
         ]),
       },
       {
         nome: "Ocorrências",
-        cabecalho: ["Data", "Técnico", "Trecho", "O.S.", "Ocorrência", "Gravidade", "Tipo de via", "Via / km", "Coordenadas", "Mapa", "Endereço", "Observação"],
+        cabecalho: ["Data", "Técnico", "Trecho", "O.S.", "Ocorrência", "Gravidade", "Tipo de via", "Licenciamento", "Via / km", "Coordenadas", "Mapa", "Endereço", "Observação"],
         linhas: pontosPeriodo.filter((p) => p.categoria === "ocorrencia").map((p): Celula[] => [
-          comoData(diaDe(quando(p))), p.tecnico ?? "", trechoDe(p.os_titulo), p.os_numero, rotulo(p.ocorrencia), rotulo(p.gravidade), rotulo(p.tipo_via),
+          comoData(diaDe(quando(p))), p.tecnico ?? "", trechoDe(p.os_titulo), p.os_numero, rotulo(p.ocorrencia), rotulo(p.gravidade), rotulo(p.tipo_via), rotulo(p.licenciamento),
           p.via_nome ?? "", coord(p), mapa(p), p.endereco ?? "", p.observacao ?? "",
         ]),
       },
@@ -196,7 +199,7 @@ export default function VistoriaMG() {
       },
     ];
     const periodo = de === ate ? dataBr(de).replace(/\//g, "-") : `${dataBr(de).replace(/\//g, "-")} a ${dataBr(ate).replace(/\//g, "-")}`;
-    await baixarXlsxAbas(`Vistoria Backbone MG - ${periodo}`, abas);
+    await baixarXlsxAbas(`${VISTORIA} - ${periodo}`, abas);
   }
 
   async function atualizarPlano(p: Plano, campos: Partial<Plano>) {
@@ -208,7 +211,7 @@ export default function VistoriaMG() {
   async function incluirPlano(e: React.FormEvent) {
     e.preventDefault();
     const { error } = await supabase.from("vistoria_planejamento").insert({
-      data: novo.data, trecho: novo.trecho.trim(), atividade: novo.atividade.trim(), base: novo.base.trim() || null, equipe: novo.equipe.trim() || null,
+      regiao, data: novo.data, trecho: novo.trecho.trim(), atividade: novo.atividade.trim(), base: novo.base.trim() || null, equipe: novo.equipe.trim() || null,
     });
     if (error) return alert(error.message);
     setNovo({ ...novo, atividade: "" });
@@ -228,7 +231,7 @@ export default function VistoriaMG() {
     <div className="grid gap-4">
       <section className="rounded-xl border border-gray-200 bg-white">
         <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 p-4">
-          <h2 className="mr-auto text-lg font-semibold">Vistoria Backbone MG · Produção</h2>
+          <h2 className="mr-auto text-lg font-semibold">{VISTORIA} · Produção</h2>
           <label className="text-sm text-gray-600">De</label>
           <input type="date" className={campo} value={de} onChange={(e) => setDe(e.target.value || hoje())} />
           <label className="text-sm text-gray-600">até</label>
@@ -239,11 +242,11 @@ export default function VistoriaMG() {
             onClick={exportar}>Baixar planilha para o gerente (Excel)</button>
         </div>
 
-        <div className="grid grid-cols-2 gap-px bg-gray-100 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-px bg-gray-100 sm:grid-cols-4 lg:grid-cols-7">
           {([
             ["Postes vistoriados", totais.postes, ""], ["Postes p/ troca", totais.troca, totais.troca ? "text-red-700" : ""],
             ["Ocorrências", totais.ocorrencias, ""], ["Ocorrências graves", totais.alta, totais.alta ? "text-red-700" : ""],
-            ["Caixas cadastradas", totais.caixas, ""], ["Km rodado", totais.km.toLocaleString("pt-BR"), ""],
+            ["Caixas cadastradas", totais.caixas, ""], ["Sem licenciamento", totais.semLicenca, totais.semLicenca ? "text-amber-700" : ""], ["Km rodado", totais.km.toLocaleString("pt-BR"), ""],
           ] as [string, string | number, string][]).map(([r, v, cor]) => (
             <div key={r} className="bg-white p-4">
               <div className={`text-2xl font-semibold ${cor}`}>{v}</div>
@@ -257,11 +260,11 @@ export default function VistoriaMG() {
             <thead className="text-gray-500">
               <tr><th className="p-3">Data</th><th className="p-3">Técnico</th><th className="p-3">Trecho(s)</th><th className="p-3 text-right">Km</th>
                 <th className="p-3 text-right">Postes</th><th className="p-3 text-right">P/ troca</th><th className="p-3 text-right">Ocorrências</th>
-                <th className="p-3 text-right">Graves</th><th className="p-3 text-right">Caixas</th></tr>
+                <th className="p-3 text-right">Graves</th><th className="p-3 text-right">Caixas</th><th className="p-3 text-right">Sem licença</th></tr>
             </thead>
             <tbody>
-              {carregando && <tr><td colSpan={9} className="p-4 text-gray-500">Carregando...</td></tr>}
-              {!carregando && producao.length === 0 && <tr><td colSpan={9} className="p-4 text-gray-500">Nenhuma produção no período.</td></tr>}
+              {carregando && <tr><td colSpan={10} className="p-4 text-gray-500">Carregando...</td></tr>}
+              {!carregando && producao.length === 0 && <tr><td colSpan={10} className="p-4 text-gray-500">Nenhuma produção no período.</td></tr>}
               {producao.map((l) => (
                 <tr key={`${l.dia}-${l.tecnico}`} className="border-t border-gray-100">
                   <td className="p-3 whitespace-nowrap">{dataBr(l.dia)}</td>
@@ -273,6 +276,7 @@ export default function VistoriaMG() {
                   <td className="p-3 text-right">{l.ocorrencias}</td>
                   <td className={`p-3 text-right ${l.alta ? "font-semibold text-red-700" : ""}`}>{l.alta}</td>
                   <td className="p-3 text-right">{l.caixas}</td>
+                  <td className={`p-3 text-right ${l.semLicenca ? "font-semibold text-amber-700" : ""}`}>{l.semLicenca}</td>
                 </tr>
               ))}
             </tbody>

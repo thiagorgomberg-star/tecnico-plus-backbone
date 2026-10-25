@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 
 type Atividade = { id: string; tipo: string; nome: string; ordem: number; ativo: boolean };
 
-const TIPOS = ["Preventiva rede", "Preventiva site", "Vistoria Backbone MG"];
+const TIPOS = ["Preventiva rede", "Preventiva site", "Vistoria Backbone MG", "Vistoria Backbone SP"];
 
 // Lista de atividades que o técnico marca ao abrir uma preventiva no app.
 export default function AtividadesPreventiva() {

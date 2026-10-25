@@ -18,7 +18,7 @@ import { compartilharOsApresentacao } from '../lib/osApresentacao';
 import { compartilharRelatorio } from '../lib/relatorioPdf';
 import { ponto, supabase } from '../lib/supabase';
 import { OrdemServico, proximaAcao, rotuloDaOs, rotuloStatus, StatusOS, variosDias } from '../lib/tipos';
-import { ehVistoriaMg, PontoVistoria as Ponto } from '../lib/vistoria';
+import { ehVistoria, PontoVistoria as Ponto } from '../lib/vistoria';
 import CaixaEmenda from './CaixaEmenda';
 import PontoVistoria from './PontoVistoria';
 
@@ -54,7 +54,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
   const [versaoCaixas, setVersaoCaixas] = useState(0);
   const [pontoAberto, setPontoAberto] = useState<{ ponto: Ponto | null; categoria: 'poste' | 'ocorrencia'; daOs: Ponto[] } | null>(null);
   const [versaoPontos, setVersaoPontos] = useState(0);
-  const vistoriaMg = ehVistoriaMg(os.tipo);
+  const vistoriaMg = ehVistoria(os.tipo);
   const [assinando, setAssinando] = useState(false);
   const [assinadoPor, setAssinadoPor] = useState<string | null>(null);
 
@@ -202,7 +202,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
 
   if (pontoAberto) {
     return (
-      <PontoVistoria osId={os.id} ponto={pontoAberto.ponto} categoria={pontoAberto.categoria} daOs={pontoAberto.daOs}
+      <PontoVistoria osId={os.id} tipoOs={os.tipo} ponto={pontoAberto.ponto} categoria={pontoAberto.categoria} daOs={pontoAberto.daOs}
         podeEditar={podeEditar} usuario={usuario} voltar={() => { setPontoAberto(null); setVersaoPontos((v) => v + 1); }} />
     );
   }

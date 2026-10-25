@@ -8,12 +8,13 @@ import { aoMudarFila, itensPendentes } from '../lib/fila';
 import { enderecoDe, posicaoAtual } from '../lib/localizacao';
 import { supabase } from '../lib/supabase';
 import {
-  ESTADOS_BASE, ESTAIS, excluirPonto, GRAVIDADES, MATERIAIS, OCORRENCIAS, Opcao, PontoVistoria as Ponto, proximoPoste, salvarPonto, TIPOS_VIA,
+  ESTADOS_BASE, ESTAIS, excluirPonto, GRAVIDADES, LICENCIAMENTOS, MATERIAIS, OCORRENCIAS, Opcao, PontoVistoria as Ponto, proximoPoste, salvarPonto, TIPOS_VIA,
 } from '../lib/vistoria';
 import CameraOS from './CameraOS';
 
 type Props = {
   osId: string;
+  tipoOs: string;
   ponto: Ponto | null;       // null: ponto novo
   categoria: 'poste' | 'ocorrencia'; // usado quando é novo
   daOs: Ponto[];             // já lançados (número do próximo poste e via do anterior)
@@ -32,13 +33,13 @@ function novoPonto(osId: string, categoria: 'poste' | 'ocorrencia', daOs: Ponto[
     material: categoria === 'poste' ? anterior?.material ?? 'madeira' : null,
     estado_base: categoria === 'poste' ? 'ok' : null, inclinado: false, rachado: false,
     estai: categoria === 'poste' ? 'ok' : null, precisa_troca: false,
-    tipo_via: anterior?.tipo_via ?? null, via_nome: anterior?.via_nome ?? null,
+    tipo_via: anterior?.tipo_via ?? null, licenciamento: anterior?.licenciamento ?? null, via_nome: anterior?.via_nome ?? null,
     ocorrencia: null, gravidade: categoria === 'ocorrencia' ? 'media' : null, observacao: null,
   };
 }
 
-// Registro de um poste ou de uma ocorrência na Vistoria Backbone MG: GPS, situação, via e fotos (funciona offline).
-export default function PontoVistoria({ osId, ponto: inicial, categoria, daOs, podeEditar, usuario, voltar }: Props) {
+// Registro de um poste ou de uma ocorrência na Vistoria Backbone (MG/SP): GPS, situação, via e fotos (funciona offline).
+export default function PontoVistoria({ osId, tipoOs, ponto: inicial, categoria, daOs, podeEditar, usuario, voltar }: Props) {
   const [nova, setNova] = useState(!inicial);
   const [p, setP] = useState<Ponto>(() => inicial ?? novoPonto(osId, categoria, daOs));
   const [lancados, setLancados] = useState(daOs);
@@ -104,6 +105,10 @@ export default function PontoVistoria({ osId, ponto: inicial, categoria, daOs, p
       Alert.alert('Tipo de via', 'Informe onde o ponto está (rodovia, vicinal, urbana...). Isso define o licenciamento.');
       return false;
     }
+    if (!p.licenciamento) {
+      Alert.alert('Licenciamento', 'Informe se o trecho é licenciado ou sem licenciamento.');
+      return false;
+    }
     return true;
   }
 
@@ -158,7 +163,7 @@ export default function PontoVistoria({ osId, ponto: inicial, categoria, daOs, p
 
   return (
     <View style={{ flex: 1, backgroundColor: cores.fundo }}>
-      <Cabecalho titulo={nova ? `Novo ${poste ? 'poste' : 'registro de ocorrência'}` : titulo} subtitulo="Vistoria Backbone MG" voltar={voltar}
+      <Cabecalho titulo={nova ? `Novo ${poste ? 'poste' : 'registro de ocorrência'}` : titulo} subtitulo={tipoOs} voltar={voltar}
         acoes={!nova && podeEditar ? [{ icone: 'delete-outline', rotulo: 'Excluir', aoTocar: excluir }] : undefined} />
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
         <View style={s.bloco}>
@@ -214,7 +219,9 @@ export default function PontoVistoria({ osId, ponto: inicial, categoria, daOs, p
         <View style={s.bloco}>
           <Text style={s.rotulo}>ONDE ESTÁ (DEFINE O LICENCIAMENTO) *</Text>
           {chips(TIPOS_VIA, p.tipo_via, (v) => mudar({ tipo_via: v }))}
-          <TextInput style={s.campo} value={p.via_nome ?? ''} editable={podeEditar} placeholder="Via / km (ex.: BR-381 km 812, MG-347)"
+          <Text style={s.rotulo}>LICENCIAMENTO DO TRECHO *</Text>
+          {chips(LICENCIAMENTOS, p.licenciamento, (v) => mudar({ licenciamento: v }))}
+          <TextInput style={s.campo} value={p.via_nome ?? ''} editable={podeEditar} placeholder="Via / km (ex.: BR-381 km 812, SP-123, Dutra km 140)"
             onChangeText={(t) => mudar({ via_nome: t })} />
           <Text style={s.rotulo}>OBSERVAÇÃO</Text>
           <TextInput style={[s.campo, { minHeight: 60, textAlignVertical: 'top' }]} multiline value={p.observacao ?? ''} editable={podeEditar}

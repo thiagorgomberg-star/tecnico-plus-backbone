@@ -4,7 +4,10 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { useEffect, useState } from 'react';
-import { Alert, AppState, BackHandler, SafeAreaView, View } from 'react-native';
+import { Alert, AppState, BackHandler, Platform, SafeAreaView, StatusBar as BarraStatus, View } from 'react-native';
+
+// Android desenha o app por baixo da barra de status (câmera/relógio): desce o conteúdo a altura dela.
+const TOPO = Platform.OS === 'android' ? (BarraStatus.currentHeight ?? 28) + 6 : 0;
 
 import AbasInferiores, { Aba } from './src/componentes/AbasInferiores';
 import { fonteIcones } from './src/componentes/Icone';
@@ -135,7 +138,7 @@ export default function App() {
 
   if (!sessao) {
     return (
-      <SafeAreaView style={estilo.tela}>
+      <SafeAreaView style={[estilo.tela, { paddingTop: TOPO }]}>
         <StatusBar style="dark" />
         <Login />
       </SafeAreaView>
@@ -176,7 +179,7 @@ export default function App() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: cores.cabecalho }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: cores.cabecalho, paddingTop: TOPO }}>
       <StatusBar style="light" />
       <View style={{ flex: 1, backgroundColor: cores.fundo }}>{conteudo}</View>
     </SafeAreaView>

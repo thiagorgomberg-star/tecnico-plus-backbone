@@ -3,9 +3,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { enfileirar } from './fila';
 import { ponto, supabase } from './supabase';
 
-// Vistoria Backbone MG: postes e ocorrências registrados ao longo da rota (funciona offline; a fila envia depois).
+// Vistoria Backbone (MG e SP): postes e ocorrências registrados ao longo da rota (funciona offline; a fila envia depois).
 export const VISTORIA_MG = 'Vistoria Backbone MG';
-export const ehVistoriaMg = (tipo: string) => tipo === VISTORIA_MG;
+export const VISTORIA_SP = 'Vistoria Backbone SP';
+export const ehVistoria = (tipo: string) => tipo === VISTORIA_MG || tipo === VISTORIA_SP;
 
 // Trechos do Sul de Minas para escolher ao abrir a vistoria (o código BB-xx soma a produção por trecho no painel).
 export const TRECHOS_MG = [
@@ -18,6 +19,18 @@ export const TRECHOS_MG = [
   'BB-14 · Pedralva × Santa Rita do Sapucaí',
   'BB-15 · Santa Rita do Sapucaí × Pouso Alegre',
 ];
+
+// Trechos de São Paulo (Vale do Paraíba e capital).
+export const TRECHOS_SP = [
+  'SJC · São José dos Campos',
+  'Taubaté',
+  'SP · São Paulo',
+];
+
+export const TRECHOS_VISTORIA: Record<string, { regiao: string; trechos: string[] }> = {
+  [VISTORIA_MG]: { regiao: 'Minas', trechos: TRECHOS_MG },
+  [VISTORIA_SP]: { regiao: 'São Paulo', trechos: TRECHOS_SP },
+};
 
 export type Opcao = { valor: string; rotulo: string };
 
@@ -32,9 +45,13 @@ export const ESTAIS: Opcao[] = [
   { valor: 'ok', rotulo: 'OK' }, { valor: 'frouxo', rotulo: 'Frouxo' }, { valor: 'ausente', rotulo: 'Faltando' }, { valor: 'nao_tem', rotulo: 'Não precisa' },
 ];
 export const TIPOS_VIA: Opcao[] = [
-  { valor: 'rodovia_federal', rotulo: 'Rodovia federal (DNIT)' }, { valor: 'rodovia_estadual', rotulo: 'Rodovia estadual (DER-MG)' },
+  { valor: 'rodovia_federal', rotulo: 'Rodovia federal (DNIT)' }, { valor: 'rodovia_estadual', rotulo: 'Rodovia estadual (DER)' },
   { valor: 'concessionaria', rotulo: 'Rodovia concedida' }, { valor: 'vicinal', rotulo: 'Estrada vicinal' },
   { valor: 'urbana', rotulo: 'Área urbana' }, { valor: 'particular', rotulo: 'Propriedade particular' },
+];
+// Trecho com licença de ocupação (faixa de domínio, prefeitura, concessionária) ou sem licenciamento.
+export const LICENCIAMENTOS: Opcao[] = [
+  { valor: 'licenciado', rotulo: 'Trecho licenciado' }, { valor: 'sem_licenca', rotulo: 'Sem licenciamento' },
 ];
 export const OCORRENCIAS: Opcao[] = [
   { valor: 'cabo_exposto', rotulo: 'Cabo exposto' }, { valor: 'flecha_baixa', rotulo: 'Flecha baixa' },
@@ -64,6 +81,7 @@ export type PontoVistoria = {
   estai: string | null;
   precisa_troca: boolean;
   tipo_via: string | null;
+  licenciamento: string | null;
   via_nome: string | null;
   ocorrencia: string | null;
   gravidade: string | null;
@@ -72,7 +90,7 @@ export type PontoVistoria = {
 
 const chaveOs = (osId: string) => `vistoria-pontos-${osId}`;
 const CAMPOS = 'id, os_id, categoria, identificacao, latitude, longitude, precisao_m, localizada_em, endereco, material, estado_base, ' +
-  'inclinado, rachado, estai, precisa_troca, tipo_via, via_nome, ocorrencia, gravidade, observacao';
+  'inclinado, rachado, estai, precisa_troca, tipo_via, licenciamento, via_nome, ocorrencia, gravidade, observacao';
 
 async function lerLocais(osId: string): Promise<PontoVistoria[]> {
   try {
@@ -123,6 +141,7 @@ export async function salvarPonto(p: PontoVistoria, novo: boolean) {
     estai: poste ? p.estai : null,
     precisa_troca: poste ? p.precisa_troca : false,
     tipo_via: p.tipo_via,
+    licenciamento: p.licenciamento,
     via_nome: p.via_nome?.trim() || null,
     ocorrencia: poste ? null : p.ocorrencia,
     gravidade: poste ? null : p.gravidade,
