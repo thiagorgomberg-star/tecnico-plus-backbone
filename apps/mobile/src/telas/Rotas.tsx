@@ -1,13 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { Alert, FlatList, Linking, Pressable, Text, View } from 'react-native';
+import { randomUUID } from 'expo-crypto';
+import { File } from 'expo-file-system';
+import { requireOptionalNativeModule } from 'expo-modules-core';
+import { ActivityIndicator, Alert, FlatList, Linking, Pressable, Text, View } from 'react-native';
+
+import AnaliseSor from '../componentes/AnaliseSor';
 
 import Cabecalho from '../componentes/Cabecalho';
 import Icone from '../componentes/Icone';
 import { cores, estilo, fundoDe } from '../lib/estilo';
 import { supabase } from '../lib/supabase';
 
-type Rota = { id: string; trecho: string; descricao: string | null; link_kmz: string };
+type Rota = { id: string; trecho: string; descricao: string | null; link_kmz: string; extensao_km: number | null };
 type Curva = {
   rota_id: string; origem: 'arquivo' | 'campo'; tirada_em: string; bucket: string; caminho: string; nome: string;
   fibra: number | null; ponta: string | null; os_numero: number | null; total: number; ultima_em: string;
@@ -22,20 +27,26 @@ export default function Rotas({ voltar }: { voltar: () => void }) {
   const [rotas, setRotas] = useState<Rota[]>([]);
   const [curvas, setCurvas] = useState<Curva[]>([]);
   const [aberta, setAberta] = useState<string | null>(null);
+  const [analise, setAnalise] = useState<(Curva & { extensaoKm: number | null }) | null>(null);
+  const [enviando, setEnviando] = useState<string | null>(null);
 
-  useEffect(() => {
-    AsyncStorage.getItem(CACHE).then((c) => c && setRotas(JSON.parse(c)));
-    AsyncStorage.getItem(CACHE_CURVAS).then((c) => c && setCurvas(JSON.parse(c)));
-    supabase.from('rotas').select('id, trecho, descricao, link_kmz').eq('ativo', true).order('trecho').then(({ data }) => {
-      if (!data) return;
-      setRotas(data);
-      AsyncStorage.setItem(CACHE, JSON.stringify(data));
-    });
+  function carregarCurvas() {
     supabase.rpc('curvas_trecho', { p_limite: 5 }).then(({ data }) => {
       if (!data) return;
       setCurvas(data as Curva[]);
       AsyncStorage.setItem(CACHE_CURVAS, JSON.stringify(data));
     });
+  }
+
+  useEffect(() => {
+    AsyncStorage.getItem(CACHE).then((c) => c && setRotas(JSON.parse(c)));
+    AsyncStorage.getItem(CACHE_CURVAS).then((c) => c && setCurvas(JSON.parse(c)));
+    supabase.from('rotas').select('id, trecho, descricao, link_kmz, extensao_km').eq('ativo', true).order('trecho').then(({ data }) => {
+      if (!data) return;
+      setRotas(data);
+      AsyncStorage.setItem(CACHE, JSON.stringify(data));
+    });
+    carregarCurvas();
   }, []);
 
   async function abrirLink(url: string) {
@@ -46,10 +57,52 @@ export default function Rotas({ voltar }: { voltar: () => void }) {
     }
   }
 
-  async function abrirCurva(c: Curva) {
+  async function abrirCurva(c: Curva, rota: Rota) {
+    if (/\.sor$/i.test(c.nome)) return setAnalise({ ...c, extensaoKm: rota.extensao_km });
     const { data, error } = await supabase.storage.from(c.bucket).createSignedUrl(c.caminho, 600);
     if (error || !data) return Alert.alert('Sem internet', 'Para abrir a curva é preciso estar conectado.');
     abrirLink(data.signedUrl);
+  }
+
+  // Envia curvas do OTDR (PDF ou .SOR) do celular para o trecho. Precisa de internet.
+  async function enviarCurva(rota: Rota) {
+    // O seletor de arquivos só existe a partir do APK novo; nos antigos o botão avisa.
+    if (!requireOptionalNativeModule('ExpoDocumentPicker')) {
+      return Alert.alert('Atualize o app', 'Para enviar curvas pelo celular é preciso instalar a versão nova do APK. Pelo painel já funciona.');
+    }
+    const Seletor: typeof import('expo-document-picker') = require('expo-document-picker');
+    const r = await Seletor.getDocumentAsync({ type: ['application/pdf', 'application/octet-stream', '*/*'], multiple: true, copyToCacheDirectory: true });
+    if (r.canceled) return;
+    const validos = r.assets.filter((a) => /\.(sor|pdf)$/i.test(a.name));
+    if (!validos.length) return Alert.alert('Arquivo não aceito', 'Envie a curva em PDF ou .SOR.');
+    setEnviando(rota.id);
+    const { data: sessao } = await supabase.auth.getSession();
+    const hoje = new Date().toISOString().slice(0, 10);
+    const falhas: string[] = [];
+    let ultimoSor: Curva | null = null;
+    for (const a of validos) {
+      const nomeSeguro = a.name.normalize('NFD').replace(/[^\w.-]+/g, '_');
+      const caminho = `${rota.id}/${hoje}_${randomUUID().slice(0, 8)}_${nomeSeguro}`;
+      const tipo = /\.pdf$/i.test(a.name) ? 'application/pdf' : 'application/octet-stream';
+      const { error: erroUp } = await supabase.storage.from('curvas').upload(caminho, await new File(a.uri).arrayBuffer(), { contentType: tipo });
+      if (erroUp) { falhas.push(a.name); continue; }
+      const fibra = a.name.match(/(?:^|[^a-z])(?:fo|fibra|f)[ _-]?(\d{1,3})(?!\d)/i)?.[1];
+      const { error } = await supabase.from('rota_curvas').insert({
+        rota_id: rota.id, tirada_em: hoje, caminho_arquivo: caminho, nome_arquivo: a.name,
+        fibra: fibra ? Number(fibra) : null, enviado_por: sessao.session?.user.id,
+      });
+      if (error) { falhas.push(a.name); continue; }
+      if (/\.sor$/i.test(a.name)) {
+        ultimoSor = { rota_id: rota.id, origem: 'arquivo', tirada_em: hoje, bucket: 'curvas', caminho, nome: a.name,
+          fibra: fibra ? Number(fibra) : null, ponta: null, os_numero: null, total: 0, ultima_em: hoje };
+      }
+    }
+    setEnviando(null);
+    carregarCurvas();
+    setAberta(rota.id);
+    if (falhas.length) Alert.alert('Algumas curvas não subiram', `${falhas.join(', ')}\n\nVerifique a internet e tente de novo.`);
+    // .SOR enviado já abre a análise dos eventos.
+    if (ultimoSor) setAnalise({ ...ultimoSor, extensaoKm: rota.extensao_km });
   }
 
   return (
@@ -75,13 +128,17 @@ export default function Rotas({ voltar }: { voltar: () => void }) {
                   {dias == null ? 'Sem curvas OTDR' : atrasado ? `${dias} dias sem curva nova` : `Curva em dia (há ${dias} dia${dias === 1 ? '' : 's'})`}
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', gap: 16, marginTop: 10 }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 16, rowGap: 8, marginTop: 10 }}>
                 {item.link_kmz ? (
                   <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} onPress={() => abrirLink(item.link_kmz)}>
                     <Icone nome="map-marker-path" cor={cores.primaria} />
                     <Text style={{ color: cores.primaria, fontWeight: '600' }}>Abrir KMZ</Text>
                   </Pressable>
                 ) : <Text style={{ color: cores.apagado, fontSize: 13 }}>KMZ ainda não cadastrado</Text>}
+                <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} disabled={!!enviando} onPress={() => enviarCurva(item)}>
+                  {enviando === item.id ? <ActivityIndicator size="small" color={cores.primaria} /> : <Icone nome="upload" cor={cores.primaria} />}
+                  <Text style={{ color: cores.primaria, fontWeight: '600' }}>Enviar curva</Text>
+                </Pressable>
                 {lista.length > 0 && (
                   <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} onPress={() => setAberta(aberta === item.id ? null : item.id)}>
                     <Icone nome="chart-bell-curve" cor={cores.primaria} />
@@ -90,7 +147,7 @@ export default function Rotas({ voltar }: { voltar: () => void }) {
                 )}
               </View>
               {aberta === item.id && lista.map((c) => (
-                <Pressable key={`${c.bucket}/${c.caminho}`} onPress={() => abrirCurva(c)}
+                <Pressable key={`${c.bucket}/${c.caminho}`} onPress={() => abrirCurva(c, item)}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: cores.borda, marginTop: 6 }}>
                   <Icone nome={c.origem === 'campo' ? 'camera' : 'file-chart'} cor={cores.suave} />
                   <View style={{ flex: 1 }}>
@@ -100,13 +157,16 @@ export default function Rotas({ voltar }: { voltar: () => void }) {
                       {c.fibra ? ` · FO ${c.fibra}` : ''}{c.ponta ? ` · ${c.ponta}` : ''}{c.os_numero ? ` · O.S. ${c.os_numero}` : ''}
                     </Text>
                   </View>
-                  <Icone nome="chevron-right" cor={cores.suave} />
+                  {/\.sor$/i.test(c.nome)
+                    ? <Text style={{ color: cores.primaria, fontWeight: '700', fontSize: 12.5 }}>Analisar</Text>
+                    : <Icone nome="chevron-right" cor={cores.suave} />}
                 </Pressable>
               ))}
             </View>
           );
         }}
       />
+      <AnaliseSor curva={analise} extensaoKm={analise?.extensaoKm ?? null} fechar={() => setAnalise(null)} />
     </View>
   );
 }

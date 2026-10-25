@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import AnaliseSor from "@/componentes/AnaliseSor";
 import { excluirComConfirmacao } from "@/lib/excluir";
 import { supabase } from "@/lib/supabase";
 
-type Rota = { id: string; trecho: string; descricao: string | null; link_kmz: string; ativo: boolean; regiao: string };
+type Rota = { id: string; trecho: string; descricao: string | null; link_kmz: string; ativo: boolean; regiao: string; extensao_km?: number | null };
 const REGIOES = ["MG", "SP"];
 type Curva = {
   rota_id: string; origem: "arquivo" | "campo"; tirada_em: string; bucket: string; caminho: string; nome: string;
@@ -172,6 +173,7 @@ function TrechoCurvas({ rota, curvas, alternar, recarregar }: { rota: Rota; curv
   const [enviando, setEnviando] = useState(false);
   const [data, setData] = useState(() => new Date().toISOString().slice(0, 10));
   const [ponta, setPonta] = useState("");
+  const [analise, setAnalise] = useState<Curva | null>(null);
   const ultima = curvas[0];
   const dias = ultima ? diasDesde(ultima.ultima_em) : null;
   const atrasado = rota.ativo && (dias == null || dias > DIAS_CURVA);
@@ -212,6 +214,15 @@ function TrechoCurvas({ rota, curvas, alternar, recarregar }: { rota: Rota; curv
         <span className="rounded-md bg-[#163A6B]/10 px-2 py-0.5 text-xs font-bold text-[#163A6B]">{rota.regiao}</span>
         <span className={`font-medium ${rota.ativo ? "" : "text-gray-400 line-through"}`}>{rota.trecho}</span>
         {rota.descricao && <span className="text-gray-500">{rota.descricao}</span>}
+        <label className="flex items-center gap-1 text-xs text-gray-500" title="Extensão da fibra no trecho: a análise do .SOR avisa quando a fibra termina antes (possível rompimento)">
+          <input className="w-16 rounded border border-gray-200 px-1 py-0.5 text-right text-sm text-gray-900" defaultValue={rota.extensao_km ?? ""} placeholder="—"
+            inputMode="decimal" onBlur={async (e) => {
+              const v = e.target.value.trim() ? Number(e.target.value.replace(",", ".")) : null;
+              if (v === (rota.extensao_km ?? null) || (v != null && !(v > 0))) return;
+              const { error } = await supabase.from("rotas").update({ extensao_km: v }).eq("id", rota.id);
+              if (error) alert(error.message); else recarregar();
+            }} /> km
+        </label>
         {rota.link_kmz ? <a className="text-blue-700 hover:underline" href={rota.link_kmz} target="_blank" rel="noreferrer">KMZ</a> : <span className="text-xs text-gray-400">sem KMZ</span>}
         {dias == null ? (
           <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">⚠ sem curvas</span>
@@ -244,8 +255,8 @@ function TrechoCurvas({ rota, curvas, alternar, recarregar }: { rota: Rota; curv
               <input className="rounded-lg border border-gray-300 p-1.5 text-sm text-gray-900" placeholder="ex.: POP SJC → Taubaté" value={ponta} onChange={(e) => setPonta(e.target.value)} />
             </label>
             <label className={`cursor-pointer rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800 ${enviando ? "opacity-50" : ""}`}>
-              {enviando ? "Enviando..." : "Enviar curvas (.sor, PDF, imagem)"}
-              <input type="file" multiple className="hidden" disabled={enviando} onChange={(e) => { enviar(e.target.files); e.target.value = ""; }} />
+              {enviando ? "Enviando..." : "Enviar curvas (.SOR ou PDF)"}
+              <input type="file" multiple accept=".sor,.SOR,.pdf,application/pdf,image/*" className="hidden" disabled={enviando} onChange={(e) => { enviar(e.target.files); e.target.value = ""; }} />
             </label>
           </div>
           {curvas.length === 0 ? (
@@ -259,7 +270,14 @@ function TrechoCurvas({ rota, curvas, alternar, recarregar }: { rota: Rota; curv
                 {curvas.map((c) => (
                   <tr key={`${c.bucket}/${c.caminho}`} className="border-t border-gray-100">
                     <td className="py-1.5 whitespace-nowrap">{new Date(c.tirada_em).toLocaleDateString("pt-BR")}</td>
-                    <td><button className="text-left text-blue-700 hover:underline" onClick={() => abrir(c)}>{c.nome}</button></td>
+                    <td>
+                      <button className="text-left text-blue-700 hover:underline" onClick={() => abrir(c)}>{c.nome}</button>
+                      {/\.sor$/i.test(c.nome) ? (
+                        <button className="ml-2 rounded bg-[#163A6B] px-2 py-0.5 text-xs font-semibold text-white hover:bg-[#0F2747]" onClick={() => setAnalise(c)}>
+                          Analisar eventos
+                        </button>
+                      ) : null}
+                    </td>
                     <td>{c.origem === "campo" ? `Foto em campo · O.S. ${c.os_numero}` : "Arquivo"}</td>
                     <td>{c.fibra ?? "—"}</td>
                     <td>{c.ponta ?? "—"}</td>
@@ -272,6 +290,9 @@ function TrechoCurvas({ rota, curvas, alternar, recarregar }: { rota: Rota; curv
           {(ultima?.total ?? 0) > curvas.length && <p className="text-xs text-gray-500">Mostrando as {curvas.length} mais recentes de {ultima!.total}.</p>}
         </div>
       )}
+      {analise ? (
+        <AnaliseSor bucket={analise.bucket} caminho={analise.caminho} nome={analise.nome} extensaoKm={rota.extensao_km ?? null} fechar={() => setAnalise(null)} />
+      ) : null}
     </li>
   );
 }
