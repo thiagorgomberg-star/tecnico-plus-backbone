@@ -32,6 +32,7 @@ import MeuPerfil from './src/telas/MeuPerfil';
 import MinhaEscala from './src/telas/MinhaEscala';
 import NovaPreventiva from './src/telas/NovaPreventiva';
 import Rotas from './src/telas/Rotas';
+import AnalisarCurva from './src/telas/AnalisarCurva';
 
 export type Perfil = { nome: string; cargo: string | null };
 type Camera = { osId: string; fotosJaFeitas: number };
@@ -42,7 +43,7 @@ export default function App() {
   const [perfil, setPerfil] = useState<Perfil>({ nome: '', cargo: null });
   const [osAberta, setOsAberta] = useState<OrdemServico | null>(null);
   const [camera, setCamera] = useState<Camera | null>(null);
-  const [tela, setTela] = useState<'inicio' | 'rotas' | 'escala' | 'preventiva' | 'despesas' | 'frota' | 'inventario' | 'perfil' | 'evento'>('inicio');
+  const [tela, setTela] = useState<'inicio' | 'rotas' | 'escala' | 'preventiva' | 'despesas' | 'frota' | 'inventario' | 'perfil' | 'evento' | 'curva'>('inicio');
   const [aba, setAba] = useState<Aba>('atividades');
   const [backlogPedido, setBacklogPedido] = useState<string | null>(null);
   const [pendentes, setPendentes] = useState(0);
@@ -159,6 +160,8 @@ export default function App() {
     );
   } else if (tela === 'rotas') {
     conteudo = <Rotas voltar={() => setTela('inicio')} />;
+  } else if (tela === 'curva') {
+    conteudo = <AnalisarCurva voltar={() => setTela('inicio')} />;
   } else if (tela === 'preventiva') {
     conteudo = <NovaPreventiva voltar={() => setTela('inicio')} abrirOS={(os) => { setTela('inicio'); setAba('atividades'); setOsAberta(os); }} />;
   } else if (tela === 'despesas') {

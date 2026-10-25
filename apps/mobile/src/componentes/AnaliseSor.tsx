@@ -13,9 +13,10 @@ const ROTULO: Record<Nivel, string> = { ok: 'OK', atencao: 'ATENÇÃO', critico:
 const fmt = (n: number, casas = 2) => n.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
 
 // Análise do .SOR do OTDR no celular: resumo, traço com os eventos e o que fazer em cada um.
-// O arquivo fica guardado depois da primeira abertura (abre de novo sem internet).
+// Curva do trecho (bucket): fica guardada depois da primeira abertura e abre de novo sem internet.
+// Curva do próprio celular (uri): lida direto do arquivo, totalmente offline.
 export default function AnaliseSor({ curva, extensaoKm, fechar }: {
-  curva: { bucket: string; caminho: string; nome: string } | null; extensaoKm: number | null; fechar: () => void;
+  curva: { nome: string; bucket?: string; caminho?: string; uri?: string } | null; extensaoKm: number | null; fechar: () => void;
 }) {
   const [sor, setSor] = useState<Sor | null>(null);
   const [erro, setErro] = useState('');
@@ -29,6 +30,8 @@ export default function AnaliseSor({ curva, extensaoKm, fechar }: {
     if (!curva) return;
     (async () => {
       try {
+        if (curva.uri) return setSor(lerSor(await new File(curva.uri).bytes()));
+        if (!curva.bucket || !curva.caminho) throw new Error('Curva sem arquivo.');
         const pasta = new Directory(Paths.document, 'curvas');
         if (!pasta.exists) pasta.create({ intermediates: true });
         const arquivo = new File(pasta, curva.caminho.replace(/[^\w.-]+/g, '_'));
@@ -42,7 +45,7 @@ export default function AnaliseSor({ curva, extensaoKm, fechar }: {
         setErro((e as Error).message || 'Arquivo .SOR inválido.');
       }
     })();
-  }, [curva?.caminho]);
+  }, [curva?.caminho, curva?.uri]);
 
   const analise = useMemo(() => (sor ? analisarSor(sor, extensaoKm) : null), [sor, extensaoKm]);
 
