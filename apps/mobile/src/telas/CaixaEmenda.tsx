@@ -9,9 +9,11 @@ import {
   calcularPlano, CAPACIDADES, CaixaRede, descreverFibra, faixasDaBandeja, FUSOES_POR_BANDEJA, herdarDaAnterior, Manobra, PADROES_CORES, rotuloPonto,
   descreverOlt, ehPonta, instalacoesDoTipo, MODELOS_OLT, TIPOS_SFP, TIPOS_CORDAO, separarBandejas, SituacaoFibra, TIPOS_PONTO,
 } from '../lib/fusao';
-import { aoMudarFila, itensPendentes } from '../lib/fila';
+import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
 import { enderecoDe, posicaoAtual } from '../lib/localizacao';
 import { supabase } from '../lib/supabase';
+import Icone from '../componentes/Icone';
+import MapaCaixas from '../componentes/MapaCaixas';
 import CameraOS from './CameraOS';
 
 type Props = {
@@ -44,6 +46,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const [origemTipo, setOrigemTipo] = useState<'caixa' | 'dgo' | 'nenhuma'>(
     inicial ? (inicial.origem_caixa_id ? 'caixa' : inicial.origem_dgo ? 'dgo' : 'nenhuma') : ultima ? 'caixa' : 'nenhuma');
   const [rede, setRede] = useState<CaixaRede[]>([]);
+  const [mapa, setMapa] = useState<{ tipo: 'anterior' } | { tipo: 'seguinte'; saida: number } | null>(null);
+  // Caixa seguinte de cada saída escolhida nesta edição (saída → id; null desliga). Vai para o servidor ao salvar.
+  const [seguintesNovas, setSeguintesNovas] = useState<Record<number, string | null>>({});
   const [capturando, setCapturando] = useState(false);
   const [gruposEditados, setGruposEditados] = useState(!!inicial);
   const [manobra, setManobra] = useState({ entrada: '', saida: 1, fibra: '', motivo: '' });
@@ -111,6 +116,16 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
     return [...daOs, ...rede.filter((x) => !ids.has(x.id))].filter((x) => x.id !== c.id && x.saidas.length > 0);
   }, [daOs, rede, c.id]);
   const anterior = candidatas.find((x) => x.id === c.origem_caixa_id);
+  const todasCaixas = useMemo(() => {
+    const ids = new Set(daOs.map((x) => x.id));
+    return [...daOs, ...rede.filter((x) => !ids.has(x.id))];
+  }, [daOs, rede]);
+  // Seguinte de cada saída: a escolhida agora ou a que já vem desta caixa no cadastro.
+  const seguinteDa = (saida: number) => {
+    const id = saida in seguintesNovas ? seguintesNovas[saida]
+      : todasCaixas.find((x) => x.origem_caixa_id === c.id && (x.origem_saida ?? 1) === saida)?.id ?? null;
+    return id ? todasCaixas.find((x) => x.id === id) ?? null : null;
+  };
 
   function escolherOrigem(ant: CaixaRede, saida: number) {
     const herdado = herdarDaAnterior(ant, saida);
@@ -216,6 +231,11 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
       fibras: ponta ? c.fibras : c.fibras.map((f) => ({ ...f, potencia_dbm: null, reflexao_db: null, perda_db_km: null })),
     };
     await salvarCaixa(final, nova);
+    for (const [saida, seguinte] of Object.entries(seguintesNovas)) {
+      if (Number(saida) > final.saidas.length) continue;
+      await enfileirar({ tipo: 'rpc', nome: 'ligar_caixa_seguinte', args: { p_caixa: final.id, p_saida: Number(saida), p_seguinte: seguinte } });
+    }
+    setSeguintesNovas({});
     setC(final);
     setSalvando(false);
     if (nova) {
@@ -303,6 +323,12 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           {origemTipo === 'dgo' ? (
             <TextInput style={s.campo} value={c.origem_dgo ?? ''} onChangeText={(t) => mudar({ origem_dgo: t })} placeholder="Nome do DGO / POP" />
           ) : null}
+          {origemTipo === 'caixa' && todasCaixas.some((x) => x.id !== c.id) ? (
+            <Pressable style={s.botaoMapa} onPress={() => setMapa({ tipo: 'anterior' })}>
+              <Icone nome="map-search-outline" tamanho={18} cor={cores.primaria} />
+              <Text style={s.botaoMapaTexto}>{anterior ? `Vem de ${anterior.identificacao} · trocar no mapa` : 'Escolher a caixa anterior no mapa'}</Text>
+            </Pressable>
+          ) : null}
           {origemTipo === 'caixa' ? (
             candidatas.length === 0 ? <Text style={s.suave}>Nenhuma caixa com saída cadastrada ainda.</Text> : (
               <>
@@ -383,6 +409,22 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
                 ))}
               </View>
               {padroes(padroesSaidas[i], (v) => mudar({ padrao_cores_saidas: padroesSaidas.map((x, k) => (k === i ? v : x)) }))}
+              {(() => {
+                const seg = seguinteDa(i + 1);
+                return (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                    <Pressable style={[s.botaoMapa, { flex: 1, marginTop: 0 }]} onPress={() => setMapa({ tipo: 'seguinte', saida: i + 1 })}>
+                      <Icone nome="map-marker-right-outline" tamanho={18} cor={cores.primaria} />
+                      <Text style={s.botaoMapaTexto} numberOfLines={1}>{seg ? `Vai para ${seg.identificacao} · trocar` : 'Caixa seguinte: escolher no mapa'}</Text>
+                    </Pressable>
+                    {seg ? (
+                      <Pressable hitSlop={8} onPress={() => setSeguintesNovas((x) => ({ ...x, [i + 1]: null }))}>
+                        <Icone nome="link-variant-off" tamanho={20} cor={cores.suave} />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                );
+              })()}
             </View>
           ))}
           <Pressable style={[s.botaoPequeno, { alignSelf: 'flex-start', marginTop: 6 }]} onPress={() => mudar({ saidas: [...c.saidas, 0], padrao_cores_saidas: [...padroesSaidas, null] })}>
@@ -614,6 +656,15 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
             caixa={{ id: c.id, tipo: camera.tipo, fibra: camera.fibra, bandeja: camera.bandeja, titulo: camera.titulo }} fechar={() => setCamera(null)} />
         ) : null}
       </Modal>
+      <MapaCaixas aberto={!!mapa} modo={mapa ?? { tipo: 'anterior' }}
+        caixas={todasCaixas.filter((x) => x.id !== c.id)}
+        aqui={c.latitude != null && c.longitude != null ? { lat: c.latitude, lng: c.longitude } : null}
+        atual={mapa?.tipo === 'seguinte' ? seguinteDa(mapa.saida)?.id ?? null : c.origem_caixa_id}
+        escolher={(x) => {
+          if (mapa?.tipo === 'seguinte') setSeguintesNovas((v) => ({ ...v, [mapa.saida]: x.id }));
+          else escolherOrigem(x, x.saidas.length === 1 ? 1 : c.origem_caixa_id === x.id ? c.origem_saida ?? 1 : 1);
+        }}
+        fechar={() => setMapa(null)} />
       {podeEditar ? (
         <View style={s.rodape}>
           <Pressable style={[s.botao, { backgroundColor: cores.sucesso, marginTop: 0 }]} onPress={salvar} disabled={salvando}>
@@ -636,6 +687,9 @@ const s = StyleSheet.create({
   chipAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
   chipTexto: { color: cores.texto, fontSize: 14 },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: cores.borda },
+  botaoMapa: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1, borderColor: cores.primaria, backgroundColor: cores.selecionado },
+  botaoMapaTexto: { color: cores.primaria, fontWeight: '700', fontSize: 13.5, flexShrink: 1 },
   botaoPequeno: { backgroundColor: cores.primaria, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 9, alignItems: 'center' },
   botaoPequenoTexto: { color: '#fff', fontWeight: '700' },
   botao: { borderRadius: 6, paddingVertical: 14, alignItems: 'center', marginTop: 12 },

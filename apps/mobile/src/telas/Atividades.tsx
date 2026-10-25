@@ -6,6 +6,7 @@ import Cabecalho from '../componentes/Cabecalho';
 import BacklogMapa from '../componentes/BacklogMapa';
 import DetalheBacklog from '../componentes/DetalheBacklog';
 import Icone, { iconeDoTipo, NomeIcone } from '../componentes/Icone';
+import { caixasDaRede } from '../lib/caixas';
 import { LINK_APK, VERSAO_APP, versaoPublicada } from '../lib/atualizacao';
 import { bloqueioDeHoje, rotuloEscala } from '../lib/escala';
 import { cores, corDoStatus, fundoDe, sombra } from '../lib/estilo';
@@ -115,6 +116,8 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
 
   useEffect(() => {
     if (!VERSAO_APP) return;
+    // Guarda as caixas da rede no celular sempre que houver sinal (o mapa de caixas funciona sem internet).
+    caixasDaRede().catch(() => undefined);
     versaoPublicada().then((v) => v && v > VERSAO_APP && setNovaVersao(v));
   }, []);
 
