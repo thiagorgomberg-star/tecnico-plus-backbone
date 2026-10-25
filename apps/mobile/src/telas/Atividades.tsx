@@ -19,6 +19,9 @@ import {
   ultimoKm,
 } from '../lib/jornada';
 import { abrirAjusteBateria, garantirRastreio, SituacaoRastreio } from '../lib/rastreio';
+import { assumirBacklog, backlogGuardado, buscarBacklog, ItemBacklog } from '../lib/backlog';
+import { posicaoRapida } from '../lib/localizacao';
+import { distanciaKm, navegarAte } from '../lib/navegacao';
 import { inventarioLocal, pendenciasInventario, precisaFoto } from '../lib/inventario';
 import { supabase } from '../lib/supabase';
 import { MeuVeiculo, meuVeiculo } from '../lib/veiculo';
@@ -30,7 +33,7 @@ const CACHE_OS = 'ordens-cache';
 const PESO_PRIORIDADE = { emergencia: 0, alta: 1, media: 2, baixa: 3 };
 const PESO_STATUS: Record<string, number> = { em_execucao: 0, pausada: 1, devolvida: 2, enviada: 3, aceita: 4, concluida: 5, baixada: 6, cancelada: 7 };
 const ENCERRADAS = ['concluida', 'baixada', 'cancelada'];
-type Grupo = 'andamento' | 'pendente' | 'fechada';
+type Grupo = 'andamento' | 'pendente' | 'fechada' | 'backlog';
 const saudacao = (d: Date) => (d.getHours() < 12 ? 'Bom dia' : d.getHours() < 18 ? 'Boa tarde' : 'Boa noite');
 const duracao = (ms: number) => {
   const min = Math.max(0, Math.floor(ms / 60000));
@@ -55,6 +58,19 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   const [ocupado, setOcupado] = useState(false);
   const [inventarioFaltam, setInventarioFaltam] = useState(0);
   const [rastreio, setRastreio] = useState<SituacaoRastreio | null>(null);
+  const [backlog, setBacklog] = useState<ItemBacklog[]>([]);
+  const [posicao, setPosicao] = useState<{ lat: number; lng: number } | null>(null);
+  const [assumindo, setAssumindo] = useState<string | null>(null);
+
+  // Backlog: o técnico não recebe aviso em tempo real dessas O.S., então confere a cada 2 min e ao voltar para o app.
+  useEffect(() => {
+    backlogGuardado().then(setBacklog).catch(() => {});
+    const atualizar = () => buscarBacklog().then((b) => b && setBacklog(b)).catch(() => {});
+    atualizar();
+    const timer = setInterval(atualizar, 120_000);
+    const aoVoltar = AppState.addEventListener('change', (e) => e === 'active' && atualizar());
+    return () => { clearInterval(timer); aoVoltar.remove(); };
+  }, []);
 
   // Relógio do expediente (atualiza a cada 30 s) e placa do veículo (do cache, funciona offline).
   useEffect(() => {
@@ -95,6 +111,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   const carregar = useCallback(async () => {
     setCarregando(true);
     setJornada(await lerJornada());
+    buscarBacklog().then((b) => b && setBacklog(b)).catch(() => {});
     // O banco já limita o técnico às O.S. abertas e às encerradas nos últimos 7 dias.
     const { data, error } = await supabase.from('ordens_servico').select('*');
     if (error || !data) {
@@ -274,11 +291,50 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   );
 
   const grupos: { chave: Grupo; rotulo: string; cor: string; ordens: OrdemServico[] }[] = [
-    { chave: 'andamento', rotulo: 'Em andamento', cor: corDoStatus.em_execucao, ordens: abertas.filter((o) => ['em_execucao', 'pausada'].includes(o.status)) },
+    { chave: 'andamento', rotulo: 'Andamento', cor: corDoStatus.em_execucao, ordens: abertas.filter((o) => ['em_execucao', 'pausada'].includes(o.status)) },
     { chave: 'pendente', rotulo: 'Pendentes', cor: corDoStatus.enviada, ordens: abertas.filter((o) => !['em_execucao', 'pausada'].includes(o.status)) },
     { chave: 'fechada', rotulo: 'Fechadas', cor: corDoStatus.concluida, ordens: encerradas },
   ];
   const aba: Grupo = filtro ?? (grupos.find((g) => g.ordens.length > 0)?.chave ?? 'andamento');
+  const abas = [...grupos.map((g) => ({ chave: g.chave, rotulo: g.rotulo, cor: g.cor, total: g.ordens.length })),
+    { chave: 'backlog' as Grupo, rotulo: 'Backlog', cor: cores.alerta, total: backlog.length }];
+
+  // Distância até cada O.S. do backlog (a posição é lida só quando o técnico abre a aba).
+  useEffect(() => {
+    if (aba === 'backlog' && !posicao) posicaoRapida().then((p) => p && setPosicao({ lat: p.latitude, lng: p.longitude })).catch(() => {});
+  }, [aba, posicao]);
+  const backlogOrdenado = useMemo(() => {
+    const dist = (b: ItemBacklog) => (posicao && b.lat != null && b.lng != null ? distanciaKm(posicao, { lat: b.lat, lng: b.lng }) : null);
+    return backlog.map((b) => ({ ...b, distancia: dist(b) }))
+      .sort((a, b) => Number(b.reservada) - Number(a.reservada)
+        || PESO_PRIORIDADE[a.prioridade] - PESO_PRIORIDADE[b.prioridade]
+        || (a.distancia ?? 1e9) - (b.distancia ?? 1e9));
+  }, [backlog, posicao]);
+
+  function assumir(b: ItemBacklog) {
+    Alert.alert(`Assumir O.S. #${b.numero}?`, `${b.titulo}\n\nEla sai do backlog, passa para você e o supervisor é avisado.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Assumir', onPress: async () => {
+          setAssumindo(b.id);
+          try {
+            await assumirBacklog(b.id);
+            setBacklog((l) => l.filter((x) => x.id !== b.id));
+            setFiltro('pendente');
+            carregar();
+            Alert.alert('O.S. assumida', 'Ela já está em Pendentes. Quer abrir a rota agora?', [
+              { text: 'Depois', style: 'cancel' },
+              { text: 'Abrir rota', onPress: () => navegarAte(b, `Ir até a O.S. #${b.numero}`) },
+            ]);
+          } catch (e) {
+            Alert.alert('Não foi possível assumir', (e as Error).message);
+            buscarBacklog().then((l) => l && setBacklog(l)).catch(() => {});
+          }
+          setAssumindo(null);
+        },
+      },
+    ]);
+  }
 
   const topo = (
     <View>
@@ -397,12 +453,13 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
       {semRede ? faixa('wifi-off', 'Sem internet. Tudo que você registrar fica salvo no celular.', '#7A4B00', '#FFF4E5') : null}
 
       <View style={s.segmento}>
-        {grupos.map((g) => {
+        {abas.map((g) => {
           const ativo = g.chave === aba;
+          const destaque = g.chave === 'backlog' && g.total > 0;
           return (
             <Pressable key={g.chave} style={[s.segItem, ativo && s.segAtivo]} onPress={() => setFiltro(g.chave)}>
               <Text style={[s.segTexto, ativo && { color: cores.texto }]} numberOfLines={1}>
-                {g.rotulo} <Text style={{ color: ativo ? g.cor : cores.apagado }}>{g.ordens.length}</Text>
+                {g.rotulo} <Text style={{ color: ativo || destaque ? g.cor : cores.apagado }}>{g.total}</Text>
               </Text>
             </Pressable>
           );
@@ -414,12 +471,14 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   return (
     <FlatList
       style={{ flex: 1, backgroundColor: cores.fundo }}
-      data={grupos.find((g) => g.chave === aba)?.ordens ?? []}
+      data={(aba === 'backlog' ? backlogOrdenado : grupos.find((g) => g.chave === aba)?.ordens ?? []) as (OrdemServico | ItemBacklog)[]}
       keyExtractor={(os) => os.id}
       ListHeaderComponent={topo}
-      ListEmptyComponent={<Text style={s.vazio}>{aba === 'andamento' ? 'Nenhuma atividade em andamento.' : aba === 'pendente' ? 'Nenhuma atividade pendente.' : 'Nenhuma atividade fechada nos últimos 7 dias.'}</Text>}
+      ListEmptyComponent={<Text style={s.vazio}>{aba === 'andamento' ? 'Nenhuma atividade em andamento.' : aba === 'pendente' ? 'Nenhuma atividade pendente.' : aba === 'backlog' ? 'Nenhum serviço no backlog agora.' : 'Nenhuma atividade fechada nos últimos 7 dias.'}</Text>}
       refreshControl={<RefreshControl refreshing={carregando} onRefresh={carregar} />}
-      renderItem={({ item }) => <Cartao os={item} abrir={abrirOS} />}
+      renderItem={({ item }) => (aba === 'backlog'
+        ? <CartaoBacklog b={item as ItemBacklog & { distancia: number | null }} assumir={assumir} ocupado={assumindo === item.id} />
+        : <Cartao os={item as OrdemServico} abrir={abrirOS} />)}
       contentContainerStyle={{ paddingBottom: 24 }}
       initialNumToRender={10}
       windowSize={7}
@@ -471,7 +530,67 @@ const Cartao = memo(function Cartao({ os, abrir }: { os: OrdemServico; abrir: (o
   );
 });
 
+// O.S. do backlog: o técnico vê onde fica, abre a rota (Waze/Google Maps) e assume para ir atender.
+function CartaoBacklog({ b, assumir, ocupado }: { b: ItemBacklog & { distancia: number | null }; assumir: (b: ItemBacklog) => void; ocupado: boolean }) {
+  const urgente = b.prioridade === 'emergencia' || b.prioridade === 'alta';
+  const temLocal = (b.lat != null && b.lng != null) || !!b.endereco;
+  return (
+    <View style={s.cartao}>
+      <View style={s.cartaoTopo}>
+        <View style={[s.cartaoIcone, { backgroundColor: cores.alerta }]}>
+          <Icone nome={iconeDoTipo(b.tipo)} tamanho={19} cor="#fff" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            {urgente ? <Icone nome="alert" tamanho={15} cor={cores.perigo} /> : null}
+            <Text style={s.cartaoTitulo} numberOfLines={1}>{b.titulo}</Text>
+          </View>
+          <Text style={s.cartaoSub} numberOfLines={1}>
+            {b.tipo} · #{b.numero}{b.ticket_acionamento ? ` · ${b.ticket_acionamento}` : ''}
+          </Text>
+        </View>
+        <View style={{ alignItems: 'flex-end', marginLeft: 8 }}>
+          <Text style={[s.cartaoHora, { color: b.distancia != null ? cores.texto : cores.apagado }]}>
+            {b.distancia == null ? '—' : b.distancia < 10 ? `${b.distancia.toFixed(1).replace('.', ',')} km` : `${Math.round(b.distancia)} km`}
+          </Text>
+          <Text style={s.cartaoHoraRotulo}>DISTÂNCIA</Text>
+        </View>
+      </View>
+      {b.descricao ? <Text style={s.backlogDescricao} numberOfLines={2}>{b.descricao}</Text> : null}
+      <View style={s.cartaoDivisor} />
+      <View style={s.cartaoBase}>
+        <Icone nome="map-marker-outline" tamanho={14} cor={cores.apagado} />
+        <Text style={s.cartaoEndereco} numberOfLines={1}>{b.endereco || (temLocal ? 'Ponto no mapa' : 'Sem endereço')}</Text>
+        {b.reservada ? (
+          <View style={[s.selo, { backgroundColor: fundoDe(cores.primaria) }]}>
+            <Text style={[s.seloTexto, { color: cores.primaria }]}>Reservada p/ você</Text>
+          </View>
+        ) : null}
+      </View>
+      <View style={s.backlogBotoes}>
+        <Pressable style={[s.backlogBotao, { backgroundColor: cores.selecionado }]} disabled={!temLocal}
+          onPress={() => navegarAte(b, `Ir até a O.S. #${b.numero}`)}>
+          <Icone nome="navigation-variant-outline" tamanho={18} cor={temLocal ? cores.primaria : cores.apagado} />
+          <Text style={[s.backlogBotaoTexto, { color: temLocal ? cores.primaria : cores.apagado }]}>Rota</Text>
+        </Pressable>
+        <Pressable style={[s.backlogBotao, { backgroundColor: cores.sucesso, flex: 1.4 }]} disabled={ocupado} onPress={() => assumir(b)}>
+          {ocupado ? <ActivityIndicator color="#fff" /> : (
+            <>
+              <Icone nome="hand-back-right-outline" tamanho={18} cor="#fff" />
+              <Text style={[s.backlogBotaoTexto, { color: '#fff' }]}>Assumir e atender</Text>
+            </>
+          )}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
+  backlogDescricao: { fontSize: 13, color: cores.suave, marginTop: 8 },
+  backlogBotoes: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  backlogBotao: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: 12 },
+  backlogBotaoTexto: { fontSize: 14, fontWeight: '700' },
   hero: { backgroundColor: cores.cartao, marginHorizontal: 16, marginTop: -74, borderRadius: 22, padding: 16,
     shadowColor: '#0F2747', shadowOpacity: 0.16, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
   heroLinha: { flexDirection: 'row', alignItems: 'flex-start' },
@@ -496,7 +615,7 @@ const s = StyleSheet.create({
   segmento: { flexDirection: 'row', backgroundColor: '#E2E7EE', borderRadius: 14, padding: 4, marginHorizontal: 16, marginTop: 16, marginBottom: 4 },
   segItem: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 11 },
   segAtivo: { backgroundColor: cores.cartao, ...sombra },
-  segTexto: { fontSize: 13, fontWeight: '700', color: '#5A6576' },
+  segTexto: { fontSize: 12, fontWeight: '700', color: '#5A6576' },
   vazio: { color: cores.suave, margin: 24, textAlign: 'center' },
   cartao: { backgroundColor: cores.cartao, borderRadius: 18, marginHorizontal: 16, marginTop: 12, paddingHorizontal: 14, paddingTop: 14, paddingBottom: 12, ...sombra },
   cartaoTopo: { flexDirection: 'row', alignItems: 'center', gap: 10 },
