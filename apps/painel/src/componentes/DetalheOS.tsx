@@ -182,7 +182,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
 
         {assinatura && (
           <>
-            <h3 className="mt-6 font-semibold">Assinatura do responsável</h3>
+            <h3 className="mt-6 font-semibold">Assinatura do técnico</h3>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={assinatura.url} alt="Assinatura" className="mt-2 h-24 rounded border border-gray-200" />
             <p className="text-sm text-gray-600">{assinatura.descricao} · {quando(assinatura.tirada_em ?? assinatura.criado_em)}</p>

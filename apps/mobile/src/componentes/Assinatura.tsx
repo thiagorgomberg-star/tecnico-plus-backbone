@@ -1,18 +1,13 @@
-import { Directory, File, Paths } from 'expo-file-system';
-import { randomUUID } from 'expo-crypto';
 import { ComponentRef, useRef, useState } from 'react';
-import { Alert, Modal, PanResponder, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { captureRef } from 'react-native-view-shot';
 
 import { cores } from '../lib/estilo';
-import { enfileirar } from '../lib/fila';
+import { salvarMinhaAssinatura } from '../lib/assinatura';
 
-// Assinatura do responsável no local: nome + traço no dedo. Vira imagem e vai pela fila (funciona offline).
-export default function Assinatura({ osId, aberta, fechar, aoSalvar }: {
-  osId: string; aberta: boolean; fechar: () => void; aoSalvar: (nome: string) => void;
-}) {
-  const [nome, setNome] = useState('');
+// Cadastro da assinatura do técnico: desenhada uma vez no dedo e reaproveitada em todas as O.S. (botão "Assinar O.S.").
+export default function Assinatura({ aberta, fechar, aoSalvar }: { aberta: boolean; fechar: () => void; aoSalvar: () => void }) {
   const [tracos, setTracos] = useState<string[]>([]);
   const atual = useRef('');
   const [, redesenhar] = useState(0);
@@ -39,22 +34,12 @@ export default function Assinatura({ osId, aberta, fechar, aoSalvar }: {
   })).current;
 
   async function salvar() {
-    if (!nome.trim()) return Alert.alert('Informe o nome de quem assina');
-    if (tracos.length === 0) return Alert.alert('Peça para a pessoa assinar no quadro');
+    if (tracos.length === 0) return Alert.alert('Assine no quadro');
     try {
-      const temporario = await captureRef(quadro, { format: 'jpg', quality: 0.9 });
-      const pasta = new Directory(Paths.document, 'fotos');
-      if (!pasta.exists) pasta.create();
-      const destino = new File(pasta, `${randomUUID()}.jpg`);
-      new File(temporario).move(destino);
-      await enfileirar({
-        tipo: 'foto', osId, tipoAnexo: 'assinatura', arquivo: destino.uri, largura: 0, altura: 0,
-        tiradaEm: new Date().toISOString(), latitude: null, longitude: null, descricao: nome.trim(),
-      });
-      aoSalvar(nome.trim());
+      await salvarMinhaAssinatura(await captureRef(quadro, { format: 'jpg', quality: 0.9 }));
       setTracos([]);
-      setNome('');
       fechar();
+      aoSalvar();
     } catch (e) {
       Alert.alert('Erro ao salvar a assinatura', String(e));
     }
@@ -63,8 +48,8 @@ export default function Assinatura({ osId, aberta, fechar, aoSalvar }: {
   return (
     <Modal visible={aberta} onRequestClose={fechar} animationType="slide">
       <View style={s.tela}>
-        <Text style={s.titulo}>Assinatura do responsável</Text>
-        <TextInput style={s.campo} placeholder="Nome de quem assina" value={nome} onChangeText={setNome} />
+        <Text style={s.titulo}>Sua assinatura</Text>
+        <Text style={s.ajuda}>Assine uma vez. Depois é só tocar em "Assinar O.S." em cada atendimento.</Text>
         <View ref={quadro} collapsable={false} style={s.quadro} {...gesto.panHandlers}>
           <Svg style={StyleSheet.absoluteFill}>
             {[...tracos, atual.current].filter(Boolean).map((d, i) => (
@@ -86,7 +71,7 @@ export default function Assinatura({ osId, aberta, fechar, aoSalvar }: {
 const s = StyleSheet.create({
   tela: { flex: 1, backgroundColor: cores.fundo, padding: 16, gap: 12 },
   titulo: { fontSize: 20, fontWeight: '700', color: cores.texto, marginTop: 8 },
-  campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 6, padding: 12, fontSize: 16, backgroundColor: '#fff' },
+  ajuda: { fontSize: 14, color: cores.suave },
   quadro: { flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: cores.borda, borderRadius: 8, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   dica: { color: '#BBB', fontSize: 22 },
   botao: { flex: 1, borderRadius: 6, paddingVertical: 14, alignItems: 'center' },

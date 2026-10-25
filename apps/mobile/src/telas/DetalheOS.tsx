@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, T
 import Cabecalho from '../componentes/Cabecalho';
 import Icone, { iconeDoTipo, NomeIcone } from '../componentes/Icone';
 import Assinatura from '../componentes/Assinatura';
+import { assinarOS, minhaAssinatura } from '../lib/assinatura';
 import CaixasOS from '../componentes/CaixasOS';
 import PontosVistoria from '../componentes/PontosVistoria';
 import ExecucaoOS from '../componentes/ExecucaoOS';
@@ -70,13 +71,36 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
     if (count != null) setFotosEnviadas(count);
   }, [os.id]);
 
+  // Assina com a assinatura cadastrada do técnico; na primeira vez abre o quadro para cadastrar.
+  async function assinar(confirmar = true) {
+    if (!(await minhaAssinatura())) {
+      return Alert.alert('Cadastre sua assinatura', 'Assine uma vez no quadro. Depois ela é usada em todas as O.S.', [
+        { text: 'Agora não', style: 'cancel' },
+        { text: 'Cadastrar', onPress: () => setAssinando(true) },
+      ]);
+    }
+    const aplicar = async () => {
+      try {
+        await assinarOS(os.id, usuario.nome);
+        setAssinadoPor(usuario.nome);
+      } catch (e) {
+        Alert.alert('Não foi possível assinar', (e as Error).message);
+      }
+    };
+    if (!confirmar) return aplicar();
+    Alert.alert(`Assinar a O.S. #${os.numero}?`, 'Sua assinatura cadastrada vai para a O.S. e para o relatório.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Assinar', onPress: aplicar },
+    ]);
+  }
+
   useEffect(() => {
     (async () => {
       const pendente = (await itensPendentes()).find((i) => i.tipo === 'foto' && i.osId === os.id && i.tipoAnexo === 'assinatura');
-      if (pendente && pendente.tipo === 'foto') return setAssinadoPor(pendente.descricao ?? 'responsável');
+      if (pendente && pendente.tipo === 'foto') return setAssinadoPor(pendente.descricao ?? usuario.nome);
       const { data } = await supabase.from('os_anexos').select('descricao').eq('os_id', os.id).eq('tipo', 'assinatura')
         .order('criado_em', { ascending: false }).limit(1);
-      if (data?.[0]) setAssinadoPor(data[0].descricao ?? 'responsável');
+      if (data?.[0]) setAssinadoPor(data[0].descricao ?? usuario.nome);
     })();
   }, [os.id]);
 
@@ -108,8 +132,8 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
       return Alert.alert('Faltam fotos', `Tire pelo menos ${MINIMO_FOTOS} fotos na horizontal antes de concluir (${totalFotos} até agora).`);
     }
     if (acao.status === 'concluida' && !assinadoPor) {
-      const seguir = await new Promise<boolean>((ok) => Alert.alert('Sem assinatura', 'Colher a assinatura do responsável no local antes de concluir?', [
-        { text: 'Assinar', onPress: () => { setAssinando(true); ok(false); } },
+      const seguir = await new Promise<boolean>((ok) => Alert.alert('O.S. sem assinatura', 'Assinar a O.S. antes de concluir?', [
+        { text: 'Assinar O.S.', onPress: () => { assinar(); ok(false); } },
         { text: 'Concluir sem', onPress: () => ok(true) },
       ]));
       if (!seguir) return;
@@ -292,8 +316,8 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
               ) : null}
               <Acao icone="camera-outline" rotulo={`Fotos ${totalFotos}/${MINIMO_FOTOS}`} cor={cores.primaria} feito={totalFotos >= MINIMO_FOTOS}
                 aoTocar={podeFotografar ? () => abrirCamera(totalFotos) : () => setAba('fotos')} />
-              <Acao icone="draw-pen" rotulo={assinadoPor ? 'Assinado' : 'Assinatura'} cor={cores.texto2} feito={!!assinadoPor}
-                aoTocar={podeEditar ? () => setAssinando(true) : undefined} />
+              <Acao icone="draw-pen" rotulo={assinadoPor ? 'O.S. assinada' : 'Assinar O.S.'} cor={cores.texto2} feito={!!assinadoPor}
+                aoTocar={podeEditar && !assinadoPor ? () => assinar() : undefined} />
               {vistoriaMg ? <Acao icone="transmission-tower" rotulo="Postes" cor={cores.primaria} aoTocar={() => setAba('postes')} /> : null}
               <Acao icone="package-variant" rotulo="Caixas" cor={cores.texto2} aoTocar={() => setAba('caixas')} />
               <Acao icone="wrench-outline" rotulo="Execução" cor={cores.texto2} aoTocar={() => setAba('execucao')} />
@@ -324,13 +348,13 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
                   ? `Registrado às ${new Date(os.evento_localizado_em).toLocaleTimeString('pt-BR')}`
                   : 'Ainda não registrado. Toque em "Localizei o evento" (funciona sem internet).'} />
             ) : null}
-            <Info icone="draw-pen" rotulo="Assinatura do responsável no local" valor={assinadoPor ? `Assinado por ${assinadoPor}` : 'Ainda não colhida.'} />
+            <Info icone="draw-pen" rotulo="Assinatura do técnico" valor={assinadoPor ? `Assinada por ${assinadoPor}` : 'Ainda não assinada. Toque em "Assinar O.S.".'} />
             </View>
 
             {os.origem_ponto_id || os.informado_por ? <FotosReferencia osId={os.id} /> : null}
             <MaterialApoio osId={os.id} />
 
-            <Assinatura osId={os.id} aberta={assinando} fechar={() => setAssinando(false)} aoSalvar={setAssinadoPor} />
+            <Assinatura aberta={assinando} fechar={() => setAssinando(false)} aoSalvar={() => assinar(false)} />
 
             {acao ? (
               <View style={s.bloco}>

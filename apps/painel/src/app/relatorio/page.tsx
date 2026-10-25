@@ -308,7 +308,7 @@ function Conteudo() {
 
       {assinatura?.url && (
         <section className={secao}>
-          <h2 className={titulo}>Assinatura do responsável</h2>
+          <h2 className={titulo}>Assinatura do técnico</h2>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={assinatura.url} alt="Assinatura" className="mt-2 h-28 border-b border-gray-400" />
           <p className="mt-1">{assinatura.descricao} · {quando(assinatura.tirada_em)}</p>

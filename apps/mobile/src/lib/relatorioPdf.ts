@@ -211,7 +211,7 @@ export async function compartilharRelatorio(os: OrdemServico) {
   ${secaoAntesDepois}
   <h2>Registro fotográfico (${fotosOs.length})</h2>
   <div class="fotos">${fotosOs.map((f, i) => `<figure><img src="${f.src}"><figcaption>Foto ${i + 1} · ${quando(f.tiradaEm)}</figcaption></figure>`).join('')}</div>
-  ${assinatura ? `<h2>Assinatura do responsável</h2><img src="${assinatura.src}" style="max-height:110px;border-bottom:1px solid #999">
+  ${assinatura ? `<h2>Assinatura do técnico</h2><img src="${assinatura.src}" style="max-height:110px;border-bottom:1px solid #999">
     <div>${esc(assinatura.descricao ?? '')} · ${quando(assinatura.tiradaEm)}</div>` : ''}
   <p class="s" style="font-size:8pt;margin-top:16px;border-top:1px solid #ccc;padding-top:4px">Multivale Engenharia · Backbone · gerado pelo Técnico Plus</p>
   </body></html>`;

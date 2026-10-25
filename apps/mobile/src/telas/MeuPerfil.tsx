@@ -2,8 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ReactNode, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, LayoutAnimation, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import Assinatura from '../componentes/Assinatura';
 import Cabecalho, { FundoDegrade } from '../componentes/Cabecalho';
 import Icone, { NomeIcone } from '../componentes/Icone';
+import { minhaAssinatura } from '../lib/assinatura';
 import { abrirPdf, Curso, meusCursos, situacaoCurso } from '../lib/cursos';
 import { cores, sombra } from '../lib/estilo';
 import { minhaFoto, trocarFoto } from '../lib/foto';
@@ -45,6 +47,8 @@ export default function MeuPerfil({ voltar }: { voltar: () => void }) {
   const [foto, setFoto] = useState<string | null>(null);
   const [enviandoFoto, setEnviandoFoto] = useState(false);
   const [verDados, setVerDados] = useState(false);
+  const [assinatura, setAssinatura] = useState<string | null>(null);
+  const [assinando, setAssinando] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(CACHE).then((c) => c && setFicha((f) => f ?? JSON.parse(c)));
@@ -53,6 +57,7 @@ export default function MeuPerfil({ voltar }: { voltar: () => void }) {
     meuVeiculo(false).then(setVeiculo).catch(() => {});
     meusCursos(setCursos).catch(() => {});
     minhaFoto(setFoto).catch(() => {});
+    minhaAssinatura().then(setAssinatura).catch(() => {});
     (async () => {
       const { data: sessao } = await supabase.auth.getSession();
       const id = sessao.session?.user.id;
@@ -206,6 +211,18 @@ export default function MeuPerfil({ voltar }: { voltar: () => void }) {
           <Linha rotulo="Calçado" valor={ficha?.tamanho_calcado} />
         </Grupo>
 
+        <Grupo titulo="MINHA ASSINATURA" icone="draw-pen" resumo={assinatura ? 'Cadastrada · usada no "Assinar O.S."' : 'Ainda não cadastrada'}>
+          <View style={{ padding: 16, gap: 10 }}>
+            {assinatura ? <Image source={{ uri: assinatura }} style={s.assinatura} resizeMode="contain" />
+              : <Text style={s.cursoSub}>Cadastre uma vez. Depois, em cada O.S., é só tocar em "Assinar O.S.".</Text>}
+            <Pressable style={s.mostrar} onPress={() => setAssinando(true)}>
+              <Icone nome="draw-pen" tamanho={18} cor={cores.primaria} />
+              <Text style={s.mostrarTexto}>{assinatura ? 'Refazer assinatura' : 'Cadastrar assinatura'}</Text>
+            </Pressable>
+          </View>
+        </Grupo>
+        <Assinatura aberta={assinando} fechar={() => setAssinando(false)} aoSalvar={() => minhaAssinatura().then(setAssinatura)} />
+
         <Text style={s.nota}>Toque em um grupo para ver os dados. Os dados pessoais não ficam gravados no celular. Se algo estiver errado ou em branco, avise o supervisor.</Text>
       </ScrollView>
     </View>
@@ -285,6 +302,7 @@ const s = StyleSheet.create({
   mostrar: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, marginBottom: 6 },
   mostrarTexto: { fontSize: 13, fontWeight: '700', color: cores.primaria },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: cores.linha },
+  assinatura: { height: 110, borderRadius: 12, borderWidth: 1, borderColor: cores.borda, backgroundColor: '#fff' },
   linhaRotulo: { fontSize: 13.5, color: cores.suave },
   linhaValor: { fontSize: 14, fontWeight: '600', color: cores.texto, textAlign: 'right', flexShrink: 1 },
   vazio: { color: cores.apagado, fontWeight: '400', fontStyle: 'italic' },
