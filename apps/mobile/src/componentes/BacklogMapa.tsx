@@ -37,9 +37,9 @@ export default function BacklogMapa({ itens, posicao, abrir, exportar }: {
       x: largura / 2 + (p.lng - cx) * 111.32 * fx * escala,
       y: ALTURA / 2 - (p.lat - cy) * 110.57 * escala,
     });
-    // Barra de escala com um valor redondo de ~1/4 da largura.
+    // Barra de escala com um valor redondo de até ~1/4 da largura.
     const alvo = largura / 4 / escala;
-    const passo = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500].find((v) => v >= alvo) ?? 1000;
+    const passo = [...[0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500]].reverse().find((v) => v <= alvo) ?? 0.5;
     return { xy, escala, passo };
   }, [comLocal, posicao, largura]);
 
@@ -88,7 +88,7 @@ export default function BacklogMapa({ itens, posicao, abrir, exportar }: {
           })() : null}
           <Line x1={12} y1={ALTURA - 14} x2={12 + projecao.passo * projecao.escala} y2={ALTURA - 14} stroke={cores.texto2} strokeWidth={3} />
           <SvgText x={12} y={ALTURA - 20} fontSize={11} fill={cores.texto2}>{projecao.passo < 1 ? `${projecao.passo * 1000} m` : `${projecao.passo} km`}</SvgText>
-          <SvgText x={largura - 12} y={18} fontSize={13} fontWeight="bold" fill={cores.suave} textAnchor="end">N ↑</SvgText>
+          <SvgText x={largura - 12} y={ALTURA - 12} fontSize={13} fontWeight="bold" fill={cores.suave} textAnchor="end">N ↑</SvgText>
         </Svg>
       )}
 

@@ -172,7 +172,7 @@ export default function InformarEvento({ usuario, voltar }: { usuario: { nome: s
                 </Text>
               ))}
               <Text style={s.duplicadaAjuda}>Se for o mesmo problema, não precisa informar de novo. Se for outro, continue normalmente.</Text>
-              <Pressable style={[s.secundario, { flex: 0, marginTop: 10, backgroundColor: '#fff' }]} onPress={descartarDuplicada}>
+              <Pressable style={[s.secundario, { flex: 0, marginTop: 10, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F5D7A8' }]} onPress={descartarDuplicada}>
                 <Text style={s.secundarioTexto}>É a mesma, descartar</Text>
               </Pressable>
             </View>
