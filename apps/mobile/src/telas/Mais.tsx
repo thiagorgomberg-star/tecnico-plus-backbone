@@ -1,10 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
 import Icone, { NomeIcone } from '../componentes/Icone';
-import { VERSAO_APP } from '../lib/atualizacao';
+import { buscarAtualizacaoAgora, DATA_ATUALIZACAO, VERSAO_APP } from '../lib/atualizacao';
 import { cores, fundoDe } from '../lib/estilo';
 import { Tema, TEMAS, temaAtual, trocarTema } from '../lib/tema';
 import { supabase } from '../lib/supabase';
@@ -76,6 +76,9 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
         </View>
         <Text style={s.secao}>CONTA</Text>
         {item('logout', 'Sair', pendentes > 0 ? `${pendentes} registro(s) ainda não enviados` : '', sair, cores.perigo)}
+        {item('update', 'Buscar atualização', DATA_ATUALIZACAO
+          ? `Atualizado em ${DATA_ATUALIZACAO.toLocaleDateString('pt-BR')} às ${DATA_ATUALIZACAO.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+          : 'Código original do APK', async () => Alert.alert('Atualização', await buscarAtualizacaoAgora()))}
         <Text style={s.versao}>Técnico Plus · versão {VERSAO_APP || 'desenvolvimento'}</Text>
       </ScrollView>
     </View>

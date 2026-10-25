@@ -34,3 +34,20 @@ export async function aplicarAtualizacaoOta() {
     // sem internet: tenta de novo na próxima abertura
   }
 }
+
+// Data da atualização pelo ar em uso (null = código que veio no APK).
+export const DATA_ATUALIZACAO = Updates.isEmbeddedLaunch ? null : Updates.createdAt;
+
+// Botão "Buscar atualização" do menu Mais: mesmo processo, com resposta para o técnico.
+export async function buscarAtualizacaoAgora(): Promise<string> {
+  if (__DEV__ || !Updates.isEnabled) return 'Atualização pelo ar desligada neste aparelho.';
+  try {
+    const { isAvailable } = await Updates.checkForUpdateAsync();
+    if (!isAvailable) return 'O app já está na versão mais recente.';
+    await Updates.fetchUpdateAsync();
+    await Updates.reloadAsync();
+    return 'Reiniciando com a versão nova...';
+  } catch (e) {
+    return `Não foi possível atualizar agora (${e instanceof Error ? e.message : 'sem internet'}).`;
+  }
+}
