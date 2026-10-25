@@ -166,10 +166,10 @@ export default function VistoriaMG({ regiao = "MG" }: { regiao?: "MG" | "SP" }) 
       },
       {
         nome: "Postes",
-        cabecalho: ["Data", "Técnico", "Trecho", "O.S.", "Poste", "Material", "Base", "Inclinado", "Rachado", "Estai", "Precisa troca", "Tipo de via", "Licenciamento", "Via / km", "Coordenadas", "Mapa", "Endereço", "Observação"],
+        cabecalho: ["Data", "Técnico", "Trecho", "O.S.", "Poste", "Material", "Base", "Inclinado", "Rachado", "Precisa troca", "Tipo de via", "Licenciamento", "Via / km", "Coordenadas", "Mapa", "Endereço", "Observação"],
         linhas: pontosPeriodo.filter((p) => p.categoria === "poste").map((p): Celula[] => [
           comoData(diaDe(quando(p))), p.tecnico ?? "", trechoDe(p.os_titulo), p.os_numero, p.identificacao ?? "", rotulo(p.material), rotulo(p.estado_base),
-          p.inclinado ? "Sim" : "Não", p.rachado ? "Sim" : "Não", rotulo(p.estai), p.precisa_troca ? "SIM" : "Não", rotulo(p.tipo_via), rotulo(p.licenciamento), p.via_nome ?? "",
+          p.inclinado ? "Sim" : "Não", p.rachado ? "Sim" : "Não", p.precisa_troca ? "SIM" : "Não", rotulo(p.tipo_via), rotulo(p.licenciamento), p.via_nome ?? "",
           coord(p), mapa(p), p.endereco ?? "", p.observacao ?? "",
         ]),
       },

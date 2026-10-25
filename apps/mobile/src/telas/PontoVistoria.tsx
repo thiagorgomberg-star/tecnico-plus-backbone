@@ -8,7 +8,7 @@ import { aoMudarFila, itensPendentes } from '../lib/fila';
 import { enderecoDe, posicaoAtual } from '../lib/localizacao';
 import { supabase } from '../lib/supabase';
 import {
-  ESTADOS_BASE, ESTAIS, excluirPonto, GRAVIDADES, LICENCIAMENTOS, MATERIAIS, OCORRENCIAS, Opcao, PontoVistoria as Ponto, proximoPoste, salvarPonto, TIPOS_VIA,
+  ESTADOS_BASE, excluirPonto, GRAVIDADES, LICENCIAMENTOS, MATERIAIS, OCORRENCIAS, Opcao, PontoVistoria as Ponto, proximoPoste, salvarPonto, TIPOS_VIA,
 } from '../lib/vistoria';
 import CameraOS from './CameraOS';
 
@@ -32,7 +32,7 @@ function novoPonto(osId: string, categoria: 'poste' | 'ocorrencia', daOs: Ponto[
     latitude: null, longitude: null, precisao_m: null, localizada_em: null, endereco: null,
     material: categoria === 'poste' ? anterior?.material ?? 'madeira' : null,
     estado_base: categoria === 'poste' ? 'ok' : null, inclinado: false, rachado: false,
-    estai: categoria === 'poste' ? 'ok' : null, precisa_troca: false,
+    estai: null, precisa_troca: false,
     tipo_via: anterior?.tipo_via ?? null, licenciamento: anterior?.licenciamento ?? null, via_nome: anterior?.via_nome ?? null,
     ocorrencia: null, gravidade: categoria === 'ocorrencia' ? 'media' : null, observacao: null,
   };
@@ -205,13 +205,11 @@ export default function PontoVistoria({ osId, tipoOs, ponto: inicial, categoria,
             {chips(MATERIAIS, p.material, (v) => mudar({ material: v }))}
             <Text style={s.rotulo}>BASE DO POSTE (NA LINHA DO SOLO)</Text>
             {chips(ESTADOS_BASE, p.estado_base, (v) => mudar({ estado_base: v, precisa_troca: v !== 'ok' ? true : p.precisa_troca }))}
-            <Text style={s.rotulo}>ESTAI</Text>
-            {chips(ESTAIS, p.estai, (v) => mudar({ estai: v }))}
             {chave('Inclinado', p.inclinado, (v) => mudar({ inclinado: v }))}
             {chave('Rachado', p.rachado, (v) => mudar({ rachado: v }))}
             {chave('Precisa trocar o poste', p.precisa_troca, (v) => mudar({ precisa_troca: v }), true)}
             {p.material === 'madeira' && p.estado_base && p.estado_base !== 'ok' ? (
-              <Text style={[s.suave, { color: cores.perigo }]}>Base comprometida: não subir neste poste. Use escada com estai ou aguarde a troca.</Text>
+              <Text style={[s.suave, { color: cores.perigo }]}>Base comprometida: não subir neste poste. Use escada apoiada ou aguarde a troca.</Text>
             ) : null}
           </View>
         ) : null}
