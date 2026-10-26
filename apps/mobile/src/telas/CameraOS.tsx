@@ -28,7 +28,8 @@ type Props = {
   unica?: { titulo: string; aoSalvar: (foto: { arquivo: string; tiradaEm: string; latitude: number | null; longitude: number | null }) => void };
 };
 
-const LARGURA_FINAL = 1600;
+// 1280 px com JPEG 0,72: a máscara continua legível e cada foto fica bem mais leve para dados móveis.
+const LARGURA_FINAL = 1280;
 
 // Foto tirada mas ainda sem máscara. Fica gravada no celular (arquivo + dados) desde o clique,
 // para não se perder se o app fechar antes da máscara: na próxima abertura da câmera ela é terminada.
@@ -221,7 +222,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
     if (!atual || !dados || !mascara.current) return;
     try {
       const alturaFinal = Math.round((LARGURA_FINAL * dados.alturaFoto * 1.137) / dados.larguraFoto);
-      const temporario = await captureRef(mascara, { format: 'jpg', quality: 0.85, width: LARGURA_FINAL, height: alturaFinal });
+      const temporario = await captureRef(mascara, { format: 'jpg', quality: 0.72, width: LARGURA_FINAL, height: alturaFinal });
       const pasta = new Directory(Paths.document, 'fotos');
       if (!pasta.exists) pasta.create();
       const destino = new File(pasta, `${randomUUID()}.jpg`);

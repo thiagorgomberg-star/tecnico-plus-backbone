@@ -8,6 +8,7 @@ import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, ScrollView,
 import Cabecalho from '../componentes/Cabecalho';
 import Icone from '../componentes/Icone';
 import { cores, estilo, fundoDe } from '../lib/estilo';
+import { reduzirFoto } from '../lib/imagem';
 import { aoMudarFila, enfileirar, ItemFila, itensPendentes } from '../lib/fila';
 import { posicaoAtual } from '../lib/localizacao';
 import { ponto, supabase } from '../lib/supabase';
@@ -226,8 +227,9 @@ function FormDespesa({ despesa, fechar, modo, veiculo }: { despesa: Despesa | nu
     const opcoes: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.6, exif: false };
     const r = origem === 'camera' ? await ImagePicker.launchCameraAsync(opcoes) : await ImagePicker.launchImageLibraryAsync(opcoes);
     if (r.canceled || !r.assets[0]) return;
-    const uri = r.assets[0].uri;
-    setFoto({ uri, extensao: /\.png$/i.test(uri) ? 'png' : 'jpg' });
+    // Comprovante: 1600 px no lado maior ainda deixa a nota legível.
+    const a = r.assets[0];
+    setFoto({ uri: await reduzirFoto(a.uri, 1600, 0.7, a.width && a.height ? { width: a.width, height: a.height } : undefined), extensao: 'jpg' });
   }
 
   async function salvar() {
