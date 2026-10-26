@@ -36,6 +36,7 @@ import { OrdemServico, rotuloDaOs } from '../lib/tipos';
 type Props = {
   nome: string; abrirOS: (os: OrdemServico) => void; abrirInventario: () => void; iniciarAtividade: () => void; informarEvento: () => void;
   backlogPedido?: string | null; backlogAberto?: () => void; // O.S. do backlog vinda de uma notificação
+  euId: string; // O.S. em que sou apoio aparecem na lista, mas não travam o meu expediente
 };
 
 const CACHE_OS = 'ordens-cache';
@@ -56,7 +57,7 @@ const duracao = (ms: number) => {
 };
 
 // Tela principal do técnico: cartão do expediente sobre o topo e as O.S. separadas em abas.
-export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtividade, informarEvento, backlogPedido, backlogAberto }: Props) {
+export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtividade, informarEvento, backlogPedido, backlogAberto, euId }: Props) {
   const [jornada, setJornada] = useState<Jornada | null>(null);
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
   const [pendentes, setPendentes] = useState(0);
@@ -250,12 +251,13 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
     if (!jornada || ocupado) return;
     if (jornada.expedienteId) {
       // Status mais recente de cada O.S.: o que ainda está na fila (offline) vale mais que o do servidor.
-      const status = new Map(ordens.map((o) => [o.id, o.status as string]));
+      const minhas = ordens.filter((o) => !o.tecnico_id || o.tecnico_id === euId);
+      const status = new Map(minhas.map((o) => [o.id, o.status as string]));
       // Pausada "para continuar amanhã" (roteamento de vários dias) não impede encerrar o expediente.
       const continua = new Map(ordens.map((o) => [o.id, !!o.continua_em]));
       for (const item of await itensPendentes()) {
         if (item.tipo === 'os' && 'continua_em' in item.campos) continua.set(item.osId, !!item.campos.continua_em);
-        if (item.tipo === 'os' && typeof item.campos.status === 'string') status.set(item.osId, item.campos.status);
+        if (item.tipo === 'os' && typeof item.campos.status === 'string' && status.has(item.osId)) status.set(item.osId, item.campos.status);
         if (item.tipo === 'inserir' && item.tabela === 'ordens_servico') status.set(String(item.linha.id), String(item.linha.status));
       }
       const emAndamento = [...status].find(([id, st]) => st === 'em_execucao' || (st === 'pausada' && !continua.get(id)));
@@ -576,18 +578,18 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
       refreshControl={<RefreshControl refreshing={carregando} onRefresh={carregar} />}
       renderItem={({ item }) => (aba === 'backlog'
         ? <CartaoBacklog b={item as ItemBacklog & { distancia: number | null }} assumir={assumir} abrir={setDetalhe} ocupado={assumindo === item.id} />
-        : <Cartao os={item as OrdemServico} abrir={abrirOS} />)}
+        : <Cartao os={item as OrdemServico} abrir={abrirOS} apoio={!!(item as OrdemServico).tecnico_id && (item as OrdemServico).tecnico_id !== euId} />)}
       contentContainerStyle={{ paddingBottom: 24 }}
       initialNumToRender={10}
       windowSize={7}
     />
-    <AvisoNovaOS ordens={ordens} abrir={abrirOS} />
+    <AvisoNovaOS ordens={ordens.filter((o) => !o.tecnico_id || o.tecnico_id === euId)} abrir={abrirOS} />
     <DetalheBacklog b={itemDetalhe} fechar={() => setDetalhe(null)} assumir={assumir} ocupado={assumindo === detalhe} />
     </>
   );
 }
 
-const Cartao = memo(function Cartao({ os, abrir }: { os: OrdemServico; abrir: (os: OrdemServico) => void }) {
+const Cartao = memo(function Cartao({ os, abrir, apoio }: { os: OrdemServico; abrir: (os: OrdemServico) => void; apoio?: boolean }) {
   const emAberto = !ENCERRADAS.includes(os.status);
   const sla = os.sla_limite && emAberto ? textoSla(os.sla_limite) : null;
   const corSla = !sla ? cores.apagado : sla.nivel === 'ok' ? cores.sucesso : sla.nivel === 'alerta' ? cores.alerta : cores.perigo;
@@ -606,6 +608,7 @@ const Cartao = memo(function Cartao({ os, abrir }: { os: OrdemServico; abrir: (o
             <Text style={s.cartaoTitulo} numberOfLines={1}>{os.titulo}</Text>
           </View>
           <Text style={s.cartaoSub} numberOfLines={1}>
+            {apoio ? <Text style={{ color: cores.primaria, fontWeight: '800' }}>APOIO · </Text> : null}
             {os.tipo}{os.numero ? ` · #${os.numero}` : ''}{os.ticket_acionamento ? ` · ${os.ticket_acionamento}` : ''}
           </Text>
         </View>

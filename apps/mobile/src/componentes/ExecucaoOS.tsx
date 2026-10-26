@@ -17,7 +17,9 @@ const UNIDADES = ['un', 'm', 'km', 'pç', 'cx', 'rolo', 'kg', 'h'];
 
 // Serviços executados, materiais utilizados e técnicos de apoio da O.S. Tudo funciona sem internet.
 // Item que não está na lista: o técnico cadastra (CAIXA ALTA) e lança; ele fica aguardando a aprovação do supervisor.
-export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; podeEditar: boolean; euId: string | null }) {
+export default function ExecucaoOS({ osId, podeEditar, euId, souApoio }: { osId: string; podeEditar: boolean; euId: string | null; souApoio?: boolean }) {
+  // Quem é apoio lança serviços e materiais, mas a lista de apoio é do técnico responsável.
+  const editaApoio = podeEditar && !souApoio;
   const [catalogo, setCatalogo] = useState<Item[]>([]);
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
   const [tecnicos, setTecnicos] = useState<Pessoa[]>([]);
@@ -224,7 +226,7 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
 
       <View style={s.bloco}>
         <Text style={s.blocoTitulo}>TÉCNICOS DE APOIO</Text>
-        {podeEditar ? (
+        {editaApoio ? (
           <View style={s.chips}>
             {tecnicos.filter((t) => t.id !== euId).map((t) => (
               <Pressable key={t.id} style={[s.chip, marcados.includes(t.id) && s.chipAtivo]} onPress={() => alternarApoio(t)}>
@@ -233,7 +235,7 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
             ))}
           </View>
         ) : null}
-        {podeEditar && apoioMudou ? (
+        {editaApoio && apoioMudou ? (
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
             <Pressable style={[s.botao, { flex: 1, height: 44, alignItems: 'center', opacity: salvandoApoio ? 0.6 : 1 }]} onPress={salvarApoio} disabled={salvandoApoio}>
               <Text style={s.botaoTexto}>Salvar apoio</Text>
@@ -243,7 +245,7 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
             </Pressable>
           </View>
         ) : null}
-        {podeEditar ? (
+        {editaApoio ? (
           <Text style={[s.vazio, { marginTop: 8, fontSize: 12.5 }]}>
             {apoio.length ? `Salvos: ${tecnicos.filter((t) => apoio.includes(t.id)).map((t) => t.nome).join(', ')}` : 'Toque nos nomes e depois em Salvar apoio.'}
           </Text>

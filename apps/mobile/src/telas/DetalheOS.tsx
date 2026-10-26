@@ -124,7 +124,9 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
   const totalFotos = fotosEnviadas + fotosNaFila;
   // Pausada para continuar em outro dia: a ação principal é retomar.
   const continuando = os.status === 'pausada' && !!os.continua_em;
-  const acao = continuando ? { status: 'em_execucao' as StatusOS, rotulo: 'Retomar atendimento' } : proximaAcao[os.status];
+  // Apoio vê tudo, tira fotos e lança o que executou; status, assinatura e evento ficam com o responsável.
+  const souApoio = !!euId && !!os.tecnico_id && os.tecnico_id !== euId;
+  const acao = souApoio ? undefined : continuando ? { status: 'em_execucao' as StatusOS, rotulo: 'Retomar atendimento' } : proximaAcao[os.status];
   const podeEditar = EM_CAMPO.includes(os.status);
   const podeFotografar = os.status === 'em_execucao' || os.status === 'aceita' || os.status === 'devolvida';
 
@@ -287,6 +289,9 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
       <RolarComTeclado style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
         {aba === 'detalhes' ? (
           <>
+            {souApoio ? (
+              <Aviso cor={cores.primaria} texto="Você é apoio nesta O.S.: pode tirar fotos, lançar o que executou e cadastrar caixas. Iniciar, pausar, assinar e concluir ficam com o técnico responsável." />
+            ) : null}
             {os.reaberta_em && os.reaberta_motivo && !['concluida', 'baixada', 'cancelada'].includes(os.status) ? (
               <Aviso cor={cores.alerta} texto={`Reaberta pelo supervisor: ${os.reaberta_motivo}`} />
             ) : null}
@@ -314,12 +319,12 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
               ) : null}
               {ehCorretiva(os.tipo) && os.status !== 'baixada' && os.status !== 'cancelada' ? (
                 <Acao icone="crosshairs-gps" rotulo={os.evento_localizado_em ? 'Evento localizado' : 'Localizei o evento'} cor={cores.perigo}
-                  feito={!!os.evento_localizado_em} aoTocar={localizarEvento} />
+                  feito={!!os.evento_localizado_em} aoTocar={souApoio ? undefined : localizarEvento} />
               ) : null}
               <Acao icone="camera-outline" rotulo={`Fotos ${totalFotos}`} cor={cores.primaria} feito={totalFotos > 0}
                 aoTocar={podeFotografar ? () => abrirCamera(totalFotos) : () => setAba('fotos')} />
               <Acao icone="draw-pen" rotulo={assinadoPor ? 'O.S. assinada' : 'Assinar O.S.'} cor={cores.texto2} feito={!!assinadoPor}
-                aoTocar={podeEditar && !assinadoPor ? () => assinar() : undefined} />
+                aoTocar={podeEditar && !assinadoPor && !souApoio ? () => assinar() : undefined} />
               {vistoriaMg ? <Acao icone="transmission-tower" rotulo="Postes" cor={cores.primaria} aoTocar={() => setAba('postes')} /> : null}
               <Acao icone="package-variant" rotulo="Caixas" cor={cores.texto2} aoTocar={() => setAba('caixas')} />
               <Acao icone="wrench-outline" rotulo="Execução" cor={cores.texto2} aoTocar={() => setAba('execucao')} />
@@ -377,7 +382,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
           <CaixasOS osId={os.id} podeEditar={podeEditar} versao={versaoCaixas} abrir={(caixa, daOs) => setCaixaAberta({ caixa, daOs })} />
         ) : null}
 
-        {aba === 'execucao' ? <ExecucaoOS osId={os.id} podeEditar={podeEditar} euId={euId} /> : null}
+        {aba === 'execucao' ? <ExecucaoOS osId={os.id} podeEditar={podeEditar} euId={euId} souApoio={souApoio} /> : null}
 
         {aba === 'fotos' ? (
           <View style={s.bloco}>
