@@ -14,6 +14,7 @@ const titulos: Record<string, string> = {
   pausa_solicitada: "Pedido de pausa",
   backlog_proximo: "Ocorrência perto de você",
   os_reaberta: "O.S. reaberta",
+  apoio_os: "Você é apoio numa O.S.",
 };
 
 type Conta = { client_email: string; private_key: string; project_id: string };
@@ -77,8 +78,8 @@ Deno.serve(async (req) => {
     return new Response("sem dispositivo", { status: 200 });
   }
 
-  // Nova O.S., reaberta e ocorrência perto tocam o alarme próprio do app (canal criado pelo APK 14 em diante).
-  const alarme = ["nova_os", "os_reaberta", "backlog_proximo"].includes(alerta.tipo);
+  // Nova O.S., reaberta, ocorrência perto e apoio tocam o alarme próprio do app (canal criado pelo APK 14 em diante).
+  const alarme = ["nova_os", "os_reaberta", "backlog_proximo", "apoio_os"].includes(alerta.tipo);
   let enviados = 0;
   try {
     const conta = JSON.parse(segredo) as Conta;

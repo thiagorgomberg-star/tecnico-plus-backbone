@@ -22,6 +22,9 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
   const [tecnicos, setTecnicos] = useState<Pessoa[]>([]);
   const [apoio, setApoio] = useState<string[]>([]);
+  // Seleção na tela; só vale depois de "Salvar apoio" (aí o apoio recebe o alarme no celular).
+  const [apoioMarcado, setApoioMarcado] = useState<string[] | null>(null);
+  const [salvandoApoio, setSalvandoApoio] = useState(false);
   const [categoria, setCategoria] = useState<'servico' | 'material'>('servico');
   const [itemId, setItemId] = useState<string | null>(null);
   const [quantidade, setQuantidade] = useState('');
@@ -109,14 +112,29 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
     ]);
   }
 
-  async function alternarApoio(p: Pessoa) {
-    if (apoio.includes(p.id)) {
-      await enfileirar({ tipo: 'excluir', tabela: 'os_tecnicos_apoio', filtros: { os_id: osId, tecnico_id: p.id } });
-      setApoio((a) => a.filter((x) => x !== p.id));
-    } else {
-      await enfileirar({ tipo: 'inserir', tabela: 'os_tecnicos_apoio', linha: { os_id: osId, tecnico_id: p.id }, conflito: 'os_id,tecnico_id' });
-      setApoio((a) => [...a, p.id]);
-    }
+  const marcados = apoioMarcado ?? apoio;
+  const apoioMudou = apoioMarcado != null && (apoioMarcado.length !== apoio.length || apoioMarcado.some((x) => !apoio.includes(x)));
+
+  function alternarApoio(p: Pessoa) {
+    setApoioMarcado(marcados.includes(p.id) ? marcados.filter((x) => x !== p.id) : [...marcados, p.id]);
+  }
+
+  async function salvarApoio() {
+    if (!apoioMarcado) return;
+    setSalvandoApoio(true);
+    try {
+      const entram = apoioMarcado.filter((x) => !apoio.includes(x));
+      for (const id of apoio.filter((x) => !apoioMarcado.includes(x))) {
+        await enfileirar({ tipo: 'excluir', tabela: 'os_tecnicos_apoio', filtros: { os_id: osId, tecnico_id: id } });
+      }
+      for (const id of entram) {
+        await enfileirar({ tipo: 'inserir', tabela: 'os_tecnicos_apoio', linha: { os_id: osId, tecnico_id: id }, conflito: 'os_id,tecnico_id' });
+      }
+      setApoio(apoioMarcado);
+      setApoioMarcado(null);
+      const nomes = tecnicos.filter((t) => entram.includes(t.id)).map((t) => t.nome).join(', ');
+      Alert.alert('Apoio salvo', nomes ? `${nomes} vai receber o alarme no celular assim que o registro chegar ao servidor.` : 'Lista de apoio atualizada.');
+    } finally { setSalvandoApoio(false); }
   }
 
   const fmt = (n: number) => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
@@ -209,11 +227,26 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
         {podeEditar ? (
           <View style={s.chips}>
             {tecnicos.filter((t) => t.id !== euId).map((t) => (
-              <Pressable key={t.id} style={[s.chip, apoio.includes(t.id) && s.chipAtivo]} onPress={() => alternarApoio(t)}>
-                <Text style={[s.chipTexto, apoio.includes(t.id) && { color: '#fff' }]}>{apoio.includes(t.id) ? '✓ ' : ''}{t.nome}</Text>
+              <Pressable key={t.id} style={[s.chip, marcados.includes(t.id) && s.chipAtivo]} onPress={() => alternarApoio(t)}>
+                <Text style={[s.chipTexto, marcados.includes(t.id) && { color: '#fff' }]}>{marcados.includes(t.id) ? '✓ ' : ''}{t.nome}</Text>
               </Pressable>
             ))}
           </View>
+        ) : null}
+        {podeEditar && apoioMudou ? (
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+            <Pressable style={[s.botao, { flex: 1, height: 44, alignItems: 'center', opacity: salvandoApoio ? 0.6 : 1 }]} onPress={salvarApoio} disabled={salvandoApoio}>
+              <Text style={s.botaoTexto}>Salvar apoio</Text>
+            </Pressable>
+            <Pressable style={[s.botao, { height: 44, backgroundColor: cores.borda }]} onPress={() => setApoioMarcado(null)}>
+              <Text style={[s.botaoTexto, { color: cores.texto }]}>Cancelar</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {podeEditar ? (
+          <Text style={[s.vazio, { marginTop: 8, fontSize: 12.5 }]}>
+            {apoio.length ? `Salvos: ${tecnicos.filter((t) => apoio.includes(t.id)).map((t) => t.nome).join(', ')}` : 'Toque nos nomes e depois em Salvar apoio.'}
+          </Text>
         ) : (
           <Text style={s.vazio}>
             {apoio.length ? tecnicos.filter((t) => apoio.includes(t.id)).map((t) => t.nome).join(', ') : 'Nenhum.'}

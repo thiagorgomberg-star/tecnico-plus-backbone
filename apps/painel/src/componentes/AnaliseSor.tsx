@@ -9,8 +9,9 @@ const COR: Record<Nivel, string> = { ok: "#1E9E4A", atencao: "#D99A00", critico:
 const ROTULO: Record<Nivel, string> = { ok: "OK", atencao: "Atenção", critico: "Crítico" };
 
 // Análise de um arquivo .SOR do OTDR: resumo da fibra, traço com os eventos marcados e o que fazer em cada evento.
-export default function AnaliseSor({ bucket, caminho, nome, extensaoKm, fechar }: {
-  bucket: string; caminho: string; nome: string; extensaoKm: number | null; fechar: () => void;
+// A curva vem do armazenamento (bucket + caminho) ou de um arquivo escolhido no computador (arquivo).
+export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm, fechar }: {
+  bucket?: string; caminho?: string; arquivo?: File; nome: string; extensaoKm: number | null; fechar: () => void;
 }) {
   const [sor, setSor] = useState<Sor | null>(null);
   const [erro, setErro] = useState("");
@@ -18,15 +19,17 @@ export default function AnaliseSor({ bucket, caminho, nome, extensaoKm, fechar }
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase.storage.from(bucket).download(caminho);
-      if (error || !data) return setErro("Não foi possível baixar o arquivo.");
+      let dados: Blob | null = arquivo ?? null;
+      if (!dados && bucket && caminho) dados = (await supabase.storage.from(bucket).download(caminho)).data;
+      if (!dados) return setErro("Não foi possível baixar o arquivo.");
       try {
-        setSor(lerSor(new Uint8Array(await data.arrayBuffer())));
+        setSor(lerSor(new Uint8Array(await dados.arrayBuffer())));
       } catch (e) {
-        setErro((e as Error).message || "Arquivo .SOR inválido.");
+        const msg = (e as Error).message || "";
+        setErro(/DataView|bounds|bytes/i.test(msg) ? "Não foi possível ler esta curva: o arquivo parece incompleto ou num formato .SOR ainda não reconhecido." : msg || "Arquivo .SOR inválido.");
       }
     })();
-  }, [bucket, caminho]);
+  }, [bucket, caminho, arquivo]);
 
   const analise = useMemo(() => (sor ? analisarSor(sor, extensaoKm) : null), [sor, extensaoKm]);
 

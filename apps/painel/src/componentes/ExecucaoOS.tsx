@@ -14,6 +14,7 @@ type Pessoa = { id: string; nome: string };
 export default function ExecucaoOS({ osId, responsavelId, bloqueado = false }: { osId: string; responsavelId: string | null; bloqueado?: boolean }) {
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
   const [apoio, setApoio] = useState<Apoio[]>([]);
+  const [avisoApoio, setAvisoApoio] = useState("");
   const [catalogo, setCatalogo] = useState<Item[]>([]);
   const [tecnicos, setTecnicos] = useState<Pessoa[]>([]);
   const [novo, setNovo] = useState({ item_id: "", quantidade: "" });
@@ -66,6 +67,7 @@ export default function ExecucaoOS({ osId, responsavelId, bloqueado = false }: {
     if (!tecnicoId) return;
     const { error } = await supabase.from("os_tecnicos_apoio").insert({ os_id: osId, tecnico_id: tecnicoId });
     if (error) alert(error.message);
+    else setAvisoApoio(`${tecnicos.find((t) => t.id === tecnicoId)?.nome ?? "Apoio"} salvo e avisado com alarme no celular.`);
     recarregar();
   }
 
@@ -96,6 +98,7 @@ export default function ExecucaoOS({ osId, responsavelId, bloqueado = false }: {
           </select>
         )}
       </div>
+      {avisoApoio && <p className="mt-1 text-xs text-green-700">✓ {avisoApoio}</p>}
 
       {(["servico", "material"] as const).map((categoria) => {
         const doTipo = lancamentos.filter((l) => l.item?.categoria === categoria);

@@ -12,7 +12,7 @@ const CANAL = 'alertas-os';
 // por isso é um canal novo).
 const CANAL_ALARME = 'alarme-os';
 const SOM_ALARME = 'alarme_os.wav';
-const COM_ALARME = ['nova_os', 'os_reaberta', 'backlog_proximo'];
+const COM_ALARME = ['nova_os', 'os_reaberta', 'backlog_proximo', 'apoio_os'];
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -32,6 +32,7 @@ const titulos: Record<string, string> = {
   pausa_solicitada: 'Pedido de pausa',
   backlog_proximo: 'Ocorrência perto de você',
   os_reaberta: 'O.S. reaberta',
+  apoio_os: 'Você é apoio numa O.S.',
 };
 
 // Registra o token do Firebase deste celular para o usuário logado: o servidor manda a notificação
