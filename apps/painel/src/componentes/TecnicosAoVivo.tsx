@@ -5,6 +5,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { GeoJSONSource, Map as Mapa } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { abrirInfoNoMapa, alvoDoPonto } from "@/lib/aoVivo";
 import { atualizarGeocarAgora } from "@/lib/geocar";
 import { supabase } from "@/lib/supabase";
 import { duracao, fmtKm, kmPercorridos, paradas, PARADA_MIN_MINUTOS, type Parada } from "@/lib/trajeto";
@@ -127,7 +128,7 @@ export default function TecnicosAoVivo() {
   // Cria o mapa uma vez (mapa de ruas do OpenStreetMap).
   useEffect(() => {
     let cancelado = false;
-    import("maplibre-gl").then(({ Map, NavigationControl }) => {
+    import("maplibre-gl").then(({ Map, NavigationControl, Popup }) => {
       if (cancelado || !divMapa.current) return;
       const m = new Map({
         container: divMapa.current,
@@ -191,6 +192,18 @@ export default function TecnicosAoVivo() {
           layout: { "text-field": ["get", "nome"], "text-offset": [0, 1.4], "text-anchor": "top", "text-size": 12 },
           paint: { "text-halo-color": "#fff", "text-halo-width": 2 },
         });
+        // Clique no técnico (celular) ou no carro (GEOCAR): situação, tempo parado, km do dia e navegar até ele.
+        for (const camada of ["tecnicos", "carros"]) {
+          m.on("click", camada, (e) => {
+            const f = e.features?.[0];
+            const alvo = alvoDoPonto(f?.properties);
+            if (!alvo || f?.geometry.type !== "Point") return;
+            const [lon, lat] = f.geometry.coordinates;
+            abrirInfoNoMapa(m, Popup, alvo, lon, lat);
+          });
+          m.on("mouseenter", camada, () => { m.getCanvas().style.cursor = "pointer"; });
+          m.on("mouseleave", camada, () => { m.getCanvas().style.cursor = ""; });
+        }
         setMapaPronto(true);
       });
       mapa.current = m;
@@ -236,7 +249,8 @@ export default function TecnicosAoVivo() {
     (m.getSource("carros") as GeoJSONSource).setData({
       type: "FeatureCollection",
       features: carrosVisiveis.map((c) => ({
-        type: "Feature", properties: { cor: corDe(c.veiculos!.tecnico_id!), placa: c.matricula },
+        type: "Feature",
+        properties: { cor: corDe(c.veiculos!.tecnico_id!), placa: c.matricula, tipo: "veiculo", viat_id: c.viat_id, nome: c.veiculos?.usuarios?.nome ?? "" },
         geometry: { type: "Point", coordinates: [c.longitude!, c.latitude!] },
       })),
     });
@@ -251,7 +265,7 @@ export default function TecnicosAoVivo() {
     (m.getSource("tecnicos") as GeoJSONSource).setData({
       type: "FeatureCollection",
       features: visiveis.map((p) => ({
-        type: "Feature", properties: { cor: corDe(p.tecnico_id), nome: p.nome.split(" ")[0] },
+        type: "Feature", properties: { cor: corDe(p.tecnico_id), nome: p.nome.split(" ")[0], tipo: "celular", tecnico_id: p.tecnico_id, nomeCompleto: p.nome },
         geometry: { type: "Point", coordinates: [p.longitude!, p.latitude!] },
       })),
     });

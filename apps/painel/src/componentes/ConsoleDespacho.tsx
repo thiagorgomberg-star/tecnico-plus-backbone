@@ -6,6 +6,7 @@ import type { GeoJSONSource, Map as Mapa } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import DetalheOS from "@/componentes/DetalheOS";
+import { abrirInfoNoMapa, alvoDoPonto } from "@/lib/aoVivo";
 import { atualizarGeocarAgora } from "@/lib/geocar";
 import { supabase } from "@/lib/supabase";
 import { OrdemServico, rotuloStatus, StatusOS, Tecnico } from "@/lib/tipos";
@@ -15,7 +16,7 @@ type OsConsole = OrdemServico & {
 };
 type Intervalo = { tecnico_id: string; inicio: string; fim: string | null };
 type Posicao = { tecnico_id: string; nome: string; latitude: number | null; longitude: number | null; registrado_em: string };
-type Carro = { matricula: string; latitude: number | null; longitude: number | null; datahora: string | null; veiculos: { tecnico_id: string | null } | null };
+type Carro = { viat_id: number; matricula: string; latitude: number | null; longitude: number | null; datahora: string | null; veiculos: { tecnico_id: string | null } | null };
 type Fonte = "celular" | "veiculo";
 
 // Cores por status (com o nome do status escrito na barra e na legenda, nunca só a cor).
@@ -71,7 +72,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
       .then(({ data }) => setRefeicoes(data ?? []));
     supabase.from("posicao_atual_tecnicos").select("tecnico_id, nome, latitude, longitude, registrado_em")
       .then(({ data }) => { setPosicoes(data ?? []); setAtualizadoEm(new Date()); });
-    supabase.from("geocar_viaturas").select("matricula, latitude, longitude, datahora, veiculos(tecnico_id)")
+    supabase.from("geocar_viaturas").select("viat_id, matricula, latitude, longitude, datahora, veiculos(tecnico_id)")
       .then(({ data }) => setCarros(((data as unknown as Carro[]) ?? []).filter((c) => c.veiculos?.tecnico_id)));
   }, [inicioDia, fimDia]);
 
@@ -149,7 +150,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
   // Mapa: técnicos em campo (posição atual) e O.S. do dia por status.
   useEffect(() => {
     let cancelado = false;
-    import("maplibre-gl").then(({ Map, NavigationControl }) => {
+    import("maplibre-gl").then(({ Map, NavigationControl, Popup }) => {
       if (cancelado || !divMapa.current) return;
       const m = new Map({
         container: divMapa.current,
@@ -174,6 +175,16 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
         m.addLayer({ id: "tecnicos-sigla", type: "symbol", source: "tecnicos",
           layout: { "text-field": ["get", "sigla"], "text-size": 11, "text-allow-overlap": true },
           paint: { "text-color": "#fff" } });
+        // Clique no técnico ou no carro: situação, tempo parado, km do dia e navegar até ele.
+        m.on("click", "tecnicos", (e) => {
+          const f = e.features?.[0];
+          const alvo = alvoDoPonto(f?.properties);
+          if (!alvo || f?.geometry.type !== "Point") return;
+          const [lon, lat] = f.geometry.coordinates;
+          abrirInfoNoMapa(m, Popup, alvo, lon, lat);
+        });
+        m.on("mouseenter", "tecnicos", () => { m.getCanvas().style.cursor = "pointer"; });
+        m.on("mouseleave", "tecnicos", () => { m.getCanvas().style.cursor = ""; });
         m.on("mouseenter", "os", () => { m.getCanvas().style.cursor = "pointer"; });
         m.on("mouseleave", "os", () => { m.getCanvas().style.cursor = ""; });
         setMapaPronto(true);
@@ -197,12 +208,18 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
     // Técnico pelo celular (GPS do app) ou pelo carro (GEOCAR), conforme a escolha no mapa.
     const nomeDe = (id: string) => tecnicos.find((t) => t.id === id)?.nome ?? posicoes.find((p) => p.tecnico_id === id)?.nome ?? "?";
     const tecs = !ehHoje ? [] : fonte === "celular"
-      ? posicoes.filter((p) => p.latitude != null && p.longitude != null).map((p) => ({ lon: p.longitude!, lat: p.latitude!, sigla: iniciais(p.nome), cor: "#312D2A" }))
-      : carros.filter((c) => c.latitude != null && c.longitude != null).map((c) => ({ lon: c.longitude!, lat: c.latitude!, sigla: iniciais(nomeDe(c.veiculos!.tecnico_id!)), cor: "#163A6B" }));
+      ? posicoes.filter((p) => p.latitude != null && p.longitude != null).map((p) => ({
+          lon: p.longitude!, lat: p.latitude!, sigla: iniciais(p.nome), cor: "#312D2A",
+          info: { tipo: "celular", tecnico_id: p.tecnico_id, nome: p.nome },
+        }))
+      : carros.filter((c) => c.latitude != null && c.longitude != null).map((c) => ({
+          lon: c.longitude!, lat: c.latitude!, sigla: iniciais(nomeDe(c.veiculos!.tecnico_id!)), cor: "#163A6B",
+          info: { tipo: "veiculo", viat_id: c.viat_id, placa: c.matricula, nome: nomeDe(c.veiculos!.tecnico_id!) },
+        }));
     (m.getSource("tecnicos") as GeoJSONSource).setData({
       type: "FeatureCollection",
       features: tecs.map((p) => ({ type: "Feature", geometry: { type: "Point", coordinates: [p.lon, p.lat] },
-        properties: { sigla: p.sigla, cor: p.cor } })),
+        properties: { sigla: p.sigla, cor: p.cor, ...p.info } })),
     });
     const pts = [...doDia.map((o) => [o.longitude!, o.latitude!]), ...tecs.map((p) => [p.lon, p.lat])];
     if (pts.length && !enquadrado.current) {
