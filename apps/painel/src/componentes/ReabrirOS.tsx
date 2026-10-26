@@ -5,10 +5,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { OrdemServico, Tecnico } from "@/lib/tipos";
 
-type Modo = "tecnico" | "supervisor";
+type Modo = "tecnico" | "backlog" | "supervisor";
 
 // Reabre uma O.S. encerrada: volta para campo (o mesmo técnico ou outro, que recebe o aviso)
-// ou fica com o supervisor para alterar e dar a baixa de novo.
+// volta para o backlog geral (qualquer técnico assume pelo app) ou fica com o supervisor para alterar e dar a baixa de novo.
 export default function ReabrirOS({ os, fechar, reaberta }: { os: OrdemServico; fechar: () => void; reaberta?: (modo: Modo) => void }) {
   const [modo, setModo] = useState<Modo>("tecnico");
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
@@ -42,14 +42,18 @@ export default function ReabrirOS({ os, fechar, reaberta }: { os: OrdemServico; 
 
   return (
     <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={fechar}>
-      <div className="mt-16 w-full max-w-lg rounded-xl bg-white p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
+      <div className="mt-16 w-full max-w-2xl rounded-xl bg-white p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold">Reabrir O.S. #{os.numero}</h2>
         <p className="text-sm text-gray-500">{os.titulo}</p>
 
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
           <button className={opcao(modo === "tecnico")} onClick={() => setModo("tecnico")}>
             <div className="font-semibold">Devolver para campo</div>
             <div className="text-gray-600">Volta como nova O.S. para o técnico escolhido, com aviso no celular.</div>
+          </button>
+          <button className={opcao(modo === "backlog")} onClick={() => setModo("backlog")}>
+            <div className="font-semibold">Voltar para o backlog</div>
+            <div className="text-gray-600">Fica sem técnico, no backlog geral. Qualquer técnico pode assumir pelo app.</div>
           </button>
           {os.status !== "concluida" && (
           <button className={opcao(modo === "supervisor")} onClick={() => setModo("supervisor")}>
@@ -75,7 +79,7 @@ export default function ReabrirOS({ os, fechar, reaberta }: { os: OrdemServico; 
 
         <label className="mt-4 block text-sm">Motivo
           <textarea className="mt-1 w-full rounded-lg border border-gray-300 p-2" rows={3} value={motivo} onChange={(e) => setMotivo(e.target.value)}
-            placeholder={modo === "tecnico" ? "Ex.: faltou a foto da bandeja da caixa CE-BKB-0012" : "Ex.: corrigir o endereço e o material lançado"} />
+            placeholder={modo !== "supervisor" ? "Ex.: faltou a foto da bandeja da caixa CE-BKB-0012" : "Ex.: corrigir o endereço e o material lançado"} />
         </label>
 
         {erro && <p className="mt-2 text-sm text-red-700">{erro}</p>}
