@@ -24,6 +24,8 @@ export async function posicaoRapida(limiteMs = 4000) {
   return (await Location.getLastKnownPositionAsync().catch(() => null))?.coords ?? null;
 }
 
+const SEM_NOME = /sem nome|sem denomina|unnamed|^\s*$/i;
+
 // Endereço a partir das coordenadas. Precisa de internet: offline (ou demorando) devolve null.
 export async function enderecoDe(latitude: number, longitude: number, limiteMs = 2500) {
   try {
@@ -31,8 +33,14 @@ export async function enderecoDe(latitude: number, longitude: number, limiteMs =
     const limite = new Promise<never>((_, rejeitar) => setTimeout(() => rejeitar(new Error('tempo')), limiteMs));
     const [r] = await Promise.race([consulta, limite]);
     if (!r) return null;
+    const cidade = r.city ?? r.subregion;
+    // O Google devolve "Estrada sem nome" / "Unnamed Road" quando não conhece a via: aí vai só a cidade.
+    if (!r.street || SEM_NOME.test(r.street)) {
+      return cidade ? cidade + (r.region ? ` - ${r.region}` : '') : null;
+    }
     const rua = [r.street, r.streetNumber].filter(Boolean).join(', ');
-    return [rua, r.district, r.city ?? r.subregion].filter(Boolean).join(' - ') +
+    const bairro = r.district && !SEM_NOME.test(r.district) ? r.district : null;
+    return [rua, bairro, cidade].filter(Boolean).join(' - ') +
       (r.region ? ` - ${r.region}` : '') + (r.postalCode ? `, ${r.postalCode}` : '');
   } catch {
     return null;

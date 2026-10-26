@@ -15,7 +15,7 @@ import { cores, corDoStatus, fundoDe, sombra } from '../lib/estilo';
 import { Caixa, caixasAtuais } from '../lib/caixas';
 import FotosDaOS from '../componentes/FotosDaOS';
 import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
-import { textoSla } from '../lib/formato';
+import { idadeOs, textoSla } from '../lib/formato';
 import { posicaoAtual } from '../lib/localizacao';
 import { compartilharKmz } from '../lib/kmz';
 import { compartilharOsApresentacao } from '../lib/osApresentacao';
@@ -415,6 +415,8 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
             <Info icone="flag-outline" rotulo="Prioridade" valor={{ baixa: 'Baixa', media: 'Média', alta: 'Alta', emergencia: 'Emergência' }[os.prioridade]} />
             {os.sla_limite ? (
               <Info icone="timer-outline" rotulo={os.os_clientes?.length ? 'Limite do SLA (menor entre os clientes)' : 'Limite do SLA (4h)'} valor={new Date(os.sla_limite).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} />
+            ) : os.criado_em && !['concluida', 'baixada', 'cancelada'].includes(os.status) ? (
+              <Info icone="timer-sand" rotulo="Sem SLA · aberta há (24h verde, 48h amarelo, depois vermelho)" valor={idadeOs(os.criado_em).texto} />
             ) : null}
             {ehCorretiva(os.tipo) && os.status !== 'baixada' && os.status !== 'cancelada' ? (
               <Info icone="crosshairs-gps" rotulo="Local do evento"
