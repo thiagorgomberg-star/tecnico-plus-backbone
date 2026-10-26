@@ -228,10 +228,13 @@ async function enviar(item: ItemFila) {
   }
 }
 
-// Erro com código SQLSTATE (5 caracteres) veio do banco; sem código é falta de rede.
+// Erro com código SQLSTATE (5 caracteres) veio do banco; recusa do storage (4xx, ex.: permissão) também.
+// Sem código é falta de rede. Recusado não trava a fila: vai para revisão e o resto (GPS, O.S.) segue.
 function recusadoPeloBanco(e: unknown) {
-  const codigo = (e as { code?: unknown })?.code;
-  return typeof codigo === 'string' && codigo.length === 5;
+  const erro = e as { code?: unknown; status?: unknown; statusCode?: unknown };
+  if (typeof erro?.code === 'string' && erro.code.length === 5) return true;
+  const http = Number(erro?.status ?? erro?.statusCode);
+  return http >= 400 && http < 500 && ![401, 408, 429].includes(http); // 401 = sessão vencida: espera renovar
 }
 
 export async function sincronizar() {
