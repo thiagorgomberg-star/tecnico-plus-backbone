@@ -20,6 +20,14 @@ type Posicao = {
 
 type Ponto = { tecnico_id: string; registrado_em: string; latitude: number; longitude: number; precisao_m: number | null };
 
+// Carro do técnico rastreado pela GEOCAR (só placas cadastradas na Frota com técnico).
+type Carro = {
+  viat_id: number; matricula: string; datahora: string | null; latitude: number | null; longitude: number | null;
+  velocidade_kmh: number | null; ignicao: boolean | null; rua: string | null;
+  veiculos: { tecnico_id: string | null; usuarios: { nome: string } | null } | null;
+};
+type PontoCarro = { viat_id: number; registrado_em: string; latitude: number; longitude: number };
+
 const hora = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
 const CORES = ["#2563eb", "#dc2626", "#16a34a", "#9333ea", "#ea580c", "#0891b2"];
@@ -29,6 +37,8 @@ const CENTRO_INICIAL: [number, number] = [-45.5, -23.0];
 export default function TecnicosAoVivo() {
   const [posicoes, setPosicoes] = useState<Posicao[]>([]);
   const [trajeto, setTrajeto] = useState<Ponto[]>([]);
+  const [carros, setCarros] = useState<Carro[]>([]);
+  const [trajetoCarros, setTrajetoCarros] = useState<PontoCarro[]>([]);
   const [agora, setAgora] = useState(0);
   const [selecionado, setSelecionado] = useState<string | null>(null);
   const [intervalo, setIntervalo] = useState(30);
@@ -49,6 +59,15 @@ export default function TecnicosAoVivo() {
         setTrajeto(data ?? []);
         setAtualizadoEm(new Date());
       });
+    supabase.from("geocar_viaturas")
+      .select("viat_id, matricula, datahora, latitude, longitude, velocidade_kmh, ignicao, rua, veiculos(tecnico_id, usuarios(nome))")
+      .order("matricula")
+      .then(({ data }) => setCarros(((data as unknown as Carro[]) ?? []).filter((c) => c.veiculos?.tecnico_id)));
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    supabase.from("geocar_posicoes").select("viat_id, registrado_em, latitude, longitude")
+      .gte("registrado_em", hoje.toISOString()).order("registrado_em").limit(20000)
+      .then(({ data }) => setTrajetoCarros(data ?? []));
   }, []);
 
   // Atualização programada do mapa e da lista (sem recarregar a página),
@@ -91,6 +110,18 @@ export default function TecnicosAoVivo() {
     return r;
   }, [trajeto]);
 
+  const carroDe = useCallback((tecnicoId: string) => carros.find((c) => c.veiculos?.tecnico_id === tecnicoId), [carros]);
+  const resumoCarro = useMemo(() => {
+    const porCarro = new globalThis.Map<number, PontoCarro[]>();
+    for (const p of trajetoCarros) {
+      if (!porCarro.has(p.viat_id)) porCarro.set(p.viat_id, []);
+      porCarro.get(p.viat_id)!.push(p);
+    }
+    const r = new globalThis.Map<number, { pontos: PontoCarro[]; km: number; paradas: Parada[] }>();
+    for (const [id, ps] of porCarro) r.set(id, { pontos: ps, km: kmPercorridos(ps), paradas: paradas(ps) });
+    return r;
+  }, [trajetoCarros]);
+
   // Cria o mapa uma vez (mapa de ruas do OpenStreetMap).
   useEffect(() => {
     let cancelado = false;
@@ -119,10 +150,26 @@ export default function TecnicosAoVivo() {
         m.addSource("trajetos", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         m.addSource("tecnicos", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         m.addSource("paradas", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        m.addSource("carros-trajeto", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        m.addSource("carros", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         m.addLayer({
           id: "trajetos", type: "line", source: "trajetos",
           paint: { "line-color": ["get", "cor"], "line-width": 4, "line-opacity": 0.75 },
           layout: { "line-cap": "round", "line-join": "round" },
+        });
+        m.addLayer({
+          id: "carros-trajeto", type: "line", source: "carros-trajeto",
+          paint: { "line-color": ["get", "cor"], "line-width": 3, "line-opacity": 0.8, "line-dasharray": [2, 1.5] },
+          layout: { "line-cap": "round", "line-join": "round" },
+        });
+        m.addLayer({
+          id: "carros", type: "circle", source: "carros",
+          paint: { "circle-radius": 7, "circle-color": "#0f172a", "circle-stroke-width": 3, "circle-stroke-color": ["get", "cor"] },
+        });
+        m.addLayer({
+          id: "carros-placa", type: "symbol", source: "carros",
+          layout: { "text-field": ["get", "placa"], "text-offset": [0, 1.2], "text-anchor": "top", "text-size": 11 },
+          paint: { "text-color": "#0f172a", "text-halo-color": "#fff", "text-halo-width": 2 },
         });
         m.addLayer({
           id: "paradas", type: "circle", source: "paradas",
@@ -171,11 +218,31 @@ export default function TecnicosAoVivo() {
     });
     // Paradas só do técnico escolhido, com o tempo parado escrito no mapa.
     const minhas = selecionado ? resumo.get(selecionado)?.paradas ?? [] : [];
+    const carroSel = selecionado ? carroDe(selecionado) : undefined;
+    const doCarro = carroSel ? resumoCarro.get(carroSel.viat_id)?.paradas ?? [] : [];
+    const rotulo = (pa: Parada, prefixo = "") => `${prefixo}${duracao(pa.minutos)} (${hora(pa.inicio)}–${hora(pa.fim)})`;
     (m.getSource("paradas") as GeoJSONSource).setData({
       type: "FeatureCollection",
-      features: minhas.map((pa) => ({
-        type: "Feature", properties: { cor: corDe(selecionado!), rotulo: `${duracao(pa.minutos)} (${hora(pa.inicio)}–${hora(pa.fim)})` },
+      features: [...minhas.map((pa) => [pa, rotulo(pa)] as const), ...doCarro.map((pa) => [pa, rotulo(pa, "Carro: ")] as const)].map(([pa, texto]) => ({
+        type: "Feature", properties: { cor: corDe(selecionado!), rotulo: texto },
         geometry: { type: "Point", coordinates: [pa.longitude, pa.latitude] },
+      })),
+    });
+
+    // Carros da GEOCAR (com a cor do técnico dono do carro).
+    const carrosVisiveis = carros.filter((c) => c.latitude != null && (!selecionado || c.veiculos?.tecnico_id === selecionado));
+    (m.getSource("carros") as GeoJSONSource).setData({
+      type: "FeatureCollection",
+      features: carrosVisiveis.map((c) => ({
+        type: "Feature", properties: { cor: corDe(c.veiculos!.tecnico_id!), placa: c.matricula },
+        geometry: { type: "Point", coordinates: [c.longitude!, c.latitude!] },
+      })),
+    });
+    (m.getSource("carros-trajeto") as GeoJSONSource).setData({
+      type: "FeatureCollection",
+      features: carrosVisiveis.map((c) => [c, resumoCarro.get(c.viat_id)?.pontos ?? []] as const).filter(([, ps]) => ps.length > 1).map(([c, ps]) => ({
+        type: "Feature", properties: { cor: corDe(c.veiculos!.tecnico_id!) },
+        geometry: { type: "LineString", coordinates: ps.map((p) => [p.longitude, p.latitude]) },
       })),
     });
     const visiveis = posicoes.filter((p) => p.latitude != null && (!selecionado || p.tecnico_id === selecionado));
@@ -194,7 +261,7 @@ export default function TecnicosAoVivo() {
       m.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 60, maxZoom: 15, duration: 600 });
       enquadrado.current = true;
     }
-  }, [posicoes, trajeto, selecionado, mapaPronto, corDe, resumo]);
+  }, [posicoes, trajeto, selecionado, mapaPronto, corDe, resumo, carros, carroDe, resumoCarro]);
 
   return (
     <section className="grid overflow-hidden rounded-xl border border-gray-200 bg-white lg:grid-cols-[320px_1fr]">
@@ -227,6 +294,8 @@ export default function TecnicosAoVivo() {
               const minutos = Math.round((agora - new Date(p.registrado_em).getTime()) / 60000);
               const res = resumo.get(p.tecnico_id);
               const aberto = selecionado === p.tecnico_id;
+              const carro = carroDe(p.tecnico_id);
+              const resCarro = carro ? resumoCarro.get(carro.viat_id) : undefined;
               return (
                 <li key={p.tecnico_id}>
                   <button onClick={() => setSelecionado(p.tecnico_id === selecionado ? null : p.tecnico_id)}
@@ -243,6 +312,11 @@ export default function TecnicosAoVivo() {
                     <span className="mt-1 block text-xs text-gray-500">
                       <b className="text-sm text-gray-900">{fmtKm(res?.km ?? 0)}</b> percorridos hoje · {res?.paradas.length ?? 0} paradas
                     </span>
+                    {carro && (
+                      <span className="mt-1 block text-xs text-gray-500">
+                        Carro {carro.matricula} (GEOCAR): {situacaoCarro(carro, agora)} · <b className="text-gray-900">{fmtKm(resCarro?.km ?? 0)}</b> hoje
+                      </span>
+                    )}
                   </button>
                   {aberto && (
                     <div className="border-b border-gray-100 bg-blue-50/50 px-4 pb-3 text-sm">
@@ -266,6 +340,25 @@ export default function TecnicosAoVivo() {
                       {!!res?.paradas.length && (
                         <p className="mt-2 text-xs text-gray-600">Total parado: <b>{duracao(res.paradas.reduce((t, pa) => t + pa.minutos, 0))}</b></p>
                       )}
+                      {carro && (
+                        <>
+                          <p className="pb-1 pt-3 text-xs text-gray-500">Paradas do carro {carro.matricula} (GEOCAR){carro.rua ? ` · agora em ${carro.rua}` : ""}</p>
+                          {!resCarro?.paradas.length ? <p className="text-xs text-gray-500">Nenhuma parada do carro hoje.</p> : (
+                            <ol className="grid gap-1">
+                              {resCarro.paradas.map((pa, i) => (
+                                <li key={pa.inicio}>
+                                  <button className="flex w-full items-center gap-2 rounded-lg bg-white px-2 py-1.5 text-left hover:bg-blue-100"
+                                    onClick={() => mapa.current?.flyTo({ center: [pa.longitude, pa.latitude], zoom: 16 })}>
+                                    <span className="w-5 text-xs text-gray-400">{i + 1}.</span>
+                                    <span>{hora(pa.inicio)}–{hora(pa.fim)}</span>
+                                    <b className="ml-auto">{duracao(pa.minutos)}</b>
+                                  </button>
+                                </li>
+                              ))}
+                            </ol>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
                 </li>
@@ -273,8 +366,35 @@ export default function TecnicosAoVivo() {
             })}
           </ul>
         )}
+        {carros.length > 0 && (
+          <>
+            <h2 className="border-y border-gray-200 p-4 font-semibold">Carros dos técnicos (GEOCAR)</h2>
+            <ul>
+              {carros.map((c) => (
+                <li key={c.viat_id}>
+                  <button className="block w-full border-b border-gray-100 p-4 text-left text-sm hover:bg-gray-50"
+                    onClick={() => c.latitude != null && mapa.current?.flyTo({ center: [c.longitude!, c.latitude], zoom: 15 })}>
+                    <span className="flex items-center gap-2 font-medium">
+                      <span className="inline-block h-3 w-3 rounded-sm" style={{ background: corDe(c.veiculos!.tecnico_id!) }} />
+                      {c.matricula}
+                      <span className="font-normal text-gray-500">· {c.veiculos?.usuarios?.nome ?? "técnico"}</span>
+                    </span>
+                    <span className="mt-1 block text-gray-500">{situacaoCarro(c, agora)} · {fmtKm(resumoCarro.get(c.viat_id)?.km ?? 0)} hoje</span>
+                    {c.rua && <span className="mt-0.5 block text-xs text-gray-400">{c.rua}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </div>
       <div ref={divMapa} className="h-[70vh] min-h-96 w-full" />
     </section>
   );
+}
+
+function situacaoCarro(c: Carro, agora: number) {
+  const min = c.datahora ? Math.round((agora - new Date(c.datahora).getTime()) / 60000) : null;
+  const estado = c.ignicao ? (c.velocidade_kmh ? `andando a ${c.velocidade_kmh} km/h` : "ligado parado") : "desligado";
+  return `${estado}${min != null ? ` · sinal há ${min < 60 ? `${min} min` : duracao(min)}` : ""}`;
 }
