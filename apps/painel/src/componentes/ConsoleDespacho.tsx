@@ -111,7 +111,8 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
   // (horário arrastado na linha do tempo) ou planejada (envio → limite do SLA).
   const barras = useMemo(() => {
     const ini = inicioDia.getTime(), fim = fimDia.getTime();
-    return ordens.filter((o) => o.tecnico_id && o.status !== "rascunho").map((o) => {
+    // Backlog programado para um técnico também aparece na linha dele (vai para o técnico às 06h do dia).
+    return ordens.filter((o) => o.tecnico_id && (o.status !== "rascunho" || o.programada_inicio)).map((o) => {
       const aberta = ABERTAS.includes(o.status);
       const planejada = aberta && !o.iniciada_em;
       const programada = planejada && !!o.programada_inicio;
@@ -125,7 +126,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
     }).filter((b) => b.comeco < fim && b.termino > ini);
   }, [ordens, inicioDia, fimDia, agora]);
 
-  const naoAtribuidas = useMemo(() => ordens.filter((o) => o.status === "rascunho" || (!o.tecnico_id && ABERTAS.includes(o.status)))
+  const naoAtribuidas = useMemo(() => ordens.filter((o) => (o.status === "rascunho" && !(o.tecnico_id && o.programada_inicio)) || (!o.tecnico_id && ABERTAS.includes(o.status)))
     .sort((a, b) => (a.sla_limite ?? a.criado_em).localeCompare(b.sla_limite ?? b.criado_em)), [ordens]);
 
   const linhas = useMemo(() => tecnicos.filter((t) => !busca || t.nome.toLowerCase().includes(busca.toLowerCase())).map((t) => {
@@ -144,12 +145,15 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
     const os = ordens.find((o) => o.id === osId);
     const tec = tecnicos.find((t) => t.id === tecnicoId);
     if (!os || !tec || os.tecnico_id === tecnicoId) return;
-    const acao = os.status === "rascunho" ? "Despachar" : "Transferir";
-    const quando = horario ? ` às ${hm(new Date(horario.inicio).toISOString())}` : "";
-    if (!confirm(`${acao} a O.S. ${os.numero} (${os.titulo}) para ${tec.nome}${quando}?`)) return;
+    // Dia futuro: a O.S. do backlog fica programada e só vai para o técnico às 06h daquele dia.
+    const amanha = new Date(); amanha.setHours(24, 0, 0, 0);
+    const futura = os.status === "rascunho" && !!horario && horario.inicio >= amanha.getTime();
+    const acao = futura ? "Programar" : os.status === "rascunho" ? "Despachar" : "Transferir";
+    const quando = horario ? `${futura ? ` em ${new Date(horario.inicio).toLocaleDateString("pt-BR")}` : ""} às ${hm(new Date(horario.inicio).toISOString())}` : "";
+    if (!confirm(`${acao} a O.S. ${os.numero} (${os.titulo}) para ${tec.nome}${quando}?${futura ? "\n\nEla vai para o técnico às 06h desse dia." : ""}`)) return;
     const campos: Record<string, unknown> = { tecnico_id: tecnicoId };
     if (horario) Object.assign(campos, { programada_inicio: new Date(horario.inicio).toISOString(), programada_fim: new Date(horario.fim).toISOString() });
-    if (os.status === "rascunho") campos.status = "enviada";
+    if (os.status === "rascunho" && !futura) campos.status = "enviada";
     const { error } = await supabase.from("ordens_servico").update(campos).eq("id", osId);
     if (error) return alert(error.message);
     carregar();
@@ -360,6 +364,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
                   <span className="truncate font-medium">{o.numero} · {o.titulo}</span>
                 </div>
                 <div className="truncate pl-4 text-xs text-gray-500">
+                  {o.programada_inicio ? `📅 ${new Date(o.programada_inicio).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · ` : ""}
                   {o.tipo}{o.ticket_acionamento ? ` · ${o.ticket_acionamento}` : ""}{o.endereco ? ` · ${o.endereco}` : ""}
                 </div>
               </li>
@@ -433,7 +438,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
                 const comeco = movendo && !saindo ? mover.comeco + (mover.modo === "mover" ? mover.delta : 0) : barra.comeco;
                 const termino = movendo && !saindo ? (mover.modo === "mover" ? mover.termino + mover.delta : Math.max(mover.comeco + PASSO, mover.termino + mover.delta)) : barra.termino;
                 const a = escala(comeco), b = escala(termino), c = COR[os.status];
-                const movel = planejada && ["enviada", "aceita"].includes(os.status);
+                const movel = planejada && ["rascunho", "enviada", "aceita"].includes(os.status);
                 return (
                   <button key={os.id} onClick={() => { if (!arrastou.current) setDetalhe(os); arrastou.current = false; }}
                     onPointerDown={movel ? (e) => comecarMover(e, barra, "mover") : undefined}
@@ -445,8 +450,8 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
                       background: planejada && !programada ? `repeating-linear-gradient(135deg, ${c.fundo} 0 6px, #ffffff 6px 9px)` : c.fundo,
                       border: planejada ? `1px ${programada ? "solid" : "dashed"} ${c.texto}` : undefined,
                     }}
-                    title={`O.S. ${os.numero} · ${os.titulo}\n${os.tipo} · ${rotuloStatus[os.status]}\n${programada ? `Programada ${hm(new Date(comeco).toISOString())} – ${hm(new Date(termino).toISOString())}` : planejada ? `Enviada ${hm(new Date(comeco).toISOString())}${os.sla_limite ? ` · SLA até ${hm(os.sla_limite)}` : ""}` : `${hm(new Date(comeco).toISOString())} – ${os.concluida_em ? hm(os.concluida_em) : "agora"}`}${os.endereco ? `\n${os.endereco}` : ""}${movel ? "\nArraste para mudar o horário ou o técnico; puxe a borda direita para mudar a duração." : ""}`}>
-                    {movendo && !saindo ? `${hm(new Date(comeco).toISOString())}–${hm(new Date(termino).toISOString())} ` : ""}{os.numero} {os.titulo}
+                    title={`O.S. ${os.numero} · ${os.titulo}\n${os.tipo} · ${rotuloStatus[os.status]}\n${programada ? `Programada ${hm(new Date(comeco).toISOString())} – ${hm(new Date(termino).toISOString())}` : planejada ? `Enviada ${hm(new Date(comeco).toISOString())}${os.sla_limite ? ` · SLA até ${hm(os.sla_limite)}` : ""}` : `${hm(new Date(comeco).toISOString())} – ${os.concluida_em ? hm(os.concluida_em) : "agora"}`}${os.endereco ? `\n${os.endereco}` : ""}${os.status === "rascunho" ? "\nBacklog programado: vai para o técnico às 06h do dia." : ""}${movel ? "\nArraste para mudar o horário ou o técnico; puxe a borda direita para mudar a duração." : ""}`}>
+                    {os.status === "rascunho" ? "📅 " : ""}{movendo && !saindo ? `${hm(new Date(comeco).toISOString())}–${hm(new Date(termino).toISOString())} ` : ""}{os.numero} {os.titulo}
                     {movel && (
                       <span className="absolute inset-y-0 right-0 w-2 cursor-ew-resize bg-black/10 hover:bg-black/30" aria-label="Mudar a duração"
                         onPointerDown={(e) => comecarMover(e, barra, "fim")}

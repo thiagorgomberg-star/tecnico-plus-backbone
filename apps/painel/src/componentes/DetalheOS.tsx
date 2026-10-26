@@ -6,6 +6,7 @@ import CaixaDetalhe, { CaixaPainel } from "@/componentes/CaixaDetalhe";
 import { baixarKmz } from "@/componentes/CaixasRede";
 import EditarOS from "@/componentes/EditarOS";
 import MaterialApoio from "@/componentes/MaterialApoio";
+import ProgramarOS from "@/componentes/ProgramarOS";
 import ExecucaoOS from "@/componentes/ExecucaoOS";
 import ReabrirOS from "@/componentes/ReabrirOS";
 import { supabase } from "@/lib/supabase";
@@ -29,6 +30,7 @@ const quando = (v: string | null) => (v ? new Date(v).toLocaleString("pt-BR", { 
 export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; fechar: () => void }) {
   const [os, setOs] = useState(inicial);
   const [material, setMaterial] = useState(false);
+  const [programar, setProgramar] = useState(false);
   const [anexos, setAnexos] = useState<Anexo[]>([]);
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [local, setLocal] = useState<Local | null>(null);
@@ -138,6 +140,11 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
             </button>
           )}
           <button className="rounded-lg border border-gray-300 px-3 py-1.5 hover:bg-gray-50" onClick={() => setMaterial(true)}>📎 Material de apoio</button>
+          {os.status === "rascunho" && (
+            <button className="rounded-lg border border-blue-400 px-3 py-1.5 font-medium text-blue-800 hover:bg-blue-50" onClick={() => setProgramar(true)}>
+              📅 {os.programada_inicio ? `Programada ${new Date(os.programada_inicio).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}` : "Programar dia"}
+            </button>
+          )}
         </div>
 
         {encerrada && (
@@ -250,6 +257,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
 
       {reabrir && <ReabrirOS os={os} fechar={() => setReabrir(false)} reaberta={recarregar} />}
       {editar && <EditarOS os={os} fechar={() => setEditar(false)} salva={recarregar} />}
+      {programar && <div onClick={(e) => e.stopPropagation()}><ProgramarOS os={os} fechar={() => setProgramar(false)} salva={recarregar} /></div>}
       {material && <div onClick={(e) => e.stopPropagation()}><MaterialApoio osId={os.id} numero={os.numero} fechar={() => { setMaterial(false); recarregar(); }} /></div>}
       {foto && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/90 p-4" onClick={(e) => { e.stopPropagation(); setFoto(null); }}>

@@ -36,6 +36,8 @@ export type OrdemServico = {
   pausa_motivo: string | null;
   reaberta_em?: string | null;
   reaberta_motivo?: string | null;
+  programada_inicio?: string | null; // backlog programado para um dia (vai ao técnico às 06h do dia)
+  programada_fim?: string | null;
   criado_em: string;
   tecnico?: { nome: string } | null;
 };
