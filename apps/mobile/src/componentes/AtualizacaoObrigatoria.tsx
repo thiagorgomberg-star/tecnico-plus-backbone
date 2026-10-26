@@ -37,6 +37,7 @@ export default function AtualizacaoObrigatoria() {
           <Icone nome="download" tamanho={22} cor="#fff" />
           <Text style={s.botaoTexto}>Baixar versão nova</Text>
         </Pressable>
+        <Text style={s.link} selectable onPress={() => Linking.openURL(LINK_APK)}>{LINK_APK}</Text>
         <Text style={s.nota}>Registros ainda não enviados não se perdem na atualização.</Text>
       </View>
     </Modal>
@@ -52,5 +53,6 @@ const s = StyleSheet.create({
   passo: { fontSize: 15, color: cores.texto },
   botao: { flexDirection: 'row', gap: 10, backgroundColor: cores.primaria, borderRadius: 14, height: 58, alignItems: 'center', justifyContent: 'center', marginTop: 24 },
   botaoTexto: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  link: { fontSize: 12, color: cores.primaria, textAlign: 'center', marginTop: 12, textDecorationLine: 'underline' },
   nota: { fontSize: 13, color: cores.suave, textAlign: 'center', marginTop: 12 },
 });
