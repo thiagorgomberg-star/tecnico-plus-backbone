@@ -21,6 +21,7 @@ export default function FotosDaOS({ osId, podeExcluir }: { osId: string; podeExc
       const locais: Foto[] = fila.flatMap((i) => (i.tipo === 'foto' && i.osId === osId && (i.tipoAnexo === 'foto_antes' || i.tipoAnexo === 'foto_depois')
         ? [{ uri: i.arquivo, tipo: i.tipoAnexo, filaId: i.id, tiradaEm: i.tiradaEm }] : []));
       const excluindo = new Set(fila.flatMap((i) => (i.tipo === 'rpc' && i.nome === 'excluir_foto_os' ? [String(i.args.p_caminho)] : [])));
+      if (vivo) setFotos((v) => [...v.filter((x) => !x.filaId), ...locais]); // as do celular aparecem na hora, mesmo sem sinal
       let enviadas: Foto[] = [];
       try {
         const { data } = await supabase.from('os_anexos').select('caminho_arquivo, tipo, tirada_em, criado_em')
