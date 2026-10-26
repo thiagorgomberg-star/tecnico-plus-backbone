@@ -87,6 +87,26 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
     fechar();
   }
   const fotos = anexos.filter((a) => a.tipo === "foto_antes" || a.tipo === "foto_depois");
+
+  // Navegar entre as fotos da O.S. no visualizador (setas na tela e no teclado; Esc fecha).
+  const posFoto = foto ? Math.max(0, fotos.findIndex((f) => f.id === foto.id)) : 0;
+  const andarFoto = useCallback((passo: number) => {
+    if (!fotos.length) return;
+    setFoto((atual) => {
+      const i = atual ? fotos.findIndex((f) => f.id === atual.id) : 0;
+      return fotos[(i + passo + fotos.length) % fotos.length];
+    });
+  }, [fotos]);
+  useEffect(() => {
+    if (!foto) return;
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") andarFoto(1);
+      else if (e.key === "ArrowLeft") andarFoto(-1);
+      else if (e.key === "Escape") setFoto(null);
+    };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, [foto, andarFoto]);
   const apoio = anexos.filter((a) => a.tipo === "documento");
   const assinatura = [...anexos].reverse().find((a) => a.tipo === "assinatura");
 
@@ -263,8 +283,19 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/90 p-4" onClick={(e) => { e.stopPropagation(); setFoto(null); }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={foto.url} alt="Foto ampliada" className="max-h-full max-w-full object-contain" />
+          <span className="absolute left-4 top-4 rounded-lg bg-black/60 px-3 py-1.5 text-sm text-white">
+            Foto {posFoto + 1} de {fotos.length} · {quando(foto.tirada_em ?? foto.criado_em)}
+          </span>
           <a href={foto.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
             className="absolute right-4 top-4 rounded-lg bg-white px-3 py-1.5 text-sm font-medium">Abrir original</a>
+          {fotos.length > 1 && (
+            <>
+              <button aria-label="Foto anterior" onClick={(e) => { e.stopPropagation(); andarFoto(-1); }}
+                className="absolute left-3 top-1/2 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-3xl text-gray-900 hover:bg-white">‹</button>
+              <button aria-label="Próxima foto" onClick={(e) => { e.stopPropagation(); andarFoto(1); }}
+                className="absolute right-3 top-1/2 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-3xl text-gray-900 hover:bg-white">›</button>
+            </>
+          )}
         </div>
       )}
     </div>

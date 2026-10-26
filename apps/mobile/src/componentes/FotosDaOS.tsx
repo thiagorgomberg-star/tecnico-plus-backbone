@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { cores } from '../lib/estilo';
@@ -54,6 +54,11 @@ export default function FotosDaOS({ osId, podeExcluir }: { osId: string; podeExc
     ]);
   }
 
+  // Navegar entre as fotos com as setas ou arrastando para os lados.
+  const pos = aberta ? Math.max(0, fotos.findIndex((f) => f.uri === aberta.uri)) : 0;
+  const andar = (passo: number) => setAberta(fotos[(pos + passo + fotos.length) % fotos.length]);
+  const toqueX = useRef(0);
+
   if (!fotos.length) return null;
   return (
     <View style={s.grade}>
@@ -65,8 +70,25 @@ export default function FotosDaOS({ osId, podeExcluir }: { osId: string; podeExc
       ))}
       <Modal visible={!!aberta} transparent animationType="fade" onRequestClose={() => setAberta(null)} supportedOrientations={['portrait', 'landscape']}>
         <Pressable style={s.fundo} onPress={() => setAberta(null)}>
-          {aberta ? <Image source={{ uri: aberta.uri }} style={{ width: '100%', height: '78%' }} resizeMode="contain" /> : null}
-          {aberta ? <Text style={s.legendaGrande}>{aberta.tipo === 'foto_antes' ? 'Antes' : 'Depois'}{aberta.tiradaEm ? ` · ${new Date(aberta.tiradaEm).toLocaleString('pt-BR')}` : ''}</Text> : null}
+          {aberta ? (
+            <View style={{ width: '100%', height: '78%' }}
+              onStartShouldSetResponder={() => true /* arrastar a foto não fecha a tela */}
+              onTouchStart={(e) => { toqueX.current = e.nativeEvent.pageX; }}
+              onTouchEnd={(e) => { const dx = e.nativeEvent.pageX - toqueX.current; if (Math.abs(dx) > 50 && fotos.length > 1) andar(dx < 0 ? 1 : -1); }}>
+              <Image source={{ uri: aberta.uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+              {fotos.length > 1 ? (
+                <>
+                  <Pressable style={[s.seta, { left: 4 }]} onPress={() => andar(-1)} hitSlop={10} accessibilityLabel="Foto anterior">
+                    <Icone nome="chevron-left" tamanho={34} cor="#fff" />
+                  </Pressable>
+                  <Pressable style={[s.seta, { right: 4 }]} onPress={() => andar(1)} hitSlop={10} accessibilityLabel="Próxima foto">
+                    <Icone nome="chevron-right" tamanho={34} cor="#fff" />
+                  </Pressable>
+                </>
+              ) : null}
+            </View>
+          ) : null}
+          {aberta ? <Text style={s.legendaGrande}>{fotos.length > 1 ? `${pos + 1} de ${fotos.length} · ` : ''}{aberta.tipo === 'foto_antes' ? 'Antes' : 'Depois'}{aberta.tiradaEm ? ` · ${new Date(aberta.tiradaEm).toLocaleString('pt-BR')}` : ''}</Text> : null}
           {aberta && podeExcluir ? (
             <Pressable style={s.excluir} onPress={() => excluir(aberta)}>
               <Icone nome="trash-can-outline" tamanho={18} cor={cores.perigo} />
@@ -84,6 +106,7 @@ const s = StyleSheet.create({
   miniatura: { width: 104, height: 78, borderRadius: 8, backgroundColor: '#DCE4EE' },
   legenda: { fontSize: 11.5, color: cores.suave, marginTop: 2 },
   fundo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center', padding: 12 },
+  seta: { position: 'absolute', top: '50%', marginTop: -26, width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   legendaGrande: { color: '#fff', marginTop: 10, fontSize: 13 },
   excluir: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14, backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
 });
