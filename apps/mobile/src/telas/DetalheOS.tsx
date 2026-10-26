@@ -13,6 +13,7 @@ import FotosReferencia from '../componentes/FotosReferencia';
 import MaterialApoio from '../componentes/MaterialApoio';
 import { cores, corDoStatus, fundoDe, sombra } from '../lib/estilo';
 import { Caixa, caixasAtuais } from '../lib/caixas';
+import FotosDaOS from '../componentes/FotosDaOS';
 import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
 import { textoSla } from '../lib/formato';
 import { posicaoAtual } from '../lib/localizacao';
@@ -69,7 +70,8 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
       .select('id', { count: 'exact', head: true })
       .eq('os_id', os.id)
       .in('tipo', ['foto_antes', 'foto_depois']);
-    if (count != null) setFotosEnviadas(count);
+    const excluindo = pendentes.filter((i) => i.tipo === 'rpc' && i.nome === 'excluir_foto_os').length;
+    if (count != null) setFotosEnviadas(Math.max(count - excluindo, 0));
   }, [os.id]);
 
   // Assina com a assinatura cadastrada do técnico; na primeira vez abre o quadro para cadastrar.
@@ -389,6 +391,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
                 <Text style={s.botaoTexto}>Tirar fotos</Text>
               </Pressable>
             ) : null}
+            <FotosDaOS osId={os.id} podeExcluir={podeFotografar} />
           </View>
         ) : null}
 

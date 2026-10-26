@@ -5,7 +5,7 @@ import { Alert } from 'react-native';
 
 import { Caixa } from './caixas';
 import { itensPendentes } from './fila';
-import { descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, localDgo, midiasKmz, posicoesDgo, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ, descreverSaidas } from './fusao';
+import { CaixaRede, kmlLances, descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, localDgo, midiasKmz, posicoesDgo, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ, descreverSaidas } from './fusao';
 import { supabase } from './supabase';
 import { OrdemServico } from './tipos';
 
@@ -38,7 +38,9 @@ export function kmlDasCaixas(os: Pick<OrdemServico, 'numero' | 'titulo' | 'tipo'
         <Point><coordinates>${c.longitude},${c.latitude},0</coordinates></Point>
       </Placemark>`;
   });
-  const linha = comLocal.length > 1 ? `
+  // Lances com comprimento (metragem do cabo ou GPS); sem caixas encadeadas, só o percurso na ordem em que foram lançadas.
+  const lances = kmlLances(caixas as unknown as CaixaRede[]);
+  const linha = lances ? `\n${lances}` : comLocal.length > 1 ? `
     <Placemark>
       <name>Percurso das caixas · O.S. ${os.numero}</name>
       <Style><LineStyle><color>ff0060ff</color><width>3</width></LineStyle></Style>

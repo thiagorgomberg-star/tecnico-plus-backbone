@@ -1,7 +1,7 @@
 // KMZ das caixas de emenda (painel e backup semanal). Recebe o cliente do Supabase para rodar também fora do navegador.
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { CaixaRede, descreverFibra, descreverSaidas, faixasDaBandeja, FotoKmz, htmlPreviaPlano, localDgo, midiasKmz, origemNaoCadastrada, posicoesDgo, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from "./fusao";
+import { CaixaRede, kmlLances, descreverFibra, descreverSaidas, faixasDaBandeja, FotoKmz, htmlPreviaPlano, localDgo, midiasKmz, origemNaoCadastrada, posicoesDgo, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from "./fusao";
 
 // Sem imports do painel além de fusao.ts: a função backup-drive do Supabase usa uma cópia idêntica deste arquivo.
 export type CaixaKmz = CaixaRede & {
@@ -66,6 +66,7 @@ export async function montarKmz(cliente: SupabaseClient, caixas: CaixaKmz[], red
     <name>Caixas de emenda - Técnico Plus</name>
 ${Object.entries(estilos).map(([id, cor]) => `    <Style id="${id}"><IconStyle><color>${cor}</color><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle></Style>`).join("\n")}
 ${pins.join("\n")}
+${kmlLances(caixas)}
   </Document>
 </kml>
 `;

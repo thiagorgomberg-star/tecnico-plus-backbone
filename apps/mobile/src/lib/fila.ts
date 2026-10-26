@@ -116,7 +116,7 @@ export function descreverItem(i: ItemFila) {
     case 'inventario': return 'Inventário (foto de ferramenta)';
     case 'os': return 'Atualização da O.S.';
     case 'kmz': return `KMZ da rota · ${i.nome}`;
-    case 'rpc': return i.nome === 'excluir_foto_caixa' ? 'Exclusão de foto' : 'Ação no servidor';
+    case 'rpc': return i.nome === 'excluir_foto_caixa' || i.nome === 'excluir_foto_os' ? 'Exclusão de foto' : 'Ação no servidor';
     case 'excluir': return `Exclusão · ${ROTULO_TABELA[i.tabela] ?? i.tabela}`;
     default: return ROTULO_TABELA[i.tabela] ?? i.tabela;
   }

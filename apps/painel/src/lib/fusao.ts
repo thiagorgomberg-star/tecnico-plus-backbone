@@ -754,3 +754,31 @@ export function refinarPorMarcas(r: Rompimento, marcas: MarcaNoCaminho[], perto:
   }
   return null;
 }
+
+// Pasta de KML com uma linha por lance (ponto anterior → ponto seguinte) e o comprimento no nome:
+// pela metragem do cabo quando as duas marcas existem; senão estimado pelo GPS (reta + reservas).
+export function kmlLances(caixas: CaixaRede[]) {
+  const porId = new Map(caixas.map((c) => [c.id, c]));
+  const linhas: string[] = [];
+  let total = 0;
+  for (const c of caixas) {
+    const ant = c.origem_caixa_id ? porId.get(c.origem_caixa_id) : null;
+    if (!ant || !temLocal(ant) || !temLocal(c)) continue;
+    const m = medirLance(ant, c.origem_saida ?? 1, c);
+    if (m.metros != null) total += m.metros;
+    const reservas = (c.reservas_lance ?? []).filter((r) => Number(r.metros) > 0);
+    const desc = [
+      m.metros == null ? 'Sem metragem' : m.fonte === 'cabo' ? `Pela metragem do cabo: marca ${m.marcaSaida} → ${m.marcaEntrada}` : 'Estimado pelo GPS (linha reta + reservas)',
+      ant.reserva_m ? `Reserva em ${ant.identificacao}: ${ant.reserva_m} m` : null,
+      ...reservas.map((r) => `Reserva no caminho: ${r.metros} m${r.marca != null ? ` (marca ${r.marca})` : ''}${r.obs ? ` · ${r.obs}` : ''}`),
+    ].filter(Boolean).map((t) => esc(String(t))).join('<br>');
+    const pts = [ant, ...reservas.filter((r) => r.lat != null && r.lng != null).map((r) => ({ latitude: r.lat, longitude: r.lng })), c]
+      .map((p) => `${Number(p.longitude).toFixed(7)},${Number(p.latitude).toFixed(7)},0`).join(' ');
+    const cor = m.fonte === 'cabo' ? 'ff00c000' : 'ff00a5ff';
+    linhas.push(`      <Placemark><name>${esc(`${ant.identificacao} → ${c.identificacao}${m.metros != null ? ` · ${fmtMetros(m.metros)}` : ''}`)}</name>`
+      + `<description><![CDATA[${desc}]]></description><Style><LineStyle><color>${cor}</color><width>3</width></LineStyle></Style>`
+      + `<LineString><tessellate>1</tessellate><coordinates>${pts}</coordinates></LineString></Placemark>`);
+  }
+  if (!linhas.length) return '';
+  return `    <Folder>\n      <name>${esc(`Lances (${linhas.length}) · ${fmtMetros(total)} de cabo`)}</name>\n${linhas.join('\n')}\n    </Folder>`;
+}
