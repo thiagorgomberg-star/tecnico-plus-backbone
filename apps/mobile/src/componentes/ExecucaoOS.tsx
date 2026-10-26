@@ -17,7 +17,7 @@ const UNIDADES = ['un', 'm', 'km', 'pç', 'cx', 'rolo', 'kg', 'h'];
 
 // Serviços executados, materiais utilizados e técnicos de apoio da O.S. Tudo funciona sem internet.
 // Item que não está na lista: o técnico cadastra (CAIXA ALTA) e lança; ele fica aguardando a aprovação do supervisor.
-export default function ExecucaoOS({ osId, podeEditar, euId, souApoio }: { osId: string; podeEditar: boolean; euId: string | null; souApoio?: boolean }) {
+export default function ExecucaoOS({ osId, podeEditar, euId, souApoio, tipoOs }: { osId: string; podeEditar: boolean; euId: string | null; souApoio?: boolean; tipoOs?: string }) {
   // Quem é apoio lança serviços e materiais, mas a lista de apoio é do técnico responsável.
   const editaApoio = podeEditar && !souApoio;
   const [catalogo, setCatalogo] = useState<Item[]>([]);
@@ -33,6 +33,21 @@ export default function ExecucaoOS({ osId, podeEditar, euId, souApoio }: { osId:
   const [busca, setBusca] = useState('');
   const [novo, setNovo] = useState<{ nome: string; unidade: string } | null>(null);
   const cacheOs = `execucao-${osId}`;
+  // Itens mais lançados neste tipo de O.S. (últimos 180 dias) aparecem primeiro.
+  const [usados, setUsados] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!tipoOs) return;
+    const chave = `mais-usados-${tipoOs}`;
+    AsyncStorage.getItem(chave).then((v) => { if (v) setUsados(JSON.parse(v)); });
+    supabase.rpc('itens_mais_usados', { p_tipo: tipoOs }).then(({ data }) => {
+      if (!data) return;
+      const mapa: Record<string, number> = {};
+      (data as { item_id: string; vezes: number }[]).forEach((x) => { mapa[x.item_id] = x.vezes; });
+      setUsados(mapa);
+      AsyncStorage.setItem(chave, JSON.stringify(mapa));
+    });
+  }, [tipoOs]);
 
   useEffect(() => {
     AsyncStorage.multiGet([CACHE_CATALOGO, CACHE_TECNICOS, cacheOs]).then(([cat, tec, os]) => {
@@ -70,7 +85,11 @@ export default function ExecucaoOS({ osId, podeEditar, euId, souApoio }: { osId:
   }, [cacheOs, lancamentos, apoio]);
 
   const porId = useMemo(() => new Map(catalogo.map((c) => [c.id, c])), [catalogo]);
-  const opcoes = catalogo.filter((c) => c.categoria === categoria && c.nome.toLowerCase().includes(busca.trim().toLowerCase()));
+  const opcoes = catalogo
+    .filter((c) => c.categoria === categoria && c.nome.toLowerCase().includes(busca.trim().toLowerCase()))
+    .sort((a, b) => (usados[b.id] ?? 0) - (usados[a.id] ?? 0));
+  // Os 5 primeiros com uso ganham a estrela.
+  const destaque = new Set(opcoes.filter((c) => usados[c.id]).slice(0, 5).map((c) => c.id));
   const escolhido = itemId ? porId.get(itemId) : null;
 
   async function lancar() {
@@ -176,14 +195,14 @@ export default function ExecucaoOS({ osId, podeEditar, euId, souApoio }: { osId:
               </Pressable>
             ))}
           </View>
-          {catalogo.filter((c) => c.categoria === categoria).length > 8 ? (
-            <TextInput placeholderTextColor={cores.apagado} style={s.campo} placeholder="Buscar..." value={busca} onChangeText={setBusca} />
-          ) : null}
+          <Text style={s.rotuloBusca}>Buscar na lista</Text>
+          <TextInput placeholderTextColor={cores.apagado} style={s.campo} placeholder="Digite parte do nome" value={busca} onChangeText={setBusca} />
+          {destaque.size ? <Text style={s.dicaUsados}>★ = mais usados neste tipo de O.S.</Text> : null}
           <View style={s.chips}>
             {opcoes.map((c) => (
               <Pressable key={c.id} style={[s.chip, itemId === c.id && s.chipAtivo, c.aprovado === false && s.chipPendente]}
                 onPress={() => { setItemId(c.id); setNovo(null); }}>
-                <Text style={[s.chipTexto, itemId === c.id && { color: '#fff' }]}>{c.nome.toUpperCase()}{c.aprovado === false ? ' ⏳' : ''}</Text>
+                <Text style={[s.chipTexto, itemId === c.id && { color: '#fff' }]}>{destaque.has(c.id) ? '★ ' : ''}{c.nome.toUpperCase()}{c.aprovado === false ? ' ⏳' : ''}</Text>
               </Pressable>
             ))}
             {opcoes.length === 0 && !busca ? <Text style={s.vazio}>Nenhum item na lista.</Text> : null}
@@ -282,4 +301,6 @@ const s = StyleSheet.create({
   campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 6, padding: 10, fontSize: 16, color: cores.texto, backgroundColor: '#fff', marginTop: 6 },
   botao: { backgroundColor: cores.primaria, borderRadius: 6, paddingHorizontal: 18, justifyContent: 'center' },
   botaoTexto: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  rotuloBusca: { fontSize: 13, fontWeight: '700', color: cores.apagado, marginTop: 8 },
+  dicaUsados: { fontSize: 12, color: cores.apagado, marginTop: 4 },
 });

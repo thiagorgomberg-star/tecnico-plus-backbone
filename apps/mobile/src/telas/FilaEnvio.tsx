@@ -58,7 +58,8 @@ export default function FilaEnvio({ voltar }: { voltar: () => void }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: cores.fundo }}>
-      <Cabecalho titulo="Envios pendentes" subtitulo="O que ainda não chegou ao servidor" voltar={voltar} />
+      <Cabecalho titulo="Envios pendentes" subtitulo="O que ainda não chegou ao servidor" voltar={voltar}
+        ajuda="Registros e fotos salvos no celular que ainda não chegaram ao servidor. Eles são enviados sozinhos quando há internet. Se a opção Fotos só no Wi-Fi estiver ligada, as fotos esperam uma rede Wi-Fi." />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
         <Pressable style={[s.botao, enviando && { opacity: 0.6 }]} onPress={enviarAgora} disabled={enviando}>
           {enviando ? <ActivityIndicator color="#fff" /> : <Icone nome="cloud-upload-outline" tamanho={20} cor="#fff" />}

@@ -29,7 +29,7 @@ import PontoVistoria from './PontoVistoria';
 type Evento = { id: number; status_novo: StatusOS; criado_em: string };
 type Props = {
   os: OrdemServico; euId: string | null; usuario: { nome: string; cargo: string | null };
-  voltar: () => void; abrirCamera: (fotosJaFeitas: number) => void;
+  voltar: () => void; abrirCamera: (fotosJaFeitas: number, tipo?: 'foto_antes' | 'foto_depois') => void;
 };
 type Aba = 'detalhes' | 'execucao' | 'postes' | 'caixas' | 'fotos' | 'historico';
 
@@ -50,6 +50,8 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
   const [observacao, setObservacao] = useState(inicial.observacao_tecnico ?? '');
   const [fotosEnviadas, setFotosEnviadas] = useState(0);
   const [fotosNaFila, setFotosNaFila] = useState(0);
+  const [fotosPorTipo, setFotosPorTipo] = useState({ antes: 0, depois: 0 });
+  const [lancamentos, setLancamentos] = useState(0);
   const [pedindoPausa, setPedindoPausa] = useState(false);
   const tecladoAberto = useAlturaTeclado();
   const [motivoPausa, setMotivoPausa] = useState('');
@@ -62,16 +64,28 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
   const [assinando, setAssinando] = useState(false);
   const [assinadoPor, setAssinadoPor] = useState<string | null>(null);
 
+  // Conta as fotos (antes/depois) e os lançamentos de execução, somando o que ainda está na fila do celular.
   const contarFotos = useCallback(async () => {
     const pendentes = await itensPendentes();
-    setFotosNaFila(pendentes.filter((i) => i.tipo === 'foto' && i.osId === os.id && (i.tipoAnexo === 'foto_antes' || i.tipoAnexo === 'foto_depois')).length);
-    const { count } = await supabase
-      .from('os_anexos')
-      .select('id', { count: 'exact', head: true })
-      .eq('os_id', os.id)
-      .in('tipo', ['foto_antes', 'foto_depois']);
-    const excluindo = pendentes.filter((i) => i.tipo === 'rpc' && i.nome === 'excluir_foto_os').length;
-    if (count != null) setFotosEnviadas(Math.max(count - excluindo, 0));
+    const naFila = pendentes.flatMap((i) => (i.tipo === 'foto' && i.osId === os.id && (i.tipoAnexo === 'foto_antes' || i.tipoAnexo === 'foto_depois') ? [i.tipoAnexo] : []));
+    setFotosNaFila(naFila.length);
+    const lancNaFila = pendentes.filter((i) => i.tipo === 'inserir' && i.tabela === 'os_servicos_executados' && i.linha.os_id === os.id).length;
+    const [{ data }, { count: lancados }] = await Promise.all([
+      supabase.from('os_anexos').select('tipo, caminho_arquivo').eq('os_id', os.id).in('tipo', ['foto_antes', 'foto_depois']),
+      supabase.from('os_servicos_executados').select('id', { count: 'exact', head: true }).eq('os_id', os.id),
+    ]);
+    const excluindo = new Set(pendentes.flatMap((i) => (i.tipo === 'rpc' && i.nome === 'excluir_foto_os' ? [String(i.args.p_caminho)] : [])));
+    if (data) {
+      const enviadas = data.filter((a) => !excluindo.has(a.caminho_arquivo));
+      setFotosEnviadas(enviadas.length);
+      setFotosPorTipo({
+        antes: enviadas.filter((a) => a.tipo === 'foto_antes').length + naFila.filter((t) => t === 'foto_antes').length,
+        depois: enviadas.filter((a) => a.tipo === 'foto_depois').length + naFila.filter((t) => t === 'foto_depois').length,
+      });
+    } else {
+      setFotosPorTipo((v) => ({ antes: Math.max(v.antes, naFila.filter((t) => t === 'foto_antes').length), depois: Math.max(v.depois, naFila.filter((t) => t === 'foto_depois').length) }));
+    }
+    setLancamentos((lancados ?? 0) + lancNaFila);
   }, [os.id]);
 
   // Assina com a assinatura cadastrada do técnico; na primeira vez abre o quadro para cadastrar.
@@ -128,14 +142,29 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
   const souApoio = !!euId && !!os.tecnico_id && os.tecnico_id !== euId;
   const acao = souApoio ? undefined : continuando ? { status: 'em_execucao' as StatusOS, rotulo: 'Retomar atendimento' } : proximaAcao[os.status];
   const podeEditar = EM_CAMPO.includes(os.status);
+
+  // Passo a passo do atendimento: mostra o que já foi feito e qual é o próximo passo, com um botão para ele.
+  const etapas: Etapa[] = [
+    { chave: 'iniciar', rotulo: 'Iniciar a O.S.', feito: !['enviada', 'aceita'].includes(os.status), icone: 'play-circle-outline', botao: 'Iniciar O.S.', acao: () => avancar() },
+    ...(ehCorretiva(os.tipo) ? [{ chave: 'local', rotulo: 'Localizar o evento', feito: !!os.evento_localizado_em, icone: 'crosshairs-gps' as NomeIcone, botao: 'Localizei o evento', acao: () => localizarEvento() }] : []),
+    { chave: 'antes', rotulo: 'Fotos do antes', feito: fotosPorTipo.antes > 0, icone: 'camera-outline', botao: 'Tirar fotos do antes', acao: () => abrirCamera(totalFotos, 'foto_antes') },
+    { chave: 'execucao', rotulo: 'Lançar o que foi feito', feito: lancamentos > 0, icone: 'wrench-outline', botao: 'Lançar serviços e materiais', acao: () => setAba('execucao') },
+    { chave: 'depois', rotulo: 'Fotos do depois', feito: fotosPorTipo.depois > 0, icone: 'camera-plus-outline', botao: 'Tirar fotos do depois', acao: () => abrirCamera(totalFotos, 'foto_depois') },
+    { chave: 'assinar', rotulo: 'Assinar a O.S.', feito: !!assinadoPor, icone: 'draw-pen', botao: 'Assinar O.S.', acao: () => assinar() },
+  ];
+  const mostrarEtapas = !souApoio && ['enviada', 'aceita', 'em_execucao', 'devolvida'].includes(os.status);
+  const proxima = etapas.find((e) => !e.feito);
   const podeFotografar = os.status === 'em_execucao' || os.status === 'aceita' || os.status === 'devolvida';
 
   async function avancar() {
     if (!acao) return;
-    if (acao.status === 'concluida' && !assinadoPor) {
-      const seguir = await new Promise<boolean>((ok) => Alert.alert('O.S. sem assinatura', 'Assinar a O.S. antes de concluir?', [
-        { text: 'Assinar O.S.', onPress: () => { assinar(); ok(false); } },
-        { text: 'Concluir sem', onPress: () => ok(true) },
+    // Antes de concluir: mostra tudo o que falta de uma vez, com atalho para resolver o primeiro.
+    const faltando = etapas.filter((e) => !e.feito && e.chave !== 'iniciar');
+    if (acao.status === 'concluida' && faltando.length) {
+      const seguir = await new Promise<boolean>((ok) => Alert.alert('Ainda falta', faltando.map((e) => `•  ${e.rotulo}`).join('\n'), [
+        { text: 'Cancelar', style: 'cancel', onPress: () => ok(false) },
+        { text: 'Concluir assim', onPress: () => ok(true) },
+        { text: faltando[0].botao, onPress: () => { faltando[0].acao(); ok(false); } },
       ]));
       if (!seguir) return;
     }
@@ -246,9 +275,10 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
         subtitulo={`${os.tipo}${os.ticket_acionamento ? ` · ${os.ticket_acionamento}` : ''}`}
         voltar={voltar}
         acoes={['concluida', 'baixada'].includes(os.status)
-          ? [{ icone: 'map-marker-multiple', rotulo: 'KMZ das caixas', aoTocar: () => enviarKmz() },
-            { icone: 'file-pdf-box', rotulo: 'Relatório PDF', aoTocar: () => enviarRelatorio() }] : undefined}
+          ? [{ icone: 'map-marker-multiple', rotulo: 'KMZ das caixas', curto: 'KMZ', aoTocar: () => enviarKmz() },
+            { icone: 'file-pdf-box', rotulo: 'Relatório PDF', curto: 'PDF', aoTocar: () => enviarRelatorio() }] : undefined}
         estendido={44}
+        ajuda="Siga o PASSO A PASSO: o botão azul sempre mostra o próximo passo (iniciar, localizar o evento, fotos do antes, lançar o que foi feito, fotos do depois, assinar). Itens com ✓ já estão feitos. Se tentar concluir faltando algo, o app avisa o que falta. Tudo funciona sem internet e é enviado depois."
       />
       <View style={s.resumo}>
         <View style={[s.resumoIcone, { backgroundColor: fundoDe(corStatus) }]}>
@@ -309,6 +339,38 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
               <Aviso cor={cores.alerta} texto={`Pausa solicitada (${os.pausa_motivo ?? ''}). Aguardando o supervisor autorizar.`} />
             ) : null}
 
+            {mostrarEtapas ? (
+              <View style={s.bloco}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={s.rotulo}>PASSO A PASSO</Text>
+                  <Text style={[s.rotulo, { color: cores.primaria }]}>{etapas.filter((e) => e.feito).length} de {etapas.length}</Text>
+                </View>
+                <View style={s.progresso}>
+                  <View style={[s.progressoFeito, { width: `${(etapas.filter((e) => e.feito).length / etapas.length) * 100}%` }]} />
+                </View>
+                {etapas.map((e, i) => (
+                  <Pressable key={e.chave} style={s.etapa} onPress={e.feito || e.chave === 'iniciar' ? undefined : e.acao}>
+                    <View style={[s.etapaMarca, e.feito ? { backgroundColor: cores.sucesso } : e === proxima ? { backgroundColor: cores.primaria } : null]}>
+                      {e.feito ? <Icone nome="check" tamanho={16} cor="#fff" /> : <Text style={[s.etapaNumero, e === proxima && { color: '#fff' }]}>{i + 1}</Text>}
+                    </View>
+                    <Text style={[s.etapaTexto, e.feito && { color: cores.suave, textDecorationLine: 'line-through' }, e === proxima && { fontWeight: '700', color: cores.texto }]}>
+                      {e.rotulo}
+                    </Text>
+                  </Pressable>
+                ))}
+                {proxima && proxima.chave !== 'iniciar' && (proxima.chave !== 'antes' && proxima.chave !== 'depois' || podeFotografar) ? (
+                  <Pressable style={[s.botaoBloco, { backgroundColor: cores.primaria, flexDirection: 'row', justifyContent: 'center', gap: 8 }]} onPress={proxima.acao}>
+                    <Icone nome={proxima.icone} tamanho={22} cor="#fff" />
+                    <Text style={s.botaoTexto}>Próximo: {proxima.botao}</Text>
+                  </Pressable>
+                ) : !proxima ? (
+                  <Text style={[s.valor, { marginTop: 10, color: cores.sucesso, fontWeight: '700' }]}>Tudo feito. Toque em "Concluir O.S." lá embaixo.</Text>
+                ) : (
+                  <Text style={[s.valor, { marginTop: 10 }]}>Toque em "Iniciar O.S." lá embaixo para começar.</Text>
+                )}
+              </View>
+            ) : null}
+
             <View style={s.grade}>
               {os.endereco ? (
                 <>
@@ -346,10 +408,13 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
             <View style={s.grupo}>
             <Info icone="map-marker-outline" rotulo="Endereço / referência" valor={os.endereco} />
             <Info icone="text-box-outline" rotulo="Descrição" valor={os.descricao} />
-            <Info icone="ticket-confirmation-outline" rotulo="Ticket de acionamento" valor={os.ticket_acionamento} />
+            {os.os_clientes?.length ? os.os_clientes.map((c, i) => (
+              <Info key={i} icone="domain" rotulo={`Cliente: ${c.cliente?.nome ?? '—'}${c.cliente ? ` · SLA ${String(c.cliente.sla_horas).replace('.', ',')}h` : ''}`}
+                valor={[c.ticket ? `Ticket ${c.ticket}` : null, c.texto_acionamento].filter(Boolean).join('\n') || 'Sem ticket'} />
+            )) : <Info icone="ticket-confirmation-outline" rotulo="Ticket de acionamento" valor={os.ticket_acionamento} />}
             <Info icone="flag-outline" rotulo="Prioridade" valor={{ baixa: 'Baixa', media: 'Média', alta: 'Alta', emergencia: 'Emergência' }[os.prioridade]} />
             {os.sla_limite ? (
-              <Info icone="timer-outline" rotulo="Limite do SLA (4h)" valor={new Date(os.sla_limite).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} />
+              <Info icone="timer-outline" rotulo={os.os_clientes?.length ? 'Limite do SLA (menor entre os clientes)' : 'Limite do SLA (4h)'} valor={new Date(os.sla_limite).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} />
             ) : null}
             {ehCorretiva(os.tipo) && os.status !== 'baixada' && os.status !== 'cancelada' ? (
               <Info icone="crosshairs-gps" rotulo="Local do evento"
@@ -384,7 +449,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
           <CaixasOS osId={os.id} podeEditar={podeEditar} versao={versaoCaixas} abrir={(caixa, daOs) => setCaixaAberta({ caixa, daOs })} />
         ) : null}
 
-        {aba === 'execucao' ? <ExecucaoOS osId={os.id} podeEditar={podeEditar} euId={euId} souApoio={souApoio} /> : null}
+        {aba === 'execucao' ? <ExecucaoOS osId={os.id} podeEditar={podeEditar} euId={euId} souApoio={souApoio} tipoOs={os.tipo} /> : null}
 
         {aba === 'fotos' ? (
           <View style={s.bloco}>
@@ -507,7 +572,15 @@ function Aviso({ cor, texto }: { cor: string; texto: string }) {
   );
 }
 
+type Etapa = { chave: string; rotulo: string; feito: boolean; icone: NomeIcone; botao: string; acao: () => void };
+
 const s = StyleSheet.create({
+  progresso: { height: 8, borderRadius: 4, backgroundColor: cores.borda, marginTop: 8, marginBottom: 6, overflow: 'hidden' },
+  progressoFeito: { height: 8, borderRadius: 4, backgroundColor: cores.sucesso },
+  etapa: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  etapaMarca: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: cores.borda },
+  etapaNumero: { fontSize: 14, fontWeight: '700', color: cores.suave },
+  etapaTexto: { fontSize: 16, color: cores.texto2, flex: 1 },
   resumo: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: cores.cartao, padding: 16, marginHorizontal: 16, marginTop: -44,
     borderRadius: 20, shadowColor: '#0F2747', shadowOpacity: 0.14, shadowRadius: 18, shadowOffset: { width: 0, height: 6 }, elevation: 5 },
   resumoIcone: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
@@ -519,10 +592,10 @@ const s = StyleSheet.create({
     marginHorizontal: 16, marginTop: 12, borderRadius: 18, ...sombra },
   grupo: { backgroundColor: cores.cartao, marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', ...sombra },
   acao: { width: '25%', alignItems: 'center', paddingVertical: 8, borderRadius: 8 },
-  acaoIcone: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  acaoIcone: { width: 56, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   acaoFeito: { position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 9, backgroundColor: cores.sucesso,
     alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
-  acaoRotulo: { fontSize: 12, color: cores.texto, marginTop: 6, textAlign: 'center', paddingHorizontal: 2 },
+  acaoRotulo: { fontSize: 13.5, fontWeight: '600', color: cores.texto, marginTop: 6, textAlign: 'center', paddingHorizontal: 2 },
   secao: { color: cores.suave, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginHorizontal: 16, marginTop: 16, marginBottom: 6 },
   info: { flexDirection: 'row', gap: 14, backgroundColor: cores.cartao, paddingHorizontal: 16, paddingVertical: 12,
     borderBottomWidth: 1, borderBottomColor: cores.linha },
@@ -542,13 +615,13 @@ const s = StyleSheet.create({
   link: { color: cores.primaria, fontWeight: '600', marginTop: 6 },
   aviso: { backgroundColor: '#FFF8EC', borderLeftWidth: 4, padding: 12, marginHorizontal: 16, marginTop: 12, borderRadius: 12 },
   campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 12, padding: 12, color: cores.texto, fontSize: 15, minHeight: 80, textAlignVertical: 'top', backgroundColor: '#fff' },
-  botaoBloco: { borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 10 },
+  botaoBloco: { borderRadius: 14, paddingVertical: 17, alignItems: 'center', marginTop: 10 },
   fotosNumero: { fontSize: 44, fontWeight: '700' },
   evento: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   eventoPonto: { width: 10, height: 10, borderRadius: 5, marginRight: 10 },
   rodape: { backgroundColor: cores.cartao, padding: 12, borderTopLeftRadius: 22, borderTopRightRadius: 22,
     shadowColor: '#101828', shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: -4 }, elevation: 12 },
-  botaoRodape: { flex: 1, flexDirection: 'row', gap: 8, justifyContent: 'center', borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
+  botaoRodape: { flex: 1, flexDirection: 'row', gap: 8, justifyContent: 'center', borderRadius: 14, paddingVertical: 18, alignItems: 'center' },
   botaoSecundario: { backgroundColor: cores.cartao, borderWidth: 1, borderColor: cores.borda },
-  botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  botaoTexto: { color: '#fff', fontSize: 17, fontWeight: '700' },
 });

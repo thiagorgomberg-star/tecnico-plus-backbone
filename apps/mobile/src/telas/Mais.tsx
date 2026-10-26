@@ -12,11 +12,11 @@ import { supabase } from '../lib/supabase';
 import { descreverVeiculo, MeuVeiculo, meuVeiculo } from '../lib/veiculo';
 
 type Destino = 'preventiva' | 'escala' | 'rotas' | 'despesas' | 'frota' | 'inventario' | 'perfil' | 'evento' | 'curva' | 'rompimento' | 'fila';
-type Props = { nome: string; cargo: string | null; pendentes: number; abrir: (d: Destino) => void; sair: () => void };
+type Props = { nome: string; cargo: string | null; pendentes: number; abrir: (d: Destino) => void; sair: () => void; abrirGuia: () => void };
 
 const iniciais = (nome: string) => nome.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'T';
 
-export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
+export default function Mais({ nome, cargo, pendentes, abrir, sair, abrirGuia }: Props) {
   const [veiculo, setVeiculo] = useState<MeuVeiculo | null>(null);
   const [auxiliares, setAuxiliares] = useState<string[]>([]);
   const [foto, setFoto] = useState<string | null>(null);
@@ -85,13 +85,14 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
         </View>
         <Text style={s.secao}>CONTA</Text>
         <View style={s.grupo}>
+        {item('help-circle-outline', 'Guia rápido', 'Como usar o app em 4 telas', abrirGuia)}
         {item('cloud-upload-outline', 'Envios pendentes', pendentes > 0 ? `${pendentes} registro(s) aguardando envio` : 'Tudo enviado', () => abrir('fila'), pendentes > 0 ? cores.alerta : cores.sucesso)}
         {item('logout', 'Sair', pendentes > 0 ? `${pendentes} registro(s) ainda não enviados` : '', sair, cores.perigo)}
         {item('update', 'Buscar atualização', DATA_ATUALIZACAO
           ? `Atualizado em ${DATA_ATUALIZACAO.toLocaleDateString('pt-BR')} às ${DATA_ATUALIZACAO.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
           : 'Código original do APK', async () => Alert.alert('Atualização', await buscarAtualizacaoAgora()))}
         </View>
-        <Text style={s.versao}>Técnico Plus · versão {VERSAO_APP || 'desenvolvimento'}</Text>
+        <Text style={s.versao}>Técnico Plus · APK versão {VERSAO_APP || 'desenvolvimento'}{DATA_ATUALIZACAO ? ` · atualização ${DATA_ATUALIZACAO.toLocaleDateString('pt-BR')}` : ''}</Text>
       </ScrollView>
     </View>
   );

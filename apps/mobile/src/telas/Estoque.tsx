@@ -34,7 +34,8 @@ export default function Estoque({ euId }: { euId: string | null }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: cores.fundo }}>
-      <Cabecalho titulo="Meu estoque" subtitulo="Material liberado pelo almoxarifado backbone" />
+      <Cabecalho titulo="Meu estoque" subtitulo="Material liberado pelo almoxarifado backbone"
+        ajuda="Material que o almoxarifado liberou para você. O que você lança nas O.S. é descontado daqui." />
       <FlatList
         data={saldos}
         keyExtractor={(s) => s.item_id}

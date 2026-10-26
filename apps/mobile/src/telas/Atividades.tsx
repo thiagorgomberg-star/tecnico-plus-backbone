@@ -10,7 +10,6 @@ import Icone, { iconeDoTipo, NomeIcone } from '../componentes/Icone';
 import { caixasDaRede } from '../lib/caixas';
 import { baixarFotosDaRota } from '../lib/fotosCaixa';
 import { baixarMapaOffline } from '../lib/mapaOffline';
-import { LINK_APK, VERSAO_APP, versaoPublicada } from '../lib/atualizacao';
 import { bloqueioDeHoje, rotuloEscala } from '../lib/escala';
 import { cores, corDoStatus, fundoDe, sombra } from '../lib/estilo';
 import { aoMudarFila, itensPendentes } from '../lib/fila';
@@ -26,6 +25,7 @@ import {
 } from '../lib/jornada';
 import { abrirAjusteBateria, economiaBateriaLigada, garantirRastreio, SituacaoRastreio } from '../lib/rastreio';
 import { assumirBacklog, backlogGuardado, buscarBacklog, compartilharBacklogKmz, ItemBacklog } from '../lib/backlog';
+import { VERSAO_APP } from '../lib/atualizacao';
 import { posicaoRapida } from '../lib/localizacao';
 import { distanciaKm, navegarAte } from '../lib/navegacao';
 import { inventarioLocal, pendenciasInventario, precisaFoto } from '../lib/inventario';
@@ -66,7 +66,6 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   const [kmAnterior, setKmAnterior] = useState<number | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [semRede, setSemRede] = useState(false);
-  const [novaVersao, setNovaVersao] = useState<number | null>(null);
   // Aba da lista (Em andamento / Pendentes / Fechadas); null = escolhe sozinha a primeira com O.S.
   const [filtro, setFiltro] = useState<Grupo | null>(null);
   const [agora, setAgora] = useState(Date.now());
@@ -128,7 +127,6 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
       ...bl.filter((b) => b.lat != null && b.lng != null).map((b) => ({ lat: b.lat!, lng: b.lng! })),
     ])).catch(() => undefined);
     baixarFotosDaRota().catch(() => undefined);
-    versaoPublicada().then((v) => v && v > VERSAO_APP && setNovaVersao(v));
   }, []);
 
   // Mostra na hora o que está salvo no celular; o servidor atualiza em seguida (sem internet pode demorar).
@@ -141,7 +139,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
     setJornada(await lerJornada());
     buscarBacklog().then((b) => b && setBacklog(b)).catch(() => {});
     // O banco já limita o técnico às O.S. abertas e às encerradas nos últimos 7 dias.
-    const { data, error } = await supabase.from('ordens_servico').select('*');
+    const { data, error } = await supabase.from('ordens_servico').select('*, os_clientes(ticket, texto_acionamento, cliente:clientes(nome, sla_horas))');
     if (error || !data) {
       setSemRede(true);
       const cache = await AsyncStorage.getItem(CACHE_OS);
@@ -323,6 +321,13 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
     </Pressable>
   );
 
+  // Início focado: a O.S. da vez (a em execução; senão a de maior prioridade e SLA mais curto).
+  const PESO = { emergencia: 0, alta: 1, media: 2, baixa: 3 } as const;
+  const proximaOs = emExpediente ? abertas
+    .filter((o) => !(o.status === 'pausada' && o.continua_em) && (!o.tecnico_id || o.tecnico_id === euId))
+    .sort((a, b) => Number(b.status === 'em_execucao') - Number(a.status === 'em_execucao')
+      || PESO[a.prioridade] - PESO[b.prioridade] || (a.sla_limite ?? '9').localeCompare(b.sla_limite ?? '9'))[0] : undefined;
+
   const grupos: { chave: Grupo; rotulo: string; cor: string; ordens: OrdemServico[] }[] = [
     { chave: 'andamento', rotulo: 'Andamento', cor: corDoStatus.em_execucao, ordens: abertas.filter((o) => ['em_execucao', 'pausada'].includes(o.status)) },
     { chave: 'pendente', rotulo: 'Pendentes', cor: corDoStatus.enviada, ordens: abertas.filter((o) => !['em_execucao', 'pausada'].includes(o.status)) },
@@ -407,8 +412,9 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
     <View>
       <Cabecalho titulo={`${saudacao(hoje)}${primeiroNome ? `, ${primeiroNome}` : ''}`}
         subtitulo={`${diaSemana(hoje)}, ${dataCurta(hoje)} · Multivale Backbone`} estendido={74}
+        ajuda="Aqui é o seu dia. 1) Toque em Iniciar expediente ao começar. 2) O cartão azul mostra a próxima O.S.: use Rota para ir até o local e Abrir para trabalhar nela. 3) A faixa no topo mostra se há registros esperando internet: eles vão sozinhos quando o sinal voltar. 4) Para almoçar, use Iniciar refeição. 5) No fim do dia, encerre o expediente (só depois de fechar as O.S. abertas)."
         acoes={[
-          { icone: semRede ? 'cloud-off-outline' : pendentes > 0 ? 'cloud-upload-outline' : 'cloud-check-outline', rotulo: 'Sincronização',
+          { icone: semRede ? 'cloud-off-outline' : pendentes > 0 ? 'cloud-upload-outline' : 'cloud-check-outline', rotulo: 'Sincronização', curto: 'Envio',
             selo: pendentes, cor: sincronizando ? '#F5C26B' : undefined,
             aoTocar: () => Alert.alert('Sincronização', semRede ? `Sem internet. ${pendentes} registro(s) salvos no celular.` : pendentes ? `${pendentes} registro(s) enviando.` : 'Tudo enviado.') },
           { icone: 'refresh', rotulo: 'Atualizar', aoTocar: carregar },
@@ -513,7 +519,6 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
         ) : null}
       </View>
 
-      {novaVersao ? faixa('download', `Nova versão do app (${novaVersao}). Toque para atualizar.`, '#fff', cores.primaria, () => Linking.openURL(LINK_APK)) : null}
       {emExpediente && rastreio && rastreio.permissao !== 'sempre'
         ? faixa('map-marker-off-outline', 'Trajeto só é gravado com o app aberto. Toque, vá em Localização e escolha "Permitir o tempo todo".',
           cores.perigo, '#FDECEC', () => Linking.openSettings())
@@ -524,7 +529,30 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
       {inventarioFaltam > 0
         ? faixa('toolbox-outline', `Inventário Matinal: ${inventarioFaltam} item(ns) para fotografar. Toque para fazer.`, '#5B3A86', '#F3EEFA', abrirInventario)
         : null}
-      {semRede ? faixa('wifi-off', 'Sem internet. Tudo que você registrar fica salvo no celular.', '#7A4B00', '#FFF4E5') : null}
+
+      {proximaOs ? (
+        <Pressable style={({ pressed }) => [s.proxima, pressed && { opacity: 0.9 }]} onPress={() => abrirOS(proximaOs)}>
+          <Text style={s.proximaRotulo}>{proximaOs.status === 'em_execucao' ? 'EM ATENDIMENTO AGORA' : 'SUA PRÓXIMA O.S.'}</Text>
+          <Text style={s.proximaTitulo} numberOfLines={2}>{proximaOs.titulo}</Text>
+          <Text style={s.proximaInfo} numberOfLines={2}>
+            {proximaOs.tipo}{proximaOs.numero ? ` · #${proximaOs.numero}` : ''}{proximaOs.endereco ? `\n${proximaOs.endereco}` : ''}
+          </Text>
+          {proximaOs.sla_limite ? <Text style={[s.proximaInfo, { fontWeight: '700' }]}>{textoSla(proximaOs.sla_limite).texto}</Text> : null}
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+            {proximaOs.endereco ? (
+              <Pressable style={[s.proximaBotao, { backgroundColor: 'rgba(255,255,255,0.18)' }]}
+                onPress={() => navegarAte({ endereco: proximaOs.endereco, lat: null, lng: null }, `Ir até a O.S. #${proximaOs.numero}`)}>
+                <Icone nome="navigation-variant" tamanho={20} cor="#fff" />
+                <Text style={s.botaoTexto}>Rota</Text>
+              </Pressable>
+            ) : null}
+            <Pressable style={[s.proximaBotao, { backgroundColor: '#fff', flex: 1.4 }]} onPress={() => abrirOS(proximaOs)}>
+              <Icone nome={proximaOs.status === 'em_execucao' ? 'arrow-right-circle-outline' : 'play-circle-outline'} tamanho={20} cor={cores.primaria} />
+              <Text style={[s.botaoTexto, { color: cores.primaria }]}>{proximaOs.status === 'em_execucao' ? 'Continuar' : 'Abrir e iniciar'}</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      ) : null}
 
       <View style={s.segmento}>
         {abas.map((g) => {
@@ -612,7 +640,7 @@ const Cartao = memo(function Cartao({ os, abrir, apoio }: { os: OrdemServico; ab
           </View>
           <Text style={s.cartaoSub} numberOfLines={1}>
             {apoio ? <Text style={{ color: cores.primaria, fontWeight: '800' }}>APOIO · </Text> : null}
-            {os.tipo}{os.numero ? ` · #${os.numero}` : ''}{os.ticket_acionamento ? ` · ${os.ticket_acionamento}` : ''}
+            {os.tipo}{os.numero ? ` · #${os.numero}` : ''}{os.os_clientes?.length ? ` · ${os.os_clientes.map((c) => c.cliente?.nome).filter(Boolean).join(', ')}` : os.ticket_acionamento ? ` · ${os.ticket_acionamento}` : ''}
           </Text>
         </View>
         <View style={{ alignItems: 'flex-end', marginLeft: 8 }}>
@@ -721,7 +749,7 @@ const s = StyleSheet.create({
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 32, borderRadius: 16, backgroundColor: cores.cartao,
     borderWidth: 1, borderColor: cores.borda },
   chipAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
-  chipTexto: { fontSize: 12.5, fontWeight: '700', color: cores.texto2 },
+  chipTexto: { fontSize: 14, fontWeight: '700', color: cores.texto2 },
   seloIdade: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   bolinha: { width: 7, height: 7, borderRadius: 4 },
   verDetalhes: { fontSize: 11.5, color: cores.apagado, textAlign: 'center', marginTop: 8 },
@@ -737,19 +765,24 @@ const s = StyleSheet.create({
   heroDesde: { fontSize: 14, fontWeight: '500', color: cores.suave, letterSpacing: 0 },
   heroAjuda: { fontSize: 13, color: cores.suave, marginTop: 6 },
   situacao: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
-  situacaoTexto: { fontSize: 12.5, fontWeight: '700' },
+  situacaoTexto: { fontSize: 14, fontWeight: '700' },
   pulso: { width: 8, height: 8, borderRadius: 4 },
   metas: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 10 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaTexto: { fontSize: 12.5, color: cores.texto2 },
+  metaTexto: { fontSize: 14, color: cores.texto2 },
   campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 12, padding: 12, fontSize: 16, backgroundColor: '#F9FAFB', color: cores.texto },
   botoes: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  botao: { flex: 1, flexDirection: 'row', gap: 8, justifyContent: 'center', alignItems: 'center', borderRadius: 14, height: 50 },
+  botao: { flex: 1, flexDirection: 'row', gap: 8, justifyContent: 'center', alignItems: 'center', borderRadius: 14, height: 58 },
   quadrado: { width: 50, height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   botaoSecundario: { backgroundColor: cores.cartao, borderWidth: 1, borderColor: cores.borda },
-  botaoTexto: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  botaoTexto: { color: '#fff', fontSize: 16.5, fontWeight: '700' },
   faixa: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginTop: 10, paddingHorizontal: 14, paddingVertical: 11, borderRadius: 14 },
   faixaTexto: { flex: 1, fontSize: 13, fontWeight: '500' },
+  proxima: { backgroundColor: cores.primaria, marginHorizontal: 16, marginTop: 14, borderRadius: 18, padding: 16, ...sombra },
+  proximaRotulo: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '800', letterSpacing: 0.8 },
+  proximaTitulo: { color: '#fff', fontSize: 19, fontWeight: '800', marginTop: 4 },
+  proximaInfo: { color: 'rgba(255,255,255,0.9)', fontSize: 14, marginTop: 4 },
+  proximaBotao: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 12, paddingVertical: 12 },
   segmento: { flexDirection: 'row', backgroundColor: '#E2E7EE', borderRadius: 14, padding: 4, marginHorizontal: 16, marginTop: 16, marginBottom: 4 },
   segItem: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 11 },
   segAtivo: { backgroundColor: cores.cartao, ...sombra },
@@ -758,13 +791,13 @@ const s = StyleSheet.create({
   cartao: { backgroundColor: cores.cartao, borderRadius: 18, marginHorizontal: 16, marginTop: 12, paddingHorizontal: 14, paddingTop: 14, paddingBottom: 12, ...sombra },
   cartaoTopo: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   cartaoIcone: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
-  cartaoTitulo: { flex: 1, fontSize: 15.5, fontWeight: '700', color: cores.texto },
-  cartaoSub: { fontSize: 12.5, color: cores.suave, marginTop: 2 },
+  cartaoTitulo: { flex: 1, fontSize: 16.5, fontWeight: '700', color: cores.texto },
+  cartaoSub: { fontSize: 14, color: cores.suave, marginTop: 2 },
   cartaoHora: { fontSize: 15, fontWeight: '800' },
   cartaoHoraRotulo: { fontSize: 10, color: cores.apagado, letterSpacing: 0.5, marginTop: 1 },
   cartaoDivisor: { height: 1, backgroundColor: cores.linha, marginTop: 12, marginBottom: 10 },
   cartaoBase: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  cartaoEndereco: { flex: 1, fontSize: 12.5, color: cores.suave, marginRight: 8 },
+  cartaoEndereco: { flex: 1, fontSize: 14, color: cores.suave, marginRight: 8 },
   selo: { borderRadius: 8, paddingHorizontal: 9, paddingVertical: 3 },
   seloTexto: { fontSize: 11.5, fontWeight: '700' },
 });

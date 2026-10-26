@@ -122,7 +122,8 @@ export default function Despesas({ voltar, modo = 'despesas' }: { voltar: () => 
 
   return (
     <View style={estilo.tela}>
-      <Cabecalho titulo={modo === 'frota' ? 'Frota' : 'Despesas'} subtitulo={`Este mês: ${reais(totalMes)}`} voltar={voltar} />
+      <Cabecalho titulo={modo === 'frota' ? 'Frota' : 'Despesas'} subtitulo={`Este mês: ${reais(totalMes)}`} voltar={voltar}
+        ajuda="Lance cada gasto com a foto do comprovante. O supervisor confere no painel e aprova o reembolso." />
       <RolarComTeclado refreshControl={<RefreshControl refreshing={carregando} onRefresh={carregar} />}>
         {modo === 'frota' && <CartaoVeiculo veiculo={veiculo} />}
         <Pressable style={[estilo.botao, { marginHorizontal: 16, marginTop: 12 }]} onPress={() => setEditando('nova')}>

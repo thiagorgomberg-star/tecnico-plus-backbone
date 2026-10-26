@@ -1,7 +1,9 @@
+import * as Application from 'expo-application';
 import * as Updates from 'expo-updates';
 
-// Versão deste APK (número do build no GitHub Actions; 0 quando rodando em desenvolvimento).
-export const VERSAO_APP = Number(process.env.EXPO_PUBLIC_VERSAO_APP ?? 0);
+// Versão do APK instalado = versionCode do Android (número do build no GitHub Actions).
+// Vem do aparelho, não do código: uma atualização pelo ar não muda este número. 0 em desenvolvimento.
+export const VERSAO_APP = __DEV__ ? 0 : Number(Application.nativeBuildVersion) || Number(process.env.EXPO_PUBLIC_VERSAO_APP ?? 0);
 
 const REPO = 'thiagorgomberg-star/tecnico-plus-backbone';
 export const LINK_APK = `https://github.com/${REPO}/releases/latest/download/tecnico-plus.apk`;

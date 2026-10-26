@@ -18,6 +18,7 @@ type Props = {
   osId: string;
   fotosJaFeitas: number;
   minimo: number;
+  tipoInicial?: 'foto_antes' | 'foto_depois';
   usuario: { nome: string; cargo: string | null };
   fechar: () => void;
   // Fotos de uma caixa (ou da tela do OTDR de uma fibra) em vez das fotos antes/depois da O.S.
@@ -28,7 +29,7 @@ type Props = {
   unica?: { titulo: string; aoSalvar: (foto: { arquivo: string; tiradaEm: string; latitude: number | null; longitude: number | null }) => void };
 };
 
-// 1280 px com JPEG 0,72: a máscara continua legível e cada foto fica bem mais leve para dados móveis.
+// 1920 px com JPEG 0,85: foto bem nítida com a máscara legível, ainda leve o bastante para dados móveis.
 const LARGURA_FINAL = 1920;
 
 // Foto tirada mas ainda sem máscara. Fica gravada no celular (arquivo + dados) desde o clique,
@@ -84,12 +85,12 @@ function distancia(a: { latitude: number; longitude: number }, b: { latitude: nu
   return Math.hypot(dx, dy);
 }
 
-export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar, caixa, ponto, unica }: Props) {
+export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usuario, fechar, caixa, ponto, unica }: Props) {
   const [permissao, pedirPermissao] = useCameraPermissions();
   const camera = useRef<CameraView>(null);
   const mascara = useRef<RefMascara>(null);
   const { width, height } = useWindowDimensions();
-  const [tipo, setTipo] = useState<'foto_antes' | 'foto_depois'>('foto_antes');
+  const [tipo, setTipo] = useState<'foto_antes' | 'foto_depois'>(tipoInicial ?? 'foto_antes');
   // Fotos já tiradas esperando a máscara: o técnico pode seguir fotografando enquanto elas são gravadas.
   const [fila, setFila] = useState<(FotoCrua | (DadosMascara & { unica: true }))[]>([]);
   const atual = fila[0] ?? null;

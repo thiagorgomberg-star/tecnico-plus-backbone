@@ -10,7 +10,11 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 // Android desenha o app por baixo da barra de status (câmera/relógio): desce o conteúdo a altura dela.
 const TOPO = Platform.OS === 'android' ? (BarraStatus.currentHeight ?? 28) + 6 : 0;
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import AbasInferiores, { Aba } from './src/componentes/AbasInferiores';
+import AtualizacaoObrigatoria from './src/componentes/AtualizacaoObrigatoria';
+import GuiaRapido, { CHAVE_GUIA } from './src/componentes/GuiaRapido';
+import FaixaEnvio from './src/componentes/FaixaEnvio';
 import { fonteIcones } from './src/componentes/Icone';
 import { cores, estilo } from './src/lib/estilo';
 import { aoMudarFila, itensPendentes, sincronizar } from './src/lib/fila';
@@ -39,7 +43,7 @@ import Rotas from './src/telas/Rotas';
 import AnalisarCurva from './src/telas/AnalisarCurva';
 
 export type Perfil = { nome: string; cargo: string | null };
-type Camera = { osId: string; fotosJaFeitas: number };
+type Camera = { osId: string; fotosJaFeitas: number; tipo?: 'foto_antes' | 'foto_depois' };
 
 // Erros não tratados do app vão para o servidor (tabela app_erros).
 vigiarErros();
@@ -73,6 +77,11 @@ function AppConteudo() {
   const [aba, setAba] = useState<Aba>('atividades');
   const [backlogPedido, setBacklogPedido] = useState<string | null>(null);
   const [pendentes, setPendentes] = useState(0);
+  const [guia, setGuia] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem(CHAVE_GUIA).then((v) => { if (!v) setGuia(true); }).catch(() => undefined);
+  }, []);
+  const fecharGuia = () => { setGuia(false); AsyncStorage.setItem(CHAVE_GUIA, '1').catch(() => undefined); };
 
   useEffect(() => {
     const contar = () => itensPendentes().then((i) => setPendentes(i.length));
@@ -161,7 +170,7 @@ function AppConteudo() {
     return (
       <>
         <StatusBar hidden />
-        <CameraOS osId={camera.osId} fotosJaFeitas={camera.fotosJaFeitas} minimo={0} usuario={perfil}
+        <CameraOS osId={camera.osId} fotosJaFeitas={camera.fotosJaFeitas} tipoInicial={camera.tipo} minimo={0} usuario={perfil}
           fechar={() => setCamera(null)} />
       </>
     );
@@ -182,7 +191,7 @@ function AppConteudo() {
     conteudo = (
       <DetalheOS os={osAberta} euId={euId} voltar={() => setOsAberta(null)}
         usuario={perfil}
-        abrirCamera={(fotosJaFeitas) => setCamera({ osId: osAberta.id, fotosJaFeitas })} />
+        abrirCamera={(fotosJaFeitas, tipo) => setCamera({ osId: osAberta.id, fotosJaFeitas, tipo })} />
     );
   } else if (tela === 'rotas') {
     conteudo = <Rotas voltar={() => setTela('inicio')} />;
@@ -213,7 +222,7 @@ function AppConteudo() {
           {aba === 'atividades' ? <Atividades nome={perfil.nome} abrirOS={setOsAberta} abrirInventario={() => setTela('inventario')} iniciarAtividade={() => setTela('preventiva')} informarEvento={() => setTela('evento')}
             backlogPedido={backlogPedido} backlogAberto={() => setBacklogPedido(null)} euId={euId} /> : null}
           {aba === 'estoque' ? <Estoque euId={euId} /> : null}
-          {aba === 'mais' ? <Mais nome={perfil.nome} cargo={perfil.cargo} pendentes={pendentes} abrir={setTela} sair={sair} /> : null}
+          {aba === 'mais' ? <Mais nome={perfil.nome} cargo={perfil.cargo} pendentes={pendentes} abrir={setTela} sair={sair} abrirGuia={() => setGuia(true)} /> : null}
         </View>
         <AbasInferiores atual={aba} mudar={setAba} avisos={{ mais: pendentes }} />
       </>
@@ -223,7 +232,10 @@ function AppConteudo() {
   return (
     <Tela fundo={cores.cabecalho2}>
       <StatusBar style="light" />
+      <FaixaEnvio abrirFila={() => { setOsAberta(null); setTela('fila'); }} />
       <View style={{ flex: 1, backgroundColor: cores.fundo }}>{conteudo}</View>
+      {guia ? <GuiaRapido fechar={fecharGuia} /> : null}
+      <AtualizacaoObrigatoria />
     </Tela>
   );
 }
