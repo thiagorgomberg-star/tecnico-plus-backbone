@@ -8,6 +8,7 @@ import { cores } from '../lib/estilo';
 import {
   CaixaRede, descreverRompimento, fmtMetros, kmlRompimento, lancesDoEnlace, localizarRompimento, rotuloPonto, sentidoPadrao,
 } from '../lib/fusao';
+import { kmlRompimentoTracado, rompimentoNoTracado, TracadoSalvo, trechoEntre } from '../lib/tracado';
 import Icone from './Icone';
 
 const numero = (t: string) => {
@@ -17,8 +18,8 @@ const numero = (t: string) => {
 
 // Simulação do local de rompimento: o OTDR foi ligado neste ponto (DGO, entroncamento ou caixa) numa fibra;
 // anda pelos lances (metragem do cabo, reservas) até a distância do evento e mostra onde procurar.
-export default function SimularRompimento({ aberto, fechar, caixas, medicao }: {
-  aberto: boolean; fechar: () => void; caixas: CaixaRede[]; medicao: CaixaRede;
+export default function SimularRompimento({ aberto, fechar, caixas, medicao, tracado, nomeTracado }: {
+  aberto: boolean; fechar: () => void; caixas: CaixaRede[]; medicao: CaixaRede; tracado?: TracadoSalvo | null; nomeTracado?: string | null;
 }) {
   const [fibra, setFibra] = useState('1');
   const [km, setKm] = useState('');
@@ -33,11 +34,18 @@ export default function SimularRompimento({ aberto, fechar, caixas, medicao }: {
   const total = lances.reduce((s, l) => s + l.reservaDe + (l.metros ?? 0), 0);
   const distancia = numero(km);
   const r = distancia != null ? localizarRompimento(lances, distancia, numero(excesso) ?? 0) : null;
-  const ponto = r && r.tipo !== 'sem_medida' && r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null;
+  // Com o KMZ da rota o ponto segue o traçado do cabo; sem ele (ou caixa longe do traçado), linha reta entre as caixas.
+  const noTracado = r && tracado ? rompimentoNoTracado(r, lances, tracado.caminho, medicao) : null;
+  const ponto = noTracado ? { lat: noTracado.lat, lng: noTracado.lng } : r && r.tipo !== 'sem_medida' && r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null;
 
   async function compartilhar() {
     if (!r || distancia == null) return;
-    const kml = kmlRompimento(r, medicao, distancia, `Rompimento a ${km} km de ${medicao.identificacao}`);
+    const titulo = `Rompimento a ${km} km de ${medicao.identificacao}`;
+    const kml = noTracado && tracado
+      ? kmlRompimentoTracado(titulo, `${descreverRompimento(r)}. Medido em ${medicao.identificacao}${nomeTracado ? ` · traçado ${nomeTracado}` : ''}.`, noTracado,
+        medicao.latitude != null && medicao.longitude != null ? { nome: medicao.identificacao, lat: medicao.latitude, lng: medicao.longitude } : null,
+        noTracado.sMedicao != null ? trechoEntre(tracado.caminho, noTracado.sMedicao, noTracado.sRompimento) : [])
+      : kmlRompimento(r, medicao, distancia, titulo);
     if (!kml) return Alert.alert('Sem localização', 'Falta o GPS dos pontos para marcar no mapa.');
     try {
       const arq = new File(Paths.cache, `rompimento-${medicao.identificacao}-${km.replace(',', '.')}km.kml`);
@@ -103,6 +111,11 @@ export default function SimularRompimento({ aberto, fechar, caixas, medicao }: {
               <Text style={s.resultadoTitulo}>{r.tipo === 'sem_medida' ? 'Falta dado para calcular' : 'Possível rompimento'}</Text>
               <Text style={s.resultadoTexto}>{descreverRompimento(r)}</Text>
               <Text style={s.suave}>Medido em {medicao.identificacao}, fibra {fibra}, {km} km{numero(excesso) ? `, excesso ${excesso}%` : ''}.</Text>
+              {r.tipo !== 'sem_medida' ? (
+                <Text style={[s.suave, { marginTop: 4, color: noTracado ? cores.sucesso : cores.alerta }]}>
+                  {noTracado ? `Posição sobre o traçado do KMZ${nomeTracado ? ` (${nomeTracado})` : ''}.` : tracado ? 'Caixas longe do traçado do KMZ: posição em linha reta entre as caixas.' : 'Sem KMZ: posição em linha reta entre as caixas.'}
+                </Text>
+              ) : null}
               {ponto ? (
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
                   <Pressable style={[s.botao, { flex: 1 }]} onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${ponto.lat},${ponto.lng}`)}>

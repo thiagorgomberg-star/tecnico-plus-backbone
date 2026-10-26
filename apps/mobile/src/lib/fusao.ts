@@ -475,6 +475,7 @@ export type CaixaRede = PlanoCaixa & {
   metragem_entrada?: number | null; metragens_saida?: (number | null)[] | null; reserva_m?: number | null;
   // Reservas de cabo encontradas no caminho desde o ponto anterior (ex.: no poste).
   reservas_lance?: ReservaLance[] | null;
+  trecho?: string | null; // rota da O.S. em que a caixa foi lançada
 };
 export type ReservaLance = { metros: number; marca?: number | null; lat?: number | null; lng?: number | null; obs?: string | null };
 

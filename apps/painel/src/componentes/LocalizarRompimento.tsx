@@ -5,6 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import { CaixaPainel, origemDe } from "@/componentes/CaixaDetalhe";
 import { supabase } from "@/lib/supabase";
 import { descreverRompimento, fmtMetros, kmlRompimento, lancesDoEnlace, localizarRompimento, rotuloPonto, sentidoPadrao } from "@/lib/fusao";
+import { comprimento, kmlRompimentoTracado, lerKmz, prepararTracado, rompimentoNoTracado, TracadoSalvo, trechoEntre } from "@/lib/tracado";
+
+type Rota = { id: string; trecho: string };
+type Kmz = { id: string; nome_arquivo: string; extensao_m: number | null; criado_em: string };
 
 const numero = (t: string) => {
   const v = Number(t.replace(",", "."));
@@ -18,6 +22,47 @@ export default function LocalizarRompimento() {
   useEffect(() => {
     supabase.from("caixas_mapa").select("*").then(({ data }) => setCaixas((data as unknown as CaixaPainel[]) ?? []));
   }, []);
+  const [rotas, setRotas] = useState<Rota[]>([]);
+  const [rotaId, setRotaId] = useState("");
+  const [kmzs, setKmzs] = useState<Kmz[]>([]);
+  const [kmzId, setKmzId] = useState("");
+  const [tracado, setTracado] = useState<TracadoSalvo | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  useEffect(() => {
+    supabase.from("rotas").select("id, trecho").eq("ativo", true).order("trecho").then(({ data }) => setRotas(data ?? []));
+  }, []);
+  const rota = rotas.find((x) => x.id === rotaId) ?? null;
+  const carregarKmzs = (id: string) => supabase.from("rota_kmz").select("id, nome_arquivo, extensao_m, criado_em").eq("rota_id", id)
+    .order("criado_em", { ascending: false }).then(({ data }) => setKmzs(data ?? []));
+  useEffect(() => {
+    setKmzs([]); setKmzId(""); setTracado(null); setMedicaoId("");
+    if (rotaId) carregarKmzs(rotaId);
+  }, [rotaId]);
+  useEffect(() => {
+    setTracado(null);
+    if (kmzId) supabase.from("rota_kmz").select("tracado").eq("id", kmzId).single().then(({ data }) => setTracado((data?.tracado as TracadoSalvo) ?? null));
+  }, [kmzId]);
+
+  // Insere o KMZ atual da rota: lê o traçado aqui e guarda arquivo + traçado para o app e as próximas buscas.
+  async function inserirKmz(arquivo: File) {
+    if (!rotaId) return;
+    setEnviando(true);
+    try {
+      const bytes = new Uint8Array(await arquivo.arrayBuffer());
+      const t = prepararTracado(await lerKmz(bytes));
+      if (t.caminho.length < 2) throw new Error("Não achei a linha do cabo (LineString) neste arquivo.");
+      const id = crypto.randomUUID();
+      const caminho = `${rotaId}/${id}.${/\.kml$/i.test(arquivo.name) ? "kml" : "kmz"}`;
+      const envio = await supabase.storage.from("kmz").upload(caminho, arquivo);
+      const { error } = await supabase.from("rota_kmz").insert({ id, rota_id: rotaId, nome_arquivo: arquivo.name, caminho_arquivo: envio.error ? null : caminho, tracado: t, extensao_m: Math.round(comprimento(t.caminho)) });
+      if (error) throw error;
+      await carregarKmzs(rotaId);
+      setKmzId(id);
+    } catch (e) {
+      alert(`Não foi possível ler o KMZ: ${(e as Error).message}`);
+    } finally { setEnviando(false); }
+  }
+
   const [medicaoId, setMedicaoId] = useState("");
   const [fibra, setFibra] = useState("1");
   const [km, setKm] = useState("");
@@ -27,18 +72,27 @@ export default function LocalizarRompimento() {
   const rede = useMemo(() => caixas.map((c) => ({ ...c, origem: origemDe(c) })), [caixas]);
   const medicao = rede.find((c) => c.id === medicaoId) ?? null;
   // Pontas primeiro: a medição costuma ser no DGO ou no entroncamento.
-  const opcoes = useMemo(() => [...rede].sort((a, b) => Number(b.tipo === "dgo" || b.tipo === "entroncamento") - Number(a.tipo === "dgo" || a.tipo === "entroncamento")
-    || a.identificacao.localeCompare(b.identificacao)), [rede]);
+  const daRota = useMemo(() => rede.filter((c) => rota && c.trecho === rota.trecho), [rede, rota]);
+  const opcoes = useMemo(() => [...(daRota.length ? daRota : rede)].sort((a, b) => Number(b.tipo === "dgo" || b.tipo === "entroncamento") - Number(a.tipo === "dgo" || a.tipo === "entroncamento")
+    || a.identificacao.localeCompare(b.identificacao)), [daRota, rede]);
 
   const lances = useMemo(() => (medicao && numero(fibra) ? lancesDoEnlace(rede, medicao.id, numero(fibra)!, sentido) : []), [rede, medicao, fibra, sentido]);
   const total = lances.reduce((s, l) => s + l.reservaDe + (l.metros ?? 0), 0);
   const distancia = numero(km);
   const r = medicao && distancia != null ? localizarRompimento(lances, distancia, numero(excesso) ?? 0) : null;
-  const ponto = r && r.tipo !== "sem_medida" && r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null;
+  // Com o KMZ da rota o ponto segue o traçado do cabo; sem ele (ou caixa longe do traçado), linha reta entre as caixas.
+  const noTracado = r && medicao && tracado ? rompimentoNoTracado(r, lances, tracado.caminho, medicao) : null;
+  const ponto = noTracado ? { lat: noTracado.lat, lng: noTracado.lng } : r && r.tipo !== "sem_medida" && r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null;
+  const kmzNome = kmzs.find((k) => k.id === kmzId)?.nome_arquivo;
 
   function baixarKml() {
     if (!r || !medicao || distancia == null) return;
-    const kml = kmlRompimento(r, medicao, distancia, `Rompimento a ${km} km de ${medicao.identificacao}`);
+    const titulo = `Rompimento a ${km} km de ${medicao.identificacao}`;
+    const kml = noTracado && tracado
+      ? kmlRompimentoTracado(titulo, `${descreverRompimento(r)}. Medido em ${medicao.identificacao} · traçado ${rota?.trecho} (${kmzNome}).`, noTracado,
+        medicao.latitude != null && medicao.longitude != null ? { nome: medicao.identificacao, lat: medicao.latitude, lng: medicao.longitude } : null,
+        noTracado.sMedicao != null ? trechoEntre(tracado.caminho, noTracado.sMedicao, noTracado.sRompimento) : [])
+      : kmlRompimento(r, medicao, distancia, titulo);
     if (!kml) return;
     const url = URL.createObjectURL(new Blob([kml], { type: "application/vnd.google-earth.kml+xml" }));
     const a = document.createElement("a");
@@ -52,8 +106,31 @@ export default function LocalizarRompimento() {
   return (
     <section className="rounded-xl border border-gray-200 bg-white">
       <h2 className="border-b border-gray-200 p-4 font-semibold">Localizar rompimento (OTDR) e metragem do enlace</h2>
-      <div className="flex flex-wrap items-end gap-2 p-4">
-        <label className="grid gap-1 text-xs text-gray-500">Medição feita em
+      <div className="flex flex-wrap items-end gap-2 border-b border-gray-100 p-4">
+        <label className="grid gap-1 text-xs text-gray-500">1 · Rota
+          <select className={campo} value={rotaId} onChange={(e) => setRotaId(e.target.value)}>
+            <option value="">Escolha a rota...</option>
+            {rotas.map((x) => <option key={x.id} value={x.id}>{x.trecho}</option>)}
+          </select>
+        </label>
+        {rotaId && (
+          <>
+            <label className="grid gap-1 text-xs text-gray-500">2 · KMZ da rota (já usados)
+              <select className={campo} value={kmzId} onChange={(e) => setKmzId(e.target.value)}>
+                <option value="">{kmzs.length ? "Sem KMZ (linha reta entre as caixas)" : "Nenhum KMZ guardado ainda"}</option>
+                {kmzs.map((k) => <option key={k.id} value={k.id}>{k.nome_arquivo} · {new Date(k.criado_em).toLocaleDateString("pt-BR")}{k.extensao_m ? ` · ${fmtMetros(k.extensao_m)}` : ""}</option>)}
+              </select>
+            </label>
+            <label className={`cursor-pointer rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 ${enviando ? "opacity-60" : ""}`}>
+              {enviando ? "Lendo KMZ..." : "Inserir o KMZ atual"}
+              <input type="file" accept=".kmz,.kml" className="hidden" disabled={enviando}
+                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) inserirKmz(f); }} />
+            </label>
+          </>
+        )}
+      </div>
+      {rotaId && <div className="flex flex-wrap items-end gap-2 p-4">
+        <label className="grid gap-1 text-xs text-gray-500">3 · Medição feita em
           <select className={campo} value={medicaoId} onChange={(e) => {
             setMedicaoId(e.target.value);
             const c = rede.find((x) => x.id === e.target.value);
@@ -78,7 +155,7 @@ export default function LocalizarRompimento() {
         <label className="grid gap-1 text-xs text-gray-500">Excesso de fibra (%)
           <input className={`${campo} w-24`} inputMode="decimal" placeholder="0" value={excesso} onChange={(e) => setExcesso(e.target.value)} />
         </label>
-      </div>
+      </div>}
 
       {medicao && (
         <div className="px-4 pb-4 text-sm">
@@ -123,6 +200,11 @@ export default function LocalizarRompimento() {
                 Medição em <b>{medicao.identificacao}</b> ({rotuloPonto(medicao.tipo, medicao.swap)}), fibra {fibra}, {km} km{numero(excesso) ? `, excesso ${excesso}%` : ""}.
                 {ponto ? ` Coordenadas ${ponto.lat.toFixed(6)}, ${ponto.lng.toFixed(6)}.` : ""}
               </div>
+              {r.tipo !== "sem_medida" && (
+                <div className={`mt-1 text-xs ${noTracado ? "text-green-700" : "text-amber-700"}`}>
+                  {noTracado ? `Posição sobre o traçado do KMZ (${kmzNome}).` : tracado ? "Caixas longe do traçado do KMZ: posição em linha reta entre as caixas." : "Sem KMZ: posição em linha reta entre as caixas."}
+                </div>
+              )}
               {ponto && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <a className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800" target="_blank" rel="noreferrer"
