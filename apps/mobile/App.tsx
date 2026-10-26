@@ -9,6 +9,7 @@ import { Alert, AppState, BackHandler, Platform, SafeAreaView, StatusBar as Barr
 // Android desenha o app por baixo da barra de status (câmera/relógio): desce o conteúdo a altura dela.
 const TOPO = Platform.OS === 'android' ? (BarraStatus.currentHeight ?? 28) + 6 : 0;
 
+import AtualizacaoObrigatoria from './src/componentes/AtualizacaoObrigatoria';
 import AbasInferiores, { Aba } from './src/componentes/AbasInferiores';
 import { fonteIcones } from './src/componentes/Icone';
 import { cores, estilo } from './src/lib/estilo';
@@ -200,6 +201,7 @@ export default function App() {
     <SafeAreaView style={{ flex: 1, backgroundColor: cores.cabecalho2, paddingTop: TOPO }}>
       <StatusBar style="light" />
       <View style={{ flex: 1, backgroundColor: cores.fundo }}>{conteudo}</View>
+      <AtualizacaoObrigatoria />
     </SafeAreaView>
   );
 }
