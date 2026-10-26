@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabase";
 import { OrdemServico, rotuloStatus, StatusOS, Tecnico } from "@/lib/tipos";
 
 type OsConsole = OrdemServico & {
+  programada_inicio: string | null; programada_fim: string | null;
   criado_em: string; aceita_em: string | null; iniciada_em: string | null; latitude: number | null; longitude: number | null;
 };
 type Intervalo = { tecnico_id: string; inicio: string; fim: string | null };
@@ -64,7 +65,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
   const carregar = useCallback(() => {
     const ini = inicioDia.toISOString(), fim = fimDia.toISOString();
     const semana = new Date(inicioDia.getTime() - 7 * 86400000).toISOString();
-    supabase.from("console_os").select("*").or(`status.in.(${ABERTAS.join(",")}),concluida_em.gte.${semana}`).lt("criado_em", fim).limit(2000)
+    supabase.from("console_despacho_os").select("*").or(`status.in.(${ABERTAS.join(",")}),concluida_em.gte.${semana}`).lt("criado_em", fim).limit(2000)
       .then(({ data }) => { setOrdens((data as OsConsole[]) ?? []); setAgora(Date.now()); });
     supabase.from("expedientes").select("tecnico_id, inicio, fim").lt("inicio", fim).or(`fim.is.null,fim.gt.${ini}`)
       .then(({ data }) => setExpedientes(data ?? []));
@@ -106,17 +107,21 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
     return Math.max(0, Math.min(100, ((h - H_INICIO) / (H_FIM - H_INICIO)) * 100));
   };
 
-  // Barras do dia: executada (início → fim), em andamento (até agora) ou planejada (envio → limite do SLA).
+  // Barras do dia: executada (início → fim), em andamento (até agora), programada pelo supervisor
+  // (horário arrastado na linha do tempo) ou planejada (envio → limite do SLA).
   const barras = useMemo(() => {
     const ini = inicioDia.getTime(), fim = fimDia.getTime();
     return ordens.filter((o) => o.tecnico_id && o.status !== "rascunho").map((o) => {
-      const comeco = new Date(o.iniciada_em ?? o.enviada_em ?? o.criado_em).getTime();
       const aberta = ABERTAS.includes(o.status);
-      let termino = o.concluida_em ? new Date(o.concluida_em).getTime()
+      const planejada = aberta && !o.iniciada_em;
+      const programada = planejada && !!o.programada_inicio;
+      const comeco = new Date((programada ? o.programada_inicio : null) ?? o.iniciada_em ?? o.enviada_em ?? o.criado_em).getTime();
+      let termino = programada ? (o.programada_fim ? new Date(o.programada_fim).getTime() : comeco + 60 * 60000)
+        : o.concluida_em ? new Date(o.concluida_em).getTime()
         : o.iniciada_em ? Math.max(agora, comeco + 15 * 60000)
         : o.sla_limite ? new Date(o.sla_limite).getTime() : comeco + 60 * 60000;
       termino = Math.max(termino, comeco + 15 * 60000);
-      return { os: o, comeco, termino, planejada: aberta && !o.iniciada_em };
+      return { os: o, comeco, termino, planejada, programada };
     }).filter((b) => b.comeco < fim && b.termino > ini);
   }, [ordens, inicioDia, fimDia, agora]);
 
@@ -134,15 +139,71 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
     };
   }), [tecnicos, busca, barras, expedientes, refeicoes, ordens]);
 
-  async function despachar(osId: string, tecnicoId: string) {
+  // Despacha/transfere e, se veio de um arraste na linha do tempo, já programa o horário.
+  async function despachar(osId: string, tecnicoId: string, horario?: { inicio: number; fim: number }) {
     const os = ordens.find((o) => o.id === osId);
     const tec = tecnicos.find((t) => t.id === tecnicoId);
     if (!os || !tec || os.tecnico_id === tecnicoId) return;
     const acao = os.status === "rascunho" ? "Despachar" : "Transferir";
-    if (!confirm(`${acao} a O.S. ${os.numero} (${os.titulo}) para ${tec.nome}?`)) return;
+    const quando = horario ? ` às ${hm(new Date(horario.inicio).toISOString())}` : "";
+    if (!confirm(`${acao} a O.S. ${os.numero} (${os.titulo}) para ${tec.nome}${quando}?`)) return;
     const campos: Record<string, unknown> = { tecnico_id: tecnicoId };
+    if (horario) Object.assign(campos, { programada_inicio: new Date(horario.inicio).toISOString(), programada_fim: new Date(horario.fim).toISOString() });
     if (os.status === "rascunho") campos.status = "enviada";
     const { error } = await supabase.from("ordens_servico").update(campos).eq("id", osId);
+    if (error) return alert(error.message);
+    carregar();
+  }
+
+  // Arrastar a barra de uma O.S. ainda não iniciada: para os lados muda o horário, para outra linha transfere,
+  // e a borda direita muda a duração. Passos de 15 min.
+  const PASSO = 15 * 60000;
+  const [mover, setMover] = useState<{
+    osId: string; modo: "mover" | "fim"; x0: number; y0: number; largura: number;
+    comeco: number; termino: number; delta: number; tecnicoId: string;
+  } | null>(null);
+  const arrastou = useRef(false);
+  const msPorPx = (largura: number) => ((H_FIM - H_INICIO) * 3600000) / largura;
+  // Horário (em passos de 15 min) no ponto x do trilho de uma linha.
+  const horaNoPonto = (clientX: number, trilho: Element) => {
+    const ret = trilho.getBoundingClientRect();
+    const t = inicioDia.getTime() + H_INICIO * 3600000 + (clientX - ret.left) * msPorPx(ret.width);
+    return Math.round(t / PASSO) * PASSO;
+  };
+
+  function comecarMover(e: React.PointerEvent, b: { os: OsConsole; comeco: number; termino: number; programada: boolean }, modo: "mover" | "fim") {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const trilho = (e.currentTarget as HTMLElement).closest("[data-trilho]")!;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    arrastou.current = false;
+    setMover({ osId: b.os.id, modo, x0: e.clientX, y0: e.clientY, largura: trilho.getBoundingClientRect().width,
+      // Ainda sem horário programado (barra vai até o SLA): começa com 1 h de duração.
+      comeco: b.comeco, termino: b.programada ? b.termino : b.comeco + 60 * 60000, delta: 0, tecnicoId: b.os.tecnico_id! });
+  }
+
+  function duranteMover(e: React.PointerEvent) {
+    if (!mover) return;
+    if (Math.abs(e.clientX - mover.x0) + Math.abs(e.clientY - mover.y0) > 4) arrastou.current = true;
+    const delta = Math.round(((e.clientX - mover.x0) * msPorPx(mover.largura)) / PASSO) * PASSO;
+    const linha = mover.modo === "mover" ? document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-tecnico]")?.getAttribute("data-tecnico") : null;
+    setMover({ ...mover, delta, tecnicoId: linha ?? mover.tecnicoId });
+    setAlvo(linha && linha !== mover.tecnicoId ? linha : null);
+  }
+
+  async function terminarMover() {
+    const m = mover;
+    setMover(null);
+    setAlvo(null);
+    if (!m || !arrastou.current) return;
+    const os = ordens.find((o) => o.id === m.osId);
+    if (!os) return;
+    const inicio = m.modo === "mover" ? m.comeco + m.delta : m.comeco;
+    const fim = m.modo === "mover" ? m.termino + m.delta : Math.max(m.comeco + PASSO, m.termino + m.delta);
+    if (m.tecnicoId !== os.tecnico_id) return despachar(os.id, m.tecnicoId, { inicio, fim });
+    if (m.delta === 0) return;
+    const { error } = await supabase.from("ordens_servico")
+      .update({ programada_inicio: new Date(inicio).toISOString(), programada_fim: new Date(fim).toISOString() }).eq("id", os.id);
     if (error) return alert(error.message);
     carregar();
   }
@@ -328,10 +389,12 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
         </div>
 
         {linhas.map(({ t, barras: bs, expedientes: ex, refeicoes: rf, abertas, emCampo }) => (
-          <div key={t.id} className={`flex border-b border-gray-100 ${alvo === t.id ? "bg-blue-50" : ""}`}
+          <div key={t.id} data-tecnico={t.id} className={`flex border-b border-gray-100 ${alvo === t.id ? "bg-blue-50" : ""}`}
             onDragOver={(e) => { if (arrastando) { e.preventDefault(); setAlvo(t.id); } }}
             onDragLeave={() => setAlvo((a) => (a === t.id ? null : a))}
-            onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData("text/plain"); setAlvo(null); setArrastando(null); if (id) despachar(id, t.id); }}>
+            onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData("text/plain"); setAlvo(null); setArrastando(null); if (!id) return;
+              const inicio = horaNoPonto(e.clientX, e.currentTarget.querySelector("[data-trilho]")!);
+              despachar(id, t.id, { inicio, fim: inicio + 60 * 60000 }); }}>
             <div className="flex w-56 shrink-0 items-center gap-2 border-r border-gray-200 px-2 py-2">
               <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded text-xs font-bold text-white ${emCampo ? "bg-green-700" : "bg-gray-500"}`}>
                 {iniciais(t.nome)}
@@ -342,7 +405,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
               </div>
               {abertas > 0 && <span className="rounded bg-gray-200 px-1.5 text-xs font-semibold" title="O.S. em aberto">{abertas}</span>}
             </div>
-            <div className="relative h-12 flex-1"
+            <div className="relative h-12 flex-1" data-trilho
               style={{ backgroundImage: `repeating-linear-gradient(to right, transparent 0, transparent calc(${100 / (H_FIM - H_INICIO)}% - 1px), #eef0f2 calc(${100 / (H_FIM - H_INICIO)}% - 1px), #eef0f2 ${100 / (H_FIM - H_INICIO)}%)` }}>
               {ex.map((e, i) => {
                 const a = escala(new Date(e.inicio).getTime()), b = escala(e.fim ? new Date(e.fim).getTime() : agora);
@@ -354,21 +417,42 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
                 return <div key={`r${i}`} className="absolute inset-y-2 z-10 flex items-center justify-center overflow-hidden rounded bg-gray-300 text-[10px] text-gray-700"
                   style={{ left: `${a}%`, width: `${Math.max(0.6, b - a)}%` }} title={`Refeição ${hm(r.inicio)}${r.fim ? `–${hm(r.fim)}` : ""}`}>🍴</div>;
               })}
-              {bs.map(({ os, comeco, termino, planejada }) => {
+              {/* Prévia da O.S. sendo arrastada para esta linha (transferência), já no horário novo. */}
+              {mover && mover.modo === "mover" && mover.tecnicoId === t.id && barras.filter((b) => b.os.id === mover.osId && b.os.tecnico_id !== t.id).map((b) => (
+                <div key="previa" className="pointer-events-none absolute inset-y-2 z-40 overflow-hidden whitespace-nowrap rounded px-1.5 text-[11px] font-medium ring-2 ring-gray-900"
+                  style={{ left: `${escala(mover.comeco + mover.delta)}%`, width: `${Math.max(1.5, escala(mover.termino + mover.delta) - escala(mover.comeco + mover.delta))}%`,
+                    background: COR[b.os.status].fundo, color: COR[b.os.status].texto }}>
+                  {hm(new Date(mover.comeco + mover.delta).toISOString())} {b.os.numero} {b.os.titulo}
+                </div>
+              ))}
+              {bs.map((barra) => {
+                const { os, planejada, programada } = barra;
+                const movendo = mover?.osId === os.id;
+                // Indo para outra linha: aqui fica só a sombra (ela continua recebendo o arraste).
+                const saindo = movendo && mover.modo === "mover" && mover.tecnicoId !== t.id;
+                const comeco = movendo && !saindo ? mover.comeco + (mover.modo === "mover" ? mover.delta : 0) : barra.comeco;
+                const termino = movendo && !saindo ? (mover.modo === "mover" ? mover.termino + mover.delta : Math.max(mover.comeco + PASSO, mover.termino + mover.delta)) : barra.termino;
                 const a = escala(comeco), b = escala(termino), c = COR[os.status];
+                const movel = planejada && ["enviada", "aceita"].includes(os.status);
                 return (
-                  <button key={os.id} onClick={() => setDetalhe(os)}
-                    draggable={["enviada", "aceita"].includes(os.status)}
-                    onDragStart={(e) => { setArrastando(os.id); e.dataTransfer.setData("text/plain", os.id); }}
-                    onDragEnd={() => { setArrastando(null); setAlvo(null); }}
-                    className="absolute inset-y-2 z-20 overflow-hidden whitespace-nowrap rounded px-1.5 text-left text-[11px] font-medium shadow-sm hover:ring-2 hover:ring-gray-800"
+                  <button key={os.id} onClick={() => { if (!arrastou.current) setDetalhe(os); arrastou.current = false; }}
+                    onPointerDown={movel ? (e) => comecarMover(e, barra, "mover") : undefined}
+                    onPointerMove={movel ? duranteMover : undefined}
+                    onPointerUp={movel ? terminarMover : undefined}
+                    className={`absolute inset-y-2 z-20 overflow-hidden whitespace-nowrap rounded px-1.5 text-left text-[11px] font-medium shadow-sm hover:ring-2 hover:ring-gray-800 ${movel ? "cursor-grab touch-none active:cursor-grabbing" : ""} ${movendo ? (saindo ? "opacity-30" : "z-40 opacity-90 ring-2 ring-gray-900") : ""}`}
                     style={{
                       left: `${a}%`, width: `${Math.max(1.5, b - a)}%`, color: c.texto,
-                      background: planejada ? `repeating-linear-gradient(135deg, ${c.fundo} 0 6px, #ffffff 6px 9px)` : c.fundo,
-                      border: planejada ? `1px dashed ${c.texto}` : undefined,
+                      background: planejada && !programada ? `repeating-linear-gradient(135deg, ${c.fundo} 0 6px, #ffffff 6px 9px)` : c.fundo,
+                      border: planejada ? `1px ${programada ? "solid" : "dashed"} ${c.texto}` : undefined,
                     }}
-                    title={`O.S. ${os.numero} · ${os.titulo}\n${os.tipo} · ${rotuloStatus[os.status]}\n${planejada ? `Enviada ${hm(new Date(comeco).toISOString())}${os.sla_limite ? ` · SLA até ${hm(os.sla_limite)}` : ""}` : `${hm(new Date(comeco).toISOString())} – ${os.concluida_em ? hm(os.concluida_em) : "agora"}`}${os.endereco ? `\n${os.endereco}` : ""}`}>
-                    {os.numero} {os.titulo}
+                    title={`O.S. ${os.numero} · ${os.titulo}\n${os.tipo} · ${rotuloStatus[os.status]}\n${programada ? `Programada ${hm(new Date(comeco).toISOString())} – ${hm(new Date(termino).toISOString())}` : planejada ? `Enviada ${hm(new Date(comeco).toISOString())}${os.sla_limite ? ` · SLA até ${hm(os.sla_limite)}` : ""}` : `${hm(new Date(comeco).toISOString())} – ${os.concluida_em ? hm(os.concluida_em) : "agora"}`}${os.endereco ? `\n${os.endereco}` : ""}${movel ? "\nArraste para mudar o horário ou o técnico; puxe a borda direita para mudar a duração." : ""}`}>
+                    {movendo && !saindo ? `${hm(new Date(comeco).toISOString())}–${hm(new Date(termino).toISOString())} ` : ""}{os.numero} {os.titulo}
+                    {movel && (
+                      <span className="absolute inset-y-0 right-0 w-2 cursor-ew-resize bg-black/10 hover:bg-black/30" aria-label="Mudar a duração"
+                        onPointerDown={(e) => comecarMover(e, barra, "fim")}
+                        onPointerMove={(e) => { e.stopPropagation(); duranteMover(e); }}
+                        onPointerUp={(e) => { e.stopPropagation(); terminarMover(); }} />
+                    )}
                   </button>
                 );
               })}
@@ -384,6 +468,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
           ))}
           <span className="flex items-center gap-1"><span className="h-3 w-5 rounded-sm border border-dashed border-gray-600"
             style={{ background: "repeating-linear-gradient(135deg, #93c5fd 0 4px, #fff 4px 6px)" }} />Aguardando início (até o SLA)</span>
+          <span className="flex items-center gap-1"><span className="h-3 w-5 rounded-sm border border-gray-700" style={{ background: "#93c5fd" }} />Programada (arraste a barra para mudar horário ou técnico)</span>
           <span className="flex items-center gap-1"><span className="h-3 w-5 rounded-sm bg-teal-50 ring-1 ring-teal-200" />Expediente</span>
           <span className="flex items-center gap-1"><span className="h-3 w-5 rounded-sm bg-gray-300" />Refeição</span>
         </div>
