@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { CaixaPainel, origemDe } from "@/componentes/CaixaDetalhe";
 import { supabase } from "@/lib/supabase";
-import { descreverRompimento, fmtMetros, kmlRompimento, lancesDoEnlace, localizarRompimento, rotuloPonto, sentidoPadrao } from "@/lib/fusao";
-import { comprimento, kmlRompimentoTracado, lerKmz, prepararTracado, rompimentoNoTracado, TracadoSalvo, trechoEntre } from "@/lib/tracado";
+import { MarcaNoCaminho, refinarPorMarcas, descreverRompimento, fmtMetros, kmlRompimento, lancesDoEnlace, localizarRompimento, rotuloPonto, sentidoPadrao } from "@/lib/fusao";
+import { pertoDoLance, comprimento, kmlRompimentoTracado, lerKmz, prepararTracado, rompimentoNoTracado, TracadoSalvo, trechoEntre } from "@/lib/tracado";
 
 type Rota = { id: string; trecho: string };
 type Kmz = { id: string; nome_arquivo: string; extensao_m: number | null; criado_em: string };
@@ -28,6 +28,12 @@ export default function LocalizarRompimento() {
   const [kmzId, setKmzId] = useState("");
   const [tracado, setTracado] = useState<TracadoSalvo | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [marcas, setMarcas] = useState<MarcaNoCaminho[]>([]);
+  useEffect(() => {
+    supabase.from("vistoria_pontos_mapa").select("identificacao, categoria, latitude, longitude, metragem_cabo, reserva_m")
+      .not("metragem_cabo", "is", null).not("latitude", "is", null).limit(5000)
+      .then(({ data }) => setMarcas((data ?? []).map((p) => ({ nome: p.identificacao || p.categoria || "Poste", lat: p.latitude, lng: p.longitude, marca: Number(p.metragem_cabo), reserva: p.reserva_m }))));
+  }, []);
   useEffect(() => {
     supabase.from("rotas").select("id, trecho").eq("ativo", true).order("trecho").then(({ data }) => setRotas(data ?? []));
   }, []);
@@ -82,16 +88,21 @@ export default function LocalizarRompimento() {
   const r = medicao && distancia != null ? localizarRompimento(lances, distancia, numero(excesso) ?? 0) : null;
   // Com o KMZ da rota o ponto segue o traçado do cabo; sem ele (ou caixa longe do traçado), linha reta entre as caixas.
   const noTracado = r && medicao && tracado ? rompimentoNoTracado(r, lances, tracado.caminho, medicao) : null;
-  const ponto = noTracado ? { lat: noTracado.lat, lng: noTracado.lng } : r && r.tipo !== "sem_medida" && r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null;
+  // Postes da vistoria com marca de metragem no lance: o ponto fica entre os dois que cercam a marca (o mais preciso).
+  const refino = r && r.tipo === "lance" && marcas.length && r.lance.de.latitude != null && r.lance.para.latitude != null
+    ? refinarPorMarcas(r, marcas, pertoDoLance(tracado?.caminho ?? null, { lat: r.lance.de.latitude, lng: r.lance.de.longitude! }, { lat: r.lance.para.latitude, lng: r.lance.para.longitude! }))
+    : null;
+  const ponto = refino ? { lat: refino.lat, lng: refino.lng } : noTracado ? { lat: noTracado.lat, lng: noTracado.lng } : r && r.tipo !== "sem_medida" && r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null;
   const kmzNome = kmzs.find((k) => k.id === kmzId)?.nome_arquivo;
 
   function baixarKml() {
     if (!r || !medicao || distancia == null) return;
     const titulo = `Rompimento a ${km} km de ${medicao.identificacao}`;
-    const kml = noTracado && tracado
-      ? kmlRompimentoTracado(titulo, `${descreverRompimento(r)}. Medido em ${medicao.identificacao} · traçado ${rota?.trecho} (${kmzNome}).`, noTracado,
+    const desc = `${descreverRompimento(r)}${refino ? ` · ${refino.naReserva ? `na reserva de ${refino.naReserva}` : `entre ${refino.entre[0]} e ${refino.entre[1]}`} (marcas da vistoria)` : ""}. Medido em ${medicao.identificacao}${tracado ? ` · traçado ${rota?.trecho} (${kmzNome})` : ""}.`;
+    const kml = (refino || noTracado) && ponto
+      ? kmlRompimentoTracado(titulo, desc, ponto,
         medicao.latitude != null && medicao.longitude != null ? { nome: medicao.identificacao, lat: medicao.latitude, lng: medicao.longitude } : null,
-        noTracado.sMedicao != null ? trechoEntre(tracado.caminho, noTracado.sMedicao, noTracado.sRompimento) : [])
+        noTracado && tracado && noTracado.sMedicao != null ? trechoEntre(tracado.caminho, noTracado.sMedicao, noTracado.sRompimento) : [])
       : kmlRompimento(r, medicao, distancia, titulo);
     if (!kml) return;
     const url = URL.createObjectURL(new Blob([kml], { type: "application/vnd.google-earth.kml+xml" }));
@@ -201,8 +212,8 @@ export default function LocalizarRompimento() {
                 {ponto ? ` Coordenadas ${ponto.lat.toFixed(6)}, ${ponto.lng.toFixed(6)}.` : ""}
               </div>
               {r.tipo !== "sem_medida" && (
-                <div className={`mt-1 text-xs ${noTracado ? "text-green-700" : "text-amber-700"}`}>
-                  {noTracado ? `Posição sobre o traçado do KMZ (${kmzNome}).` : tracado ? "Caixas longe do traçado do KMZ: posição em linha reta entre as caixas." : "Sem KMZ: posição em linha reta entre as caixas."}
+                <div className={`mt-1 text-xs ${refino || noTracado ? "text-green-700" : "text-amber-700"}`}>
+                  {refino ? (refino.naReserva ? `Na reserva anotada em ${refino.naReserva} (marcas de metragem da vistoria).` : `Entre ${refino.entre[0]} e ${refino.entre[1]}, pelas marcas de metragem da vistoria.`) : noTracado ? `Posição sobre o traçado do KMZ (${kmzNome}).` : tracado ? "Caixas longe do traçado do KMZ: posição em linha reta entre as caixas." : "Sem KMZ: posição em linha reta entre as caixas."}
                 </div>
               )}
               {ponto && (

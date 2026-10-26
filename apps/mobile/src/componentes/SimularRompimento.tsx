@@ -6,9 +6,9 @@ import RolarComTeclado from './RolarComTeclado';
 
 import { cores } from '../lib/estilo';
 import {
-  CaixaRede, descreverRompimento, fmtMetros, kmlRompimento, lancesDoEnlace, localizarRompimento, rotuloPonto, sentidoPadrao,
+  CaixaRede, MarcaNoCaminho, refinarPorMarcas, descreverRompimento, fmtMetros, kmlRompimento, lancesDoEnlace, localizarRompimento, rotuloPonto, sentidoPadrao,
 } from '../lib/fusao';
-import { kmlRompimentoTracado, rompimentoNoTracado, TracadoSalvo, trechoEntre } from '../lib/tracado';
+import { kmlRompimentoTracado, pertoDoLance, rompimentoNoTracado, TracadoSalvo, trechoEntre } from '../lib/tracado';
 import Icone from './Icone';
 
 const numero = (t: string) => {
@@ -18,8 +18,8 @@ const numero = (t: string) => {
 
 // Simulação do local de rompimento: o OTDR foi ligado neste ponto (DGO, entroncamento ou caixa) numa fibra;
 // anda pelos lances (metragem do cabo, reservas) até a distância do evento e mostra onde procurar.
-export default function SimularRompimento({ aberto, fechar, caixas, medicao, tracado, nomeTracado }: {
-  aberto: boolean; fechar: () => void; caixas: CaixaRede[]; medicao: CaixaRede; tracado?: TracadoSalvo | null; nomeTracado?: string | null;
+export default function SimularRompimento({ aberto, fechar, caixas, medicao, tracado, marcas, nomeTracado }: {
+  aberto: boolean; fechar: () => void; caixas: CaixaRede[]; medicao: CaixaRede; tracado?: TracadoSalvo | null; marcas?: MarcaNoCaminho[]; nomeTracado?: string | null;
 }) {
   const [fibra, setFibra] = useState('1');
   const [km, setKm] = useState('');
@@ -36,15 +36,20 @@ export default function SimularRompimento({ aberto, fechar, caixas, medicao, tra
   const r = distancia != null ? localizarRompimento(lances, distancia, numero(excesso) ?? 0) : null;
   // Com o KMZ da rota o ponto segue o traçado do cabo; sem ele (ou caixa longe do traçado), linha reta entre as caixas.
   const noTracado = r && tracado ? rompimentoNoTracado(r, lances, tracado.caminho, medicao) : null;
-  const ponto = noTracado ? { lat: noTracado.lat, lng: noTracado.lng } : r && r.tipo !== 'sem_medida' && r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null;
+  // Postes da vistoria com marca de metragem no lance: o ponto fica entre os dois que cercam a marca (o mais preciso).
+  const refino = r && r.tipo === 'lance' && marcas?.length && r.lance.de.latitude != null && r.lance.para.latitude != null
+    ? refinarPorMarcas(r, marcas, pertoDoLance(tracado?.caminho ?? null, { lat: r.lance.de.latitude, lng: r.lance.de.longitude! }, { lat: r.lance.para.latitude, lng: r.lance.para.longitude! }))
+    : null;
+  const ponto = refino ? { lat: refino.lat, lng: refino.lng } : noTracado ? { lat: noTracado.lat, lng: noTracado.lng } : r && r.tipo !== 'sem_medida' && r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null;
 
   async function compartilhar() {
     if (!r || distancia == null) return;
     const titulo = `Rompimento a ${km} km de ${medicao.identificacao}`;
-    const kml = noTracado && tracado
-      ? kmlRompimentoTracado(titulo, `${descreverRompimento(r)}. Medido em ${medicao.identificacao}${nomeTracado ? ` · traçado ${nomeTracado}` : ''}.`, noTracado,
+    const desc = `${descreverRompimento(r)}${refino ? ` · ${refino.naReserva ? `na reserva de ${refino.naReserva}` : `entre ${refino.entre[0]} e ${refino.entre[1]}`} (marcas da vistoria)` : ''}. Medido em ${medicao.identificacao}${nomeTracado ? ` · traçado ${nomeTracado}` : ''}.`;
+    const kml = (refino || noTracado) && ponto
+      ? kmlRompimentoTracado(titulo, desc, ponto,
         medicao.latitude != null && medicao.longitude != null ? { nome: medicao.identificacao, lat: medicao.latitude, lng: medicao.longitude } : null,
-        noTracado.sMedicao != null ? trechoEntre(tracado.caminho, noTracado.sMedicao, noTracado.sRompimento) : [])
+        noTracado && tracado && noTracado.sMedicao != null ? trechoEntre(tracado.caminho, noTracado.sMedicao, noTracado.sRompimento) : [])
       : kmlRompimento(r, medicao, distancia, titulo);
     if (!kml) return Alert.alert('Sem localização', 'Falta o GPS dos pontos para marcar no mapa.');
     try {
@@ -112,8 +117,8 @@ export default function SimularRompimento({ aberto, fechar, caixas, medicao, tra
               <Text style={s.resultadoTexto}>{descreverRompimento(r)}</Text>
               <Text style={s.suave}>Medido em {medicao.identificacao}, fibra {fibra}, {km} km{numero(excesso) ? `, excesso ${excesso}%` : ''}.</Text>
               {r.tipo !== 'sem_medida' ? (
-                <Text style={[s.suave, { marginTop: 4, color: noTracado ? cores.sucesso : cores.alerta }]}>
-                  {noTracado ? `Posição sobre o traçado do KMZ${nomeTracado ? ` (${nomeTracado})` : ''}.` : tracado ? 'Caixas longe do traçado do KMZ: posição em linha reta entre as caixas.' : 'Sem KMZ: posição em linha reta entre as caixas.'}
+                <Text style={[s.suave, { marginTop: 4, color: refino || noTracado ? cores.sucesso : cores.alerta }]}>
+                  {refino ? (refino.naReserva ? `Na reserva anotada em ${refino.naReserva} (marcas de metragem da vistoria).` : `Entre ${refino.entre[0]} e ${refino.entre[1]}, pelas marcas de metragem da vistoria.`) : noTracado ? `Posição sobre o traçado do KMZ${nomeTracado ? ` (${nomeTracado})` : ''}.` : tracado ? 'Caixas longe do traçado do KMZ: posição em linha reta entre as caixas.' : 'Sem KMZ: posição em linha reta entre as caixas.'}
                 </Text>
               ) : null}
               {ponto ? (

@@ -6,8 +6,8 @@ import Icone from '../componentes/Icone';
 import SimularRompimento from '../componentes/SimularRompimento';
 import { caixasDaRede } from '../lib/caixas';
 import { cores } from '../lib/estilo';
-import { CaixaRede, fmtMetros, rotuloPonto } from '../lib/fusao';
-import { inserirKmz, KmzRota, kmzDaRota, RotaSimples, rotasParaRompimento, tracadoDoKmz } from '../lib/kmzRotas';
+import { CaixaRede, fmtMetros, MarcaNoCaminho, rotuloPonto } from '../lib/fusao';
+import { inserirKmz, KmzRota, kmzDaRota, marcasDaVistoria, RotaSimples, rotasParaRompimento, tracadoDoKmz } from '../lib/kmzRotas';
 import { TracadoSalvo } from '../lib/tracado';
 
 // Ferramenta à parte (como o analisador de curvas): 1) rota, 2) KMZ da rota (inserir o atual ou um já usado),
@@ -23,9 +23,11 @@ export default function LocalizarRompimento({ voltar }: { voltar: () => void }) 
   const [caixas, setCaixas] = useState<CaixaRede[] | null>(null);
   const [busca, setBusca] = useState('');
   const [medicao, setMedicao] = useState<CaixaRede | null>(null);
+  const [marcas, setMarcas] = useState<MarcaNoCaminho[]>([]);
 
   useEffect(() => {
     rotasParaRompimento(setRotas).catch(() => setRotas((v) => v ?? []));
+    marcasDaVistoria(setMarcas).catch(() => undefined);
     let vivo = true;
     caixasDaRede((c) => vivo && setCaixas(c)).then((c) => vivo && setCaixas(c)).catch(() => vivo && setCaixas((v) => v ?? []));
     return () => { vivo = false; };
@@ -145,7 +147,7 @@ export default function LocalizarRompimento({ voltar }: { voltar: () => void }) 
       </ScrollView>
       {medicao && caixas ? (
         <SimularRompimento aberto fechar={() => setMedicao(null)} medicao={medicao} caixas={caixas}
-          tracado={tracado} nomeTracado={kmz ? `${rota?.trecho} · ${kmz.nome_arquivo}` : null} />
+          tracado={tracado} marcas={marcas} nomeTracado={kmz ? `${rota?.trecho} · ${kmz.nome_arquivo}` : null} />
       ) : null}
     </View>
   );

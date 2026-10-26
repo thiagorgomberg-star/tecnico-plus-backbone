@@ -722,3 +722,35 @@ export function kmlRompimento(r: Rompimento, medicao: CaixaRede, distanciaKm: nu
     + (temLocal(medicao) ? marca(`Medição OTDR: ${medicao.identificacao}`, 'Ponto onde o OTDR foi ligado', 'm', medicao.latitude!, medicao.longitude!) : '')
     + linha + `</Document></kml>`;
 }
+
+// Marcas de metragem do cabo anotadas em pontos do caminho (postes da vistoria): com elas o rompimento
+// fica entre os dois pontos cujas marcas cercam a marca calculada, bem mais preciso que o lance inteiro.
+export type MarcaNoCaminho = { nome: string; lat: number; lng: number; marca: number; reserva?: number | null };
+export type RefinoPorMarcas = { lat: number; lng: number; entre: [string, string]; naReserva: string | null };
+
+export function refinarPorMarcas(r: Rompimento, marcas: MarcaNoCaminho[], perto: (p: { lat: number; lng: number }) => boolean): RefinoPorMarcas | null {
+  if (r.tipo !== 'lance' || r.marca == null) return null;
+  const l = r.lance;
+  if (l.marcaDe == null || l.marcaPara == null || !temLocal(l.de) || !temLocal(l.para)) return null;
+  const dir = Math.sign(l.marcaPara - l.marcaDe) || 1;
+  const pos = (m: number) => (m - l.marcaDe!) * dir;
+  const fim = pos(l.marcaPara);
+  const meio = marcas.filter((m) => pos(m.marca) > 0 && pos(m.marca) < fim && perto(m));
+  if (!meio.length) return null;
+  const seq: MarcaNoCaminho[] = [
+    { nome: l.de.identificacao, lat: l.de.latitude!, lng: l.de.longitude!, marca: l.marcaDe },
+    ...meio.sort((a, b) => pos(a.marca) - pos(b.marca)),
+    { nome: l.para.identificacao, lat: l.para.latitude!, lng: l.para.longitude!, marca: l.marcaPara },
+  ];
+  const alvo = pos(r.marca);
+  for (let i = 0; i < seq.length - 1; i++) {
+    const a = seq[i], b = seq[i + 1];
+    const inicioChao = pos(a.marca) + (i > 0 ? Number(a.reserva) || 0 : 0); // cabo enrolado na reserva do poste
+    if (alvo >= pos(a.marca) && alvo < inicioChao) return { lat: a.lat, lng: a.lng, entre: [a.nome, b.nome], naReserva: a.nome };
+    if (alvo >= inicioChao && alvo <= pos(b.marca)) {
+      const f = pos(b.marca) > inicioChao ? (alvo - inicioChao) / (pos(b.marca) - inicioChao) : 0;
+      return { lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f, entre: [a.nome, b.nome], naReserva: null };
+    }
+  }
+  return null;
+}

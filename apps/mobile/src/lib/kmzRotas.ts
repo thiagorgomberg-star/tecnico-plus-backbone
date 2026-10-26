@@ -5,6 +5,7 @@ import { requireOptionalNativeModule } from 'expo-modules-core';
 
 import { enfileirar } from './fila';
 import { supabase } from './supabase';
+import { MarcaNoCaminho } from './fusao';
 import { comprimento, lerKmz, prepararTracado, TracadoSalvo } from './tracado';
 
 // Rotas e os KMZ de cada uma para localizar rompimento. Tudo fica guardado no celular para usar sem sinal.
@@ -68,4 +69,16 @@ export async function inserirKmz(rotaId: string): Promise<KmzRota | null> {
   copia.write(bytes);
   await enfileirar({ tipo: 'kmz', kmzId: id, rotaId, nome: item.nome_arquivo, arquivo: copia.uri, tracado, extensao_m: item.extensao_m });
   return item;
+}
+
+// Postes/pontos da vistoria com a marca de metragem do cabo anotada (refinam o local do rompimento).
+const CH_MARCAS = 'rompimento-marcas-vistoria';
+export async function marcasDaVistoria(aoAtualizar: (m: MarcaNoCaminho[]) => void) {
+  aoAtualizar(await ler<MarcaNoCaminho[]>(CH_MARCAS, []));
+  const { data } = await supabase.from('vistoria_pontos_mapa').select('identificacao, categoria, latitude, longitude, metragem_cabo, reserva_m')
+    .not('metragem_cabo', 'is', null).not('latitude', 'is', null).limit(5000);
+  if (!data) return;
+  const marcas = data.map((p) => ({ nome: p.identificacao || p.categoria || 'Poste', lat: p.latitude, lng: p.longitude, marca: Number(p.metragem_cabo), reserva: p.reserva_m }));
+  aoAtualizar(marcas);
+  await AsyncStorage.setItem(CH_MARCAS, JSON.stringify(marcas));
 }

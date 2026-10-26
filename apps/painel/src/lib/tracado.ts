@@ -212,3 +212,11 @@ export type TracadoSalvo = { caminho: Coord[]; pontos: PontoKml[] };
 export function prepararTracado(t: Tracado): TracadoSalvo {
   return { caminho: simplificar(encadear(t.linhas)), pontos: t.pontos.map((p) => ({ nome: p.nome.slice(0, 60), lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6) })) };
 }
+
+// Ponto com marca de metragem pertence ao cabo deste lance? Com traçado: até 300 m dele; sem: perto da reta entre as caixas.
+export function pertoDoLance(cam: Coord[] | null, de: Coord, para: Coord) {
+  if (cam && cam.length >= 2) return (p: Coord) => projetar(cam, p).dist <= 300;
+  const reta = [de, para];
+  const limite = Math.max(500, distanciaMetros(de, para) * 0.3);
+  return (p: Coord) => projetar(reta, p).dist <= limite;
+}
