@@ -70,7 +70,7 @@ export async function compartilharRelatorio(os: OrdemServico) {
     supabase.from('ordens_servico')
       .select('criado_em, enviada_em, iniciada_em, concluida_em, tecnico:usuarios!ordens_servico_tecnico_id_fkey(nome, cargo), rota:rotas(trecho), veiculo:veiculos(placa, marca, modelo, cor)')
       .eq('id', os.id).maybeSingle(),
-    supabase.from('os_anexos').select('caminho_arquivo, tirada_em, tipo, caixa_id, fibra, bandeja, descricao').eq('os_id', os.id)
+    supabase.from('os_anexos').select('caminho_arquivo, tirada_em, tipo, caixa_id, fibra, bandeja, descricao').eq('os_id', os.id).eq('oculta_relatorio', false)
       .in('tipo', ['foto_antes', 'foto_depois', 'foto_caixa', 'foto_otdr', 'foto_bandeja', 'foto_olt', 'assinatura']).order('criado_em'),
     supabase.rpc('km_percorridos_os', { p_os: os.id }),
   ]);
@@ -87,7 +87,10 @@ export async function compartilharRelatorio(os: OrdemServico) {
   // O.S. aberta por vistoria ou ocorrência informada: as fotos da abertura entram como "Antes" no comparativo com a correção.
   const comAbertura = !!(os.origem_ponto_id || os.informado_por);
   const { data: refs } = comAbertura ? await supabase.rpc('fotos_referencia', { p_os: os.id }) : { data: null };
-  const caminhosRef = new Set(((refs ?? []) as { caminho_arquivo: string }[]).map((r) => r.caminho_arquivo));
+  // Fotos que o supervisor ocultou do relatório também saem do "Antes".
+  const { data: ocultas } = comAbertura ? await supabase.from('os_anexos').select('caminho_arquivo').eq('oculta_relatorio', true) : { data: null };
+  const caminhosOcultos = new Set((ocultas ?? []).map((o) => o.caminho_arquivo));
+  const caminhosRef = new Set(((refs ?? []) as { caminho_arquivo: string }[]).map((r) => r.caminho_arquivo).filter((c) => !caminhosOcultos.has(c)));
   let antes: string[] = [];
   if (caminhosRef.size) {
     const { data: urls } = await supabase.storage.from('os-anexos').createSignedUrls([...caminhosRef], 600);

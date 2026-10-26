@@ -16,7 +16,7 @@ const EM_ANDAMENTO: StatusOS[] = ["enviada", "aceita", "em_execucao", "pausada",
 
 type Anexo = {
   id: string; tipo: string; caminho_arquivo: string; nome_arquivo: string | null; descricao: string | null;
-  tirada_em: string | null; criado_em: string; url?: string;
+  tirada_em: string | null; criado_em: string; oculta_relatorio: boolean; url?: string;
 };
 type Evento = {
   id: number; status_anterior: StatusOS | null; status_novo: StatusOS; criado_em: string; observacao: string | null;
@@ -51,7 +51,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
       .then(({ data }) => setLocal(data));
     supabase.from("caixas_mapa").select("*").eq("os_id", inicial.id).order("localizada_em")
       .then(({ data }) => setCaixas((data as unknown as CaixaPainel[]) ?? []));
-    supabase.from("os_anexos").select("id, tipo, caminho_arquivo, nome_arquivo, descricao, tirada_em, criado_em")
+    supabase.from("os_anexos").select("id, tipo, caminho_arquivo, nome_arquivo, descricao, tirada_em, criado_em, oculta_relatorio")
       .eq("os_id", inicial.id).order("criado_em")
       .then(async ({ data }) => {
         const lista = data ?? [];
@@ -107,6 +107,40 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
     window.addEventListener("keydown", tecla);
     return () => window.removeEventListener("keydown", tecla);
   }, [foto, andarFoto]);
+  // Supervisor esconde (ou volta a mostrar) uma foto no relatório; ela continua guardada na O.S.
+  async function alternarOculta(f: Anexo) {
+    const { error } = await supabase.from("os_anexos").update({ oculta_relatorio: !f.oculta_relatorio }).eq("id", f.id);
+    if (error) return alert(error.message);
+    setAnexos((v) => v.map((a) => (a.id === f.id ? { ...a, oculta_relatorio: !f.oculta_relatorio } : a)));
+    setFoto((atual) => (atual?.id === f.id ? { ...atual, oculta_relatorio: !f.oculta_relatorio } : atual));
+  }
+
+  // Supervisor envia fotos do computador para a O.S. Foto em pé ganha faixas laterais para ficar deitada (padrão do relatório).
+  const [tipoEnvio, setTipoEnvio] = useState<"foto_antes" | "foto_depois">("foto_depois");
+  const [enviando, setEnviando] = useState(0);
+  async function enviarFotos(arquivos: FileList | null) {
+    const lista = Array.from(arquivos ?? []).filter((a) => a.type.startsWith("image/"));
+    if (!lista.length) return;
+    setEnviando(lista.length);
+    for (const arquivo of lista) {
+      try {
+        const { blob, largura, altura } = await fotoDeitada(arquivo);
+        const caminho = `${os.id}/supervisor/${crypto.randomUUID()}.jpg`;
+        const { error: e1 } = await supabase.storage.from("os-anexos").upload(caminho, blob, { contentType: "image/jpeg" });
+        if (e1) throw e1;
+        const { data: sessao } = await supabase.auth.getUser();
+        const { error: e2 } = await supabase.from("os_anexos").insert({
+          os_id: os.id, tipo: tipoEnvio, caminho_arquivo: caminho, nome_arquivo: arquivo.name, enviado_por: sessao.user?.id,
+          largura_px: largura, altura_px: altura, tirada_em: new Date(arquivo.lastModified || Date.now()).toISOString(),
+        });
+        if (e2) throw e2;
+      } catch (e) {
+        alert(`Não foi possível enviar ${arquivo.name}: ${(e as { message?: string }).message ?? e}`);
+      }
+      setEnviando((n) => n - 1);
+    }
+    recarregar();
+  }
   const apoio = anexos.filter((a) => a.tipo === "documento");
   const assinatura = [...anexos].reverse().find((a) => a.tipo === "assinatura");
 
@@ -225,18 +259,42 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
             <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-green-600" /> ao vivo
           </span>
         </h3>
+        <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-blue-300 bg-blue-50/50 p-3 text-sm">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-gray-600">Tipo da foto</span>
+            <select className="rounded border border-gray-300 bg-white px-2 py-1.5" value={tipoEnvio}
+              onChange={(e) => setTipoEnvio(e.target.value as "foto_antes" | "foto_depois")}>
+              <option value="foto_antes">Antes</option>
+              <option value="foto_depois">Depois</option>
+            </select>
+          </label>
+          <label className={`cursor-pointer rounded-lg bg-blue-700 px-3 py-2 font-medium text-white hover:bg-blue-800 ${enviando ? "pointer-events-none opacity-60" : ""}`}>
+            {enviando ? `Enviando... (${enviando})` : "📷 Enviar fotos para a O.S."}
+            <input type="file" accept="image/*" multiple className="hidden"
+              onChange={(e) => { enviarFotos(e.target.files); e.target.value = ""; }} />
+          </label>
+        </div>
         {fotos.length === 0 ? (
           <p className="mt-2 text-sm text-gray-500">Nenhuma foto enviada ainda. Elas aparecem aqui assim que chegam do celular.</p>
         ) : (
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {fotos.map((f, i) => (
-              <button key={f.id} onClick={() => setFoto(f)} className="group relative overflow-hidden rounded-lg border border-gray-200">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={f.url} alt={`Foto ${i + 1}`} className="aspect-[4/3] w-full object-cover group-hover:opacity-90" />
-                <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 text-xs text-white">
+              <div key={f.id} className={`group relative overflow-hidden rounded-lg border ${f.oculta_relatorio ? "border-amber-400" : "border-gray-200"}`}>
+                <button onClick={() => setFoto(f)} className="block w-full">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={f.url} alt={`Foto ${i + 1}`} className={`aspect-[4/3] w-full object-cover group-hover:opacity-90 ${f.oculta_relatorio ? "opacity-40" : ""}`} />
+                </button>
+                <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-black/60 px-1.5 text-xs text-white">
                   {i + 1} · {quando(f.tirada_em ?? f.criado_em)}
                 </span>
-              </button>
+                {f.oculta_relatorio && (
+                  <span className="pointer-events-none absolute left-1 top-1 rounded bg-amber-500 px-1.5 text-xs font-medium text-white">Fora do relatório</span>
+                )}
+                <button onClick={() => alternarOculta(f)} title={f.oculta_relatorio ? "Mostrar no relatório" : "Ocultar do relatório"}
+                  className="absolute right-1 top-1 rounded bg-white/90 px-1.5 py-0.5 text-xs font-medium text-gray-800 shadow hover:bg-white">
+                  {f.oculta_relatorio ? "👁 Mostrar" : "🙈 Ocultar"}
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -288,6 +346,10 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
           </span>
           <a href={foto.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
             className="absolute right-4 top-4 rounded-lg bg-white px-3 py-1.5 text-sm font-medium">Abrir original</a>
+          <button onClick={(e) => { e.stopPropagation(); alternarOculta(foto); }}
+            className={`absolute right-40 top-4 rounded-lg px-3 py-1.5 text-sm font-medium ${foto.oculta_relatorio ? "bg-amber-500 text-white" : "bg-white text-gray-900"}`}>
+            {foto.oculta_relatorio ? "👁 Mostrar no relatório" : "🙈 Ocultar do relatório"}
+          </button>
           {fotos.length > 1 && (
             <>
               <button aria-label="Foto anterior" onClick={(e) => { e.stopPropagation(); andarFoto(-1); }}
@@ -300,4 +362,22 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
       )}
     </div>
   );
+}
+
+// Lê a imagem e devolve um JPEG deitado: foto em pé ou quadrada ganha faixas pretas nas laterais (nada é cortado).
+async function fotoDeitada(arquivo: File): Promise<{ blob: Blob; largura: number; altura: number }> {
+  const img = await createImageBitmap(arquivo);
+  const escala = Math.min(1, 2560 / Math.max(img.width, img.height));
+  const w = Math.round(img.width * escala);
+  const h = Math.round(img.height * escala);
+  const largura = w > h ? w : Math.round(h * 4 / 3);
+  const canvas = document.createElement("canvas");
+  canvas.width = largura;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, largura, h);
+  ctx.drawImage(img, Math.round((largura - w) / 2), 0, w, h);
+  const blob = await new Promise<Blob>((ok, falha) => canvas.toBlob((b) => (b ? ok(b) : falha(new Error("imagem inválida"))), "image/jpeg", 0.88));
+  return { blob, largura, altura: h };
 }

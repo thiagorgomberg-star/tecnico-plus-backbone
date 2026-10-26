@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     admin.from("os_eventos").select("status_novo, criado_em").eq("os_id", osId).order("criado_em"),
     admin.from("os_servicos_executados").select("quantidade, observacao, item:itens_execucao(nome, unidade, categoria)").eq("os_id", osId).order("lancado_em"),
     admin.from("os_tecnicos_apoio").select("tecnico:usuarios!os_tecnicos_apoio_tecnico_id_fkey(nome)").eq("os_id", osId),
-    admin.from("os_anexos").select("tipo, caminho_arquivo, tirada_em, caixa_id, fibra, bandeja, descricao").eq("os_id", osId)
+    admin.from("os_anexos").select("tipo, caminho_arquivo, tirada_em, caixa_id, fibra, bandeja, descricao").eq("os_id", osId).eq("oculta_relatorio", false)
       .in("tipo", ["foto_antes", "foto_depois", "foto_caixa", "foto_otdr", "foto_bandeja", "foto_olt", "assinatura"]).order("criado_em"),
     admin.from("eventos_mapa").select("latitude, longitude, evento_localizado_em, evento_precisao_m").eq("id", osId).maybeSingle(),
     admin.from("caixas_mapa").select("*").eq("os_id", osId).order("localizada_em"),
@@ -46,12 +46,12 @@ Deno.serve(async (req) => {
   const { origem_ponto_id: pontoId, informado_por: informante, ...dadosOs } = os.data as typeof os.data & { origem_ponto_id: string | null; informado_por: string | null };
   const abertura: { caminho_arquivo: string; tirada_em: string | null }[] = [];
   if (pontoId) {
-    const { data } = await admin.from("os_anexos").select("caminho_arquivo, tirada_em").eq("ponto_id", pontoId).order("criado_em");
+    const { data } = await admin.from("os_anexos").select("caminho_arquivo, tirada_em").eq("ponto_id", pontoId).eq("oculta_relatorio", false).order("criado_em");
     abertura.push(...(data ?? []));
   }
   if (informante) {
     const { data } = await admin.from("os_anexos").select("caminho_arquivo, tirada_em")
-      .eq("os_id", osId).eq("enviado_por", informante).eq("tipo", "foto_antes").order("criado_em");
+      .eq("os_id", osId).eq("enviado_por", informante).eq("tipo", "foto_antes").eq("oculta_relatorio", false).order("criado_em");
     abertura.push(...(data ?? []));
   }
   const daAbertura = new Set(abertura.map((a) => a.caminho_arquivo));
