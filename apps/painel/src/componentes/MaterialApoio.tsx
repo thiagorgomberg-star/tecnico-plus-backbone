@@ -97,10 +97,18 @@ export default function MaterialApoio({ osId, numero, fechar }: { osId: string; 
         </ul>
 
         <div className="mt-4 grid gap-2">
-          <input type="file" multiple onChange={(e) => setArquivos(Array.from(e.target.files ?? []))}
-            accept="image/*,.pdf,.kmz,.kml,.xlsx,.docx,.zip,.txt,.sor" className="text-sm" />
-          <input className="rounded-lg border border-gray-300 p-2 text-sm" placeholder="Descrição (opcional)"
-            value={descricao} onChange={(e) => setDescricao(e.target.value)} />
+          <label className="flex cursor-pointer flex-col items-center gap-1 rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 p-4 text-center text-sm text-blue-800 hover:bg-blue-100">
+            <span className="font-semibold">📎 Escolher arquivos para enviar</span>
+            <span className="text-xs text-blue-700">
+              {arquivos.length ? arquivos.map((a) => a.name).join(", ") : "Fotos, PDF, KMZ, planilhas ou curvas .sor (pode escolher vários)"}
+            </span>
+            <input type="file" multiple className="sr-only" onChange={(e) => setArquivos(Array.from(e.target.files ?? []))}
+              accept="image/*,.pdf,.kmz,.kml,.xlsx,.docx,.zip,.txt,.sor" />
+          </label>
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-gray-700">Descrição (opcional)</span>
+            <input className="rounded-lg border border-gray-300 p-2" value={descricao} onChange={(e) => setDescricao(e.target.value)} />
+          </label>
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
