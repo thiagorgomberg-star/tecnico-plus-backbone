@@ -159,7 +159,7 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
                       {os.pausa_solicitada_em && (
                         <button className={`${botao} bg-orange-600 text-white`} onClick={() => setPausa(os)}>Autorizar pausa</button>
                       )}
-                      <button className={`${botao} border border-gray-300`} onClick={() => setApoio(os)}>Apoio</button>
+                      <button className={`${botao} border border-gray-300`} onClick={() => setApoio(os)}>Material de apoio</button>
                       {os.status === "rascunho" && (
                         <button className={`${botao} bg-blue-700 text-white disabled:opacity-40`} disabled={!os.tecnico_id}
                           title={os.tecnico_id ? "" : "Escolha o técnico na coluna ao lado"}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import MaterialApoio from "@/componentes/MaterialApoio";
 import { supabase } from "@/lib/supabase";
 import { OrdemServico, Prioridade, TIPOS_OS } from "@/lib/tipos";
 
@@ -18,6 +19,7 @@ export default function EditarOS({ os, fechar, salva }: { os: OrdemServico; fech
     observacao_supervisor: os.observacao_supervisor ?? "",
   });
   const [salvando, setSalvando] = useState(false);
+  const [apoio, setApoio] = useState(false);
   const [erro, setErro] = useState("");
   const muda = (campo: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setF({ ...f, [campo]: e.target.value });
@@ -79,12 +81,16 @@ export default function EditarOS({ os, fechar, salva }: { os: OrdemServico; fech
         </div>
         <p className="mt-3 text-xs text-gray-500">Serviços, materiais e técnicos de apoio são alterados direto no detalhe da O.S.</p>
         {erro && <p className="mt-2 text-sm text-red-700">{erro}</p>}
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <button className="mr-auto rounded-lg border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50" onClick={() => setApoio(true)}>
+            📎 Material de apoio (anexar arquivos)
+          </button>
           <button className="rounded-lg px-4 py-2 text-sm hover:bg-gray-100" onClick={fechar}>Cancelar</button>
           <button className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
             disabled={salvando} onClick={salvar}>{salvando ? "Salvando..." : "Salvar alterações"}</button>
         </div>
       </div>
+      {apoio && <div onClick={(e) => e.stopPropagation()}><MaterialApoio osId={os.id} numero={os.numero} fechar={() => setApoio(false)} /></div>}
     </div>
   );
 }

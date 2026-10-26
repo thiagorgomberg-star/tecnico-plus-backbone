@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import CaixaDetalhe, { CaixaPainel } from "@/componentes/CaixaDetalhe";
 import { baixarKmz } from "@/componentes/CaixasRede";
 import EditarOS from "@/componentes/EditarOS";
+import MaterialApoio from "@/componentes/MaterialApoio";
 import ExecucaoOS from "@/componentes/ExecucaoOS";
 import ReabrirOS from "@/componentes/ReabrirOS";
 import { supabase } from "@/lib/supabase";
@@ -25,6 +26,7 @@ const quando = (v: string | null) => (v ? new Date(v).toLocaleString("pt-BR", { 
 // Detalhe da O.S. para o supervisor: dados, histórico, local do evento e fotos chegando em tempo real.
 export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; fechar: () => void }) {
   const [os, setOs] = useState(inicial);
+  const [material, setMaterial] = useState(false);
   const [anexos, setAnexos] = useState<Anexo[]>([]);
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [local, setLocal] = useState<Local | null>(null);
@@ -118,6 +120,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
           {!encerrada && (
             <button className="rounded-lg border border-gray-300 px-3 py-1.5 hover:bg-gray-50" onClick={() => setEditar(true)}>Editar dados</button>
           )}
+          <button className="rounded-lg border border-gray-300 px-3 py-1.5 hover:bg-gray-50" onClick={() => setMaterial(true)}>📎 Material de apoio</button>
         </div>
 
         {encerrada && (
@@ -230,6 +233,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
 
       {reabrir && <ReabrirOS os={os} fechar={() => setReabrir(false)} reaberta={recarregar} />}
       {editar && <EditarOS os={os} fechar={() => setEditar(false)} salva={recarregar} />}
+      {material && <div onClick={(e) => e.stopPropagation()}><MaterialApoio osId={os.id} numero={os.numero} fechar={() => { setMaterial(false); recarregar(); }} /></div>}
       {foto && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/90 p-4" onClick={(e) => { e.stopPropagation(); setFoto(null); }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}

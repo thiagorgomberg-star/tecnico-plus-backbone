@@ -73,7 +73,7 @@ export default function MaterialApoio({ osId, numero, fechar }: { osId: string; 
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 p-4" onClick={fechar}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={fechar}>
       <div className="w-full max-w-lg rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold">Material de apoio · O.S. #{numero}</h2>
         <p className="mt-1 text-sm text-gray-500">Fotos, prints, PDF, KMZ ou planilhas que o técnico consulta no app.</p>
