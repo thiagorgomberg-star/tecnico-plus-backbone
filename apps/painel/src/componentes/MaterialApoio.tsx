@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import AnaliseSor from "@/componentes/AnaliseSor";
 import { supabase } from "@/lib/supabase";
 
 type Anexo = { id: string; caminho_arquivo: string; nome_arquivo: string | null; descricao: string | null; criado_em: string };
@@ -31,6 +32,7 @@ export async function enviarMaterialApoio(osId: string, arquivos: File[], descri
 
 export default function MaterialApoio({ osId, numero, fechar }: { osId: string; numero: number; fechar: () => void }) {
   const [anexos, setAnexos] = useState<Anexo[]>([]);
+  const [curva, setCurva] = useState<Anexo | null>(null);
   const [arquivos, setArquivos] = useState<File[]>([]);
   const [descricao, setDescricao] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -84,14 +86,19 @@ export default function MaterialApoio({ osId, numero, fechar }: { osId: string; 
                 {a.nome_arquivo ?? a.caminho_arquivo.split("/").pop()}
               </button>
               {a.descricao && <span className="truncate text-gray-500">· {a.descricao}</span>}
-              <button className="ml-auto text-red-700 hover:underline" onClick={() => remover(a)}>Remover</button>
+              {/\.sor$/i.test(a.nome_arquivo ?? a.caminho_arquivo) && (
+                <button className="ml-auto whitespace-nowrap rounded-md bg-[#163A6B] px-2 py-1 text-xs font-semibold text-white hover:opacity-90" onClick={() => setCurva(a)}>
+                  Analisar curva
+                </button>
+              )}
+              <button className={`${/\.sor$/i.test(a.nome_arquivo ?? a.caminho_arquivo) ? "" : "ml-auto "}text-red-700 hover:underline`} onClick={() => remover(a)}>Remover</button>
             </li>
           ))}
         </ul>
 
         <div className="mt-4 grid gap-2">
           <input type="file" multiple onChange={(e) => setArquivos(Array.from(e.target.files ?? []))}
-            accept="image/*,.pdf,.kmz,.kml,.xlsx,.docx,.zip,.txt" className="text-sm" />
+            accept="image/*,.pdf,.kmz,.kml,.xlsx,.docx,.zip,.txt,.sor" className="text-sm" />
           <input className="rounded-lg border border-gray-300 p-2 text-sm" placeholder="Descrição (opcional)"
             value={descricao} onChange={(e) => setDescricao(e.target.value)} />
         </div>
@@ -104,6 +111,12 @@ export default function MaterialApoio({ osId, numero, fechar }: { osId: string; 
           </button>
         </div>
       </div>
+      {curva && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <AnaliseSor bucket="os-anexos" caminho={curva.caminho_arquivo} nome={curva.nome_arquivo ?? curva.caminho_arquivo.split("/").pop() ?? ""}
+            extensaoKm={null} fechar={() => setCurva(null)} />
+        </div>
+      )}
     </div>
   );
 }
