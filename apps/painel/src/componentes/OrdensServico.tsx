@@ -4,11 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 
 import AutorizarPausa from "@/componentes/AutorizarPausa";
 import DetalheOS from "@/componentes/DetalheOS";
+import EditarOS from "@/componentes/EditarOS";
 import ExcluirDados from "@/componentes/ExcluirDados";
 import MaterialApoio from "@/componentes/MaterialApoio";
 import NovaOS from "@/componentes/NovaOS";
+import ReabrirOS from "@/componentes/ReabrirOS";
 import { supabase } from "@/lib/supabase";
-import { corStatus, OrdemServico, rotuloDaOs, StatusOS, Tecnico } from "@/lib/tipos";
+import { corStatus, ENCERRADAS, OrdemServico, rotuloDaOs, StatusOS, Tecnico } from "@/lib/tipos";
 
 const FILTROS: { rotulo: string; status: StatusOS[] | null }[] = [
   { rotulo: "Backlog", status: ["rascunho"] },
@@ -30,6 +32,8 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
   const [detalhe, setDetalhe] = useState<OrdemServico | null>(null);
   const [pausa, setPausa] = useState<OrdemServico | null>(null);
   const [excluir, setExcluir] = useState<OrdemServico | null>(null);
+  const [reabrir, setReabrir] = useState<OrdemServico | null>(null);
+  const [editar, setEditar] = useState<OrdemServico | null>(null);
 
   const [versao, setVersao] = useState(0);
   const carregar = useCallback(() => setVersao((v) => v + 1), []);
@@ -119,6 +123,9 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
                     <button className="font-mono text-blue-700 hover:underline" onClick={() => setDetalhe(os)}>#{os.numero}</button>
                     {os.ticket_acionamento && <div className="font-mono text-xs text-gray-500">{os.ticket_interno ? "Token" : "Ticket"} {os.ticket_acionamento}</div>}
                     {os.criada_por === os.tecnico_id && <div className="text-xs font-medium text-green-700">Aberta pelo técnico em campo</div>}
+                    {os.reaberta_em && !ENCERRADAS.includes(os.status) && (
+                      <div className="text-xs font-medium text-amber-700" title={os.reaberta_motivo ?? ""}>Reaberta</div>
+                    )}
                   </td>
                   <td className="p-3">
                     <button className="text-left font-medium text-blue-700 hover:underline" onClick={() => setDetalhe(os)}>{os.titulo}</button>
@@ -164,6 +171,12 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
                           <button className={`${botao} border border-gray-300`} onClick={() => mudarStatus(os, "devolvida", true)}>Devolver</button>
                         </>
                       )}
+                      {(ENCERRADAS.includes(os.status) || os.status === "concluida") && (
+                        <button className={`${botao} border border-amber-500 text-amber-800`} onClick={() => setReabrir(os)}>Reabrir</button>
+                      )}
+                      {!ENCERRADAS.includes(os.status) && (
+                        <button className={`${botao} border border-gray-300`} onClick={() => setEditar(os)}>Editar</button>
+                      )}
                       {!["baixada", "cancelada", "concluida"].includes(os.status) && (
                         <button className={`${botao} text-red-700 hover:bg-red-50`}
                           onClick={() => confirm(`Cancelar a O.S. #${os.numero}?`) && mudarStatus(os, "cancelada")}>Cancelar</button>
@@ -180,6 +193,8 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
       </div>
 
       {excluir && <ExcluirDados tipo="os" id={excluir.id} nome={`O.S. #${excluir.numero}`} fechar={() => setExcluir(null)} aoExcluir={carregar} />}
+      {reabrir && <ReabrirOS os={reabrir} fechar={() => setReabrir(null)} reaberta={carregar} />}
+      {editar && <EditarOS os={editar} fechar={() => setEditar(null)} salva={carregar} />}
       {pausa && <AutorizarPausa os={pausa} tecnicos={tecnicos} fechar={() => setPausa(null)} />}
       {detalhe && <DetalheOS os={detalhe} fechar={() => setDetalhe(null)} />}
       {apoio && <MaterialApoio osId={apoio.id} numero={apoio.numero} fechar={() => setApoio(null)} />}

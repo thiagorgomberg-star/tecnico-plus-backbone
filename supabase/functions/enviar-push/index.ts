@@ -13,6 +13,7 @@ const titulos: Record<string, string> = {
   os_visualizada: "O.S. visualizada",
   pausa_solicitada: "Pedido de pausa",
   backlog_proximo: "Ocorrência perto de você",
+  os_reaberta: "O.S. reaberta",
 };
 
 type Conta = { client_email: string; private_key: string; project_id: string };

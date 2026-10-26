@@ -10,7 +10,8 @@ type Apoio = { tecnico_id: string; tecnico: { nome: string } | null };
 type Pessoa = { id: string; nome: string };
 
 // Serviços executados, materiais utilizados e técnicos de apoio da O.S. (atualiza em tempo real).
-export default function ExecucaoOS({ osId, responsavelId }: { osId: string; responsavelId: string | null }) {
+// bloqueado: O.S. encerrada, só leitura até ser reaberta.
+export default function ExecucaoOS({ osId, responsavelId, bloqueado = false }: { osId: string; responsavelId: string | null; bloqueado?: boolean }) {
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
   const [apoio, setApoio] = useState<Apoio[]>([]);
   const [catalogo, setCatalogo] = useState<Item[]>([]);
@@ -85,10 +86,10 @@ export default function ExecucaoOS({ osId, responsavelId }: { osId: string; resp
         {apoio.map((a) => (
           <span key={a.tecnico_id} className="flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1">
             {a.tecnico?.nome}
-            <button className="text-gray-500 hover:text-red-700" onClick={() => removerApoio(a.tecnico_id)} title="Remover">×</button>
+            {!bloqueado && <button className="text-gray-500 hover:text-red-700" onClick={() => removerApoio(a.tecnico_id)} title="Remover">×</button>}
           </span>
         ))}
-        {disponiveis.length > 0 && (
+        {!bloqueado && disponiveis.length > 0 && (
           <select className="rounded-lg border border-gray-300 p-1.5" value="" onChange={(e) => adicionarApoio(e.target.value)}>
             <option value="">+ Adicionar apoio</option>
             {disponiveis.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
@@ -112,7 +113,7 @@ export default function ExecucaoOS({ osId, responsavelId }: { osId: string; resp
                       <td className="py-1.5 text-right font-medium">{fmt(l.quantidade)} {l.item?.unidade}</td>
                       <td className="py-1.5 pl-3 text-xs text-gray-500">{l.autor?.nome}</td>
                       <td className="py-1.5 pl-2 text-right">
-                        <button className="text-xs text-red-700 hover:underline" onClick={() => remover(l)}>remover</button>
+                        {!bloqueado && <button className="text-xs text-red-700 hover:underline" onClick={() => remover(l)}>remover</button>}
                       </td>
                     </tr>
                   ))}
@@ -123,7 +124,7 @@ export default function ExecucaoOS({ osId, responsavelId }: { osId: string; resp
         );
       })}
 
-      <form onSubmit={lancar} className="mt-3 flex flex-wrap gap-2 text-sm">
+      {!bloqueado && <form onSubmit={lancar} className="mt-3 flex flex-wrap gap-2 text-sm">
         <select className="flex-1 rounded-lg border border-gray-300 p-1.5" value={novo.item_id} onChange={(e) => setNovo({ ...novo, item_id: e.target.value })}>
           <option value="">Lançar serviço ou material...</option>
           <optgroup label="Serviços">
@@ -136,7 +137,7 @@ export default function ExecucaoOS({ osId, responsavelId }: { osId: string; resp
         <input className="w-28 rounded-lg border border-gray-300 p-1.5" placeholder="Quantidade" inputMode="decimal"
           value={novo.quantidade} onChange={(e) => setNovo({ ...novo, quantidade: e.target.value })} />
         <button className="rounded-lg border border-gray-300 px-3 py-1.5 hover:bg-gray-50">Lançar</button>
-      </form>
+      </form>}
     </>
   );
 }

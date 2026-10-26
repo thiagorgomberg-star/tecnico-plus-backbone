@@ -34,6 +34,8 @@ export type OrdemServico = {
   pausa_solicitada_em: string | null;
   continua_em?: string | null; // pausada para continuar em outro dia (roteamento)
   pausa_motivo: string | null;
+  reaberta_em?: string | null;
+  reaberta_motivo?: string | null;
   criado_em: string;
   tecnico?: { nome: string } | null;
 };
@@ -67,5 +69,8 @@ export const corStatus: Record<StatusOS, string> = {
   baixada: "bg-green-100 text-green-800",
   cancelada: "bg-gray-100 text-gray-500",
 };
+
+// Encerradas: só mudam depois de reabertas.
+export const ENCERRADAS: StatusOS[] = ["baixada", "cancelada"];
 
 export const TIPOS_OS = ["Corretiva", "Preventiva rede", "Preventiva site", "Roteamento de fibras", "Vistoria de rota", "Vistoria Backbone MG", "Vistoria Backbone SP", "Ocorrência informada"];

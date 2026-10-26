@@ -288,6 +288,9 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
         {aba === 'detalhes' ? (
           <>
+            {os.reaberta_em && os.reaberta_motivo && !['concluida', 'baixada', 'cancelada'].includes(os.status) ? (
+              <Aviso cor={cores.alerta} texto={`Reaberta pelo supervisor: ${os.reaberta_motivo}`} />
+            ) : null}
             {os.status === 'devolvida' && os.observacao_supervisor ? (
               <Aviso cor={cores.perigo} texto={`Devolvida pelo supervisor: ${os.observacao_supervisor}`} />
             ) : null}

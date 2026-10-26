@@ -27,6 +27,9 @@ export type OrdemServico = {
   tecnico_id?: string | null;
   pausa_solicitada_em?: string | null;
   pausa_motivo?: string | null;
+  enviada_em?: string | null;
+  reaberta_em?: string | null; // reaberta pelo supervisor depois de encerrada
+  reaberta_motivo?: string | null;
   continua_em?: string | null; // pausada para continuar em outro dia (roteamento)
   informado_por?: string | null; // ocorrência informada por um técnico (fotos dele viram referência)
   criado_em?: string;

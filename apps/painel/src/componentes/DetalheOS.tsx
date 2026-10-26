@@ -4,15 +4,20 @@ import { useCallback, useEffect, useState } from "react";
 
 import CaixaDetalhe, { CaixaPainel } from "@/componentes/CaixaDetalhe";
 import { baixarKmz } from "@/componentes/CaixasRede";
+import EditarOS from "@/componentes/EditarOS";
 import ExecucaoOS from "@/componentes/ExecucaoOS";
+import ReabrirOS from "@/componentes/ReabrirOS";
 import { supabase } from "@/lib/supabase";
-import { corStatus, OrdemServico, rotuloDaOs, rotuloStatus, StatusOS } from "@/lib/tipos";
+import { corStatus, ENCERRADAS, OrdemServico, rotuloDaOs, rotuloStatus, StatusOS } from "@/lib/tipos";
 
 type Anexo = {
   id: string; tipo: string; caminho_arquivo: string; nome_arquivo: string | null; descricao: string | null;
   tirada_em: string | null; criado_em: string; url?: string;
 };
-type Evento = { id: number; status_anterior: StatusOS | null; status_novo: StatusOS; criado_em: string; usuario: { nome: string } | null };
+type Evento = {
+  id: number; status_anterior: StatusOS | null; status_novo: StatusOS; criado_em: string; observacao: string | null;
+  usuario: { nome: string } | null;
+};
 type Local = { latitude: number; longitude: number; evento_localizado_em: string; evento_precisao_m: number | null };
 
 const quando = (v: string | null) => (v ? new Date(v).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—");
@@ -25,13 +30,15 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
   const [local, setLocal] = useState<Local | null>(null);
   const [foto, setFoto] = useState<Anexo | null>(null);
   const [caixas, setCaixas] = useState<CaixaPainel[]>([]);
+  const [reabrir, setReabrir] = useState(false);
+  const [editar, setEditar] = useState(false);
   const [versao, setVersao] = useState(0);
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
 
   useEffect(() => {
     supabase.from("ordens_servico").select("*, tecnico:usuarios!ordens_servico_tecnico_id_fkey(nome)").eq("id", inicial.id).single()
       .then(({ data }) => data && setOs(data as OrdemServico));
-    supabase.from("os_eventos").select("id, status_anterior, status_novo, criado_em, usuario:usuarios(nome)")
+    supabase.from("os_eventos").select("id, status_anterior, status_novo, criado_em, observacao, usuario:usuarios(nome)")
       .eq("os_id", inicial.id).order("criado_em")
       .then(({ data }) => setEventos((data as unknown as Evento[]) ?? []));
     supabase.from("eventos_mapa").select("latitude, longitude, evento_localizado_em, evento_precisao_m").eq("id", inicial.id).maybeSingle()
@@ -62,6 +69,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
     };
   }, [inicial.id, recarregar]);
 
+  const encerrada = ENCERRADAS.includes(os.status);
   const fotos = anexos.filter((a) => a.tipo === "foto_antes" || a.tipo === "foto_depois");
   const apoio = anexos.filter((a) => a.tipo === "documento");
   const assinatura = [...anexos].reverse().find((a) => a.tipo === "assinatura");
@@ -102,7 +110,26 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
           <button className="rounded-lg border border-gray-300 px-3 py-1.5 hover:bg-gray-50" onClick={() => compartilhar(true)}>
             Ver relatório / PDF
           </button>
+          {encerrada || os.status === "concluida" ? (
+            <button className="rounded-lg border border-amber-500 px-3 py-1.5 font-medium text-amber-800 hover:bg-amber-50" onClick={() => setReabrir(true)}>
+              Reabrir O.S.
+            </button>
+          ) : null}
+          {!encerrada && (
+            <button className="rounded-lg border border-gray-300 px-3 py-1.5 hover:bg-gray-50" onClick={() => setEditar(true)}>Editar dados</button>
+          )}
         </div>
+
+        {encerrada && (
+          <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600">
+            O.S. encerrada: para alterar, use <b>Reabrir O.S.</b>
+          </p>
+        )}
+        {!encerrada && os.reaberta_em && os.reaberta_motivo && (
+          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Reaberta em {quando(os.reaberta_em)}: {os.reaberta_motivo}
+          </p>
+        )}
 
         <dl className="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
           <div><dt className="text-gray-500">Técnico</dt><dd>{os.tecnico?.nome ?? "—"}</dd></div>
@@ -127,7 +154,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
           )}
         </dl>
 
-        <ExecucaoOS osId={os.id} responsavelId={os.tecnico_id} />
+        <ExecucaoOS osId={os.id} responsavelId={os.tecnico_id} bloqueado={encerrada} />
 
         {caixas.length > 0 && (
           <>
@@ -195,11 +222,14 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
             <li key={e.id} className="mb-2">
               <span className="font-medium">{rotuloStatus[e.status_novo]}</span>
               <span className="text-gray-500"> · {quando(e.criado_em)}{e.usuario?.nome ? ` · ${e.usuario.nome}` : ""}</span>
+              {e.observacao && <div className="text-amber-800">{e.observacao}</div>}
             </li>
           ))}
         </ol>
       </div>
 
+      {reabrir && <ReabrirOS os={os} fechar={() => setReabrir(false)} reaberta={recarregar} />}
+      {editar && <EditarOS os={os} fechar={() => setEditar(false)} salva={recarregar} />}
       {foto && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/90 p-4" onClick={(e) => { e.stopPropagation(); setFoto(null); }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -3,6 +3,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, FlatList, Linking, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
+import AvisoNovaOS from '../componentes/AvisoNovaOS';
 import BacklogMapa from '../componentes/BacklogMapa';
 import DetalheBacklog from '../componentes/DetalheBacklog';
 import Icone, { iconeDoTipo, NomeIcone } from '../componentes/Icone';
@@ -574,6 +575,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
       initialNumToRender={10}
       windowSize={7}
     />
+    <AvisoNovaOS ordens={ordens} abrir={abrirOS} />
     <DetalheBacklog b={itemDetalhe} fechar={() => setDetalhe(null)} assumir={assumir} ocupado={assumindo === detalhe} />
     </>
   );
