@@ -1,5 +1,5 @@
 import { randomUUID } from 'expo-crypto';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { ComponentRef, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
 import RolarComTeclado, { useAlturaTeclado } from '../componentes/RolarComTeclado';
 
@@ -66,6 +66,8 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const [balaoEstado, setBalaoEstado] = useState<'acesa' | 'apagada' | null>(null);
   const [balaoCliente, setBalaoCliente] = useState('');
   const [camera, setCamera] = useState<Camera | null>(null);
+  const [etapa, setEtapa] = useState(0);
+  const rolagemForm = useRef<ComponentRef<typeof ScrollView>>(null);
   // Já tem foto: abre a galeria (rever, excluir, tirar outra); sem foto vai direto para a câmera.
   const [galeria, setGaleria] = useState<Camera | null>(null);
   const abrirFotos = (cam: Camera) => (cam.feitas ? setGaleria(cam) : setCamera(cam));
@@ -285,17 +287,17 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
 
   async function salvar() {
     const identificacao = tagAuto ?? c.identificacao.trim();
-    if (!identificacao) return Alert.alert('Informe a identificação', 'Ex.: CE-BKB-0006');
-    if (origemTipo === 'dgo' && !c.origem_dgo?.trim()) return Alert.alert('Informe o nome ou TAG de onde vem a fibra');
-    if (!c.capacidade_fibras) return Alert.alert('Informe o tamanho do cabo de entrada');
-    if (c.saidas.some((q) => !q)) return Alert.alert('Informe o tamanho do cabo de cada saída');
-    if (calcularPlano(c).ligacoes.length && !c.fusoes_por_bandeja && !dgo) return Alert.alert('Informe quantas fusões cabem por bandeja');
-    if (c.tipo === 'site' && !c.parceiro?.trim()) return Alert.alert('Informe o parceiro do site');
-    if ((c.tipo === 'emenda' || c.tipo === 'entroncamento') && !c.instalacao) return Alert.alert('Informe se a caixa é aérea ou subterrânea');
-    if (dgo && !c.instalacao) return Alert.alert('Informe onde o DGO está instalado', 'Container, rooftop ou site de outro parceiro.');
-    if (dgo && c.instalacao === 'site_parceiro' && !c.parceiro?.trim()) return Alert.alert('Informe de qual parceiro é o site');
+    if (!identificacao) return irPara(0), Alert.alert('Informe a identificação', 'Ex.: CE-BKB-0006');
+    if (origemTipo === 'dgo' && !c.origem_dgo?.trim()) return irPara(1), Alert.alert('Informe o nome ou TAG de onde vem a fibra');
+    if (!c.capacidade_fibras) return irPara(2), Alert.alert('Informe o tamanho do cabo de entrada');
+    if (c.saidas.some((q) => !q)) return irPara(2), Alert.alert('Informe o tamanho do cabo de cada saída');
+    if (calcularPlano(c).ligacoes.length && !c.fusoes_por_bandeja && !dgo) return irPara(2), Alert.alert('Informe quantas fusões cabem por bandeja');
+    if (c.tipo === 'site' && !c.parceiro?.trim()) return irPara(0), Alert.alert('Informe o parceiro do site');
+    if ((c.tipo === 'emenda' || c.tipo === 'entroncamento') && !c.instalacao) return irPara(0), Alert.alert('Informe se a caixa é aérea ou subterrânea');
+    if (dgo && !c.instalacao) return irPara(0), Alert.alert('Informe onde o DGO está instalado', 'Container, rooftop ou site de outro parceiro.');
+    if (dgo && c.instalacao === 'site_parceiro' && !c.parceiro?.trim()) return irPara(0), Alert.alert('Informe de qual parceiro é o site');
     if (c.latitude == null && !(await new Promise<boolean>((ok) => Alert.alert('Sem localização', 'Salvar mesmo assim?', [
-      { text: 'Capturar', onPress: () => ok(false) }, { text: 'Salvar', onPress: () => ok(true) }])))) return;
+      { text: 'Capturar', onPress: () => { irPara(0); ok(false); } }, { text: 'Salvar', onPress: () => ok(true) }])))) return;
     setSalvando(true);
     const final: Caixa = {
       ...c,
@@ -318,9 +320,10 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
     setSalvando(false);
     if (nova) {
       setNova(false);
+      irPara(4);
       Alert.alert('Elemento salvo', ponta
-        ? 'Agora tire as fotos da caixa, de cada bandeja e a foto da tela do OTDR de cada fibra medida.'
-        : 'Agora tire as fotos da caixa e de cada bandeja com as fibras acomodadas.');
+        ? 'Agora tire as fotos da caixa (etapa Fotos), de cada bandeja (Fusões) e do OTDR de cada fibra medida (Fibras).'
+        : 'Agora tire as fotos da caixa (etapa Fotos) e de cada bandeja com as fibras acomodadas (Fusões).');
     } else voltar();
   }
 
@@ -341,10 +344,30 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
     </View>
   );
 
+  // Formulário em etapas: cada uma mostra só os seus blocos e ganha ✓ quando o essencial dela está preenchido.
+  const precisaInstalacao = ['emenda', 'entroncamento', 'dgo'].includes(c.tipo);
+  const etapasOk = [
+    !!(tagAuto ?? c.identificacao.trim()) && (!precisaInstalacao || !!c.instalacao),
+    dgo || origemTipo === 'nenhuma' || (origemTipo === 'caixa' ? !!c.origem_caixa_id : !!c.origem_dgo?.trim()),
+    !!c.capacidade_fibras && (dgo || !plano.ligacoes.length || !!c.fusoes_por_bandeja),
+    c.fibras.length > 0,
+    !nova && fotos.caixa > 0,
+  ];
+  const ETAPAS = ['Identificação', 'Vem de', 'Fusões', 'Fibras', 'Fotos'];
+  const irPara = (n: number) => { setEtapa(n); rolagemForm.current?.scrollTo({ y: 0, animated: false }); };
+
   return (
     <View style={{ flex: 1, backgroundColor: cores.fundo }}>
       <Cabecalho titulo={nova ? `Nova caixa · ${tagAuto}` : c.identificacao} subtitulo={rotuloPonto(c.tipo, c.swap)} voltar={voltar} />
-      <RolarComTeclado keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 32 }} pointerEvents={podeEditar ? 'auto' : 'none'}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.etapas} contentContainerStyle={{ paddingHorizontal: 10, gap: 6 }}>
+        {ETAPAS.map((nome, i) => (
+          <Pressable key={nome} onPress={() => irPara(i)} style={[s.etapa, etapa === i && s.etapaAtiva]}>
+            <Text style={[s.etapaTexto, etapa === i && { color: '#fff' }]}>{etapasOk[i] ? '✓ ' : `${i + 1} · `}{nome}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+      <RolarComTeclado ref={rolagemForm} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 32 }} pointerEvents={podeEditar ? 'auto' : 'none'}>
+        {etapa === 0 ? (<>
         <View style={s.bloco}>
           <Text style={s.rotulo}>TIPO</Text>
           <View style={s.chips}>
@@ -407,7 +430,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           ) : null}
         </View>
 
-        {dgo ? (
+        </>) : null}
+
+        {etapa === 1 ? (dgo ? (
           <View style={s.bloco}>
             <Text style={s.rotulo}>VEM DE · OLT E CORDÃO</Text>
             <Text style={s.suave}>O DGO é o começo do enlace: as fibras vêm da OLT pelos cordões. Escolha aqui o padrão; em cada fibra do mapa de fusão dá para ajustar posição na OLT, SFP e cordão.</Text>
@@ -549,8 +574,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
             <Text style={s.botaoPequenoTexto}>+ Reserva no caminho</Text>
           </Pressable>
         </View>
-        )}
+        )) : null}
 
+        {etapa === 0 ? (
         <View style={s.bloco}>
           <Text style={s.rotulo}>LOCALIZAÇÃO</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -567,6 +593,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           <TextInput placeholderTextColor={cores.apagado} style={s.campo} value={c.endereco ?? ''} onChangeText={(t) => mudar({ endereco: t })} placeholder="Endereço (preenchido pelo GPS)" multiline />
         </View>
 
+        ) : null}
+
+        {etapa === 2 ? (<>
         <View style={s.bloco}>
           <Text style={s.rotulo}>PLANO DE FUSÃO · ENTRADA (FIBRAS)</Text>
           <View style={s.chips}>
@@ -728,6 +757,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           )}
         </View>
 
+        </>) : null}
+
+        {etapa === 3 ? (
         <View style={s.bloco}>
           <Text style={s.rotulo}>{dgo ? 'FIBRAS: CLIENTE, POSIÇÃO NO DGO E OTDR' : ponta ? 'FIBRAS: CLIENTE, SINAL E SEM POTÊNCIA' : 'FIBRAS: CLIENTE E SEM POTÊNCIA'} ({c.fibras.length})</Text>
           {c.fibras.map((f) => (
@@ -837,6 +869,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           </Pressable>
         </View>
 
+        ) : null}
+
+        {etapa === 4 ? (
         <View style={s.bloco}>
           <Text style={s.rotulo}>OBSERVAÇÃO</Text>
           <TextInput style={[s.campo, { minHeight: 60, textAlignVertical: 'top' }]} multiline value={c.observacao ?? ''}
@@ -856,6 +891,19 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           {!nova ? null : (
             <Text style={s.suave}>Depois de salvar, tire as fotos da acomodação da caixa{ponta ? ' e do OTDR' : ''}.</Text>
           )}
+        </View>
+        ) : null}
+        <View style={s.navEtapas}>
+          {etapa > 0 ? (
+            <Pressable style={[s.botaoEtapa, s.botaoEtapaSec]} onPress={() => irPara(etapa - 1)}>
+              <Text style={[s.botaoEtapaTexto, { color: cores.primaria }]}>‹ {ETAPAS[etapa - 1]}</Text>
+            </Pressable>
+          ) : <View style={{ flex: 1 }} />}
+          {etapa < ETAPAS.length - 1 ? (
+            <Pressable style={s.botaoEtapa} onPress={() => irPara(etapa + 1)}>
+              <Text style={s.botaoEtapaTexto}>{ETAPAS[etapa + 1]} ›</Text>
+            </Pressable>
+          ) : <View style={{ flex: 1 }} />}
         </View>
       </RolarComTeclado>
       <Modal visible={balao != null} transparent animationType="fade" onRequestClose={() => setBalao(null)}>
@@ -966,6 +1014,14 @@ const s = StyleSheet.create({
   botaoPequenoTexto: { color: '#fff', fontWeight: '700' },
   botao: { borderRadius: 6, paddingVertical: 14, alignItems: 'center', marginTop: 12 },
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  etapas: { flexGrow: 0, backgroundColor: cores.cartao, borderBottomWidth: 1, borderBottomColor: cores.borda, paddingVertical: 8 },
+  etapa: { borderWidth: 1, borderColor: cores.borda, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: '#fff' },
+  etapaAtiva: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  etapaTexto: { fontSize: 13, fontWeight: '700', color: cores.texto },
+  navEtapas: { flexDirection: 'row', gap: 10, padding: 14 },
+  botaoEtapa: { flex: 1, height: 44, borderRadius: 12, backgroundColor: cores.primaria, alignItems: 'center', justifyContent: 'center' },
+  botaoEtapaSec: { backgroundColor: '#fff', borderWidth: 1, borderColor: cores.primaria },
+  botaoEtapaTexto: { color: '#fff', fontSize: 14.5, fontWeight: '800' },
   rodape: { backgroundColor: cores.cartao, borderTopWidth: 1, borderTopColor: cores.borda, padding: 12 },
 });
 
