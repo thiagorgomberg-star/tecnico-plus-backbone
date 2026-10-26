@@ -22,10 +22,17 @@ export async function fotosDaCaixa(caixaId: string, aoAtualizar: (f: FotoCaixa[]
   const fila = await daFila();
   aoAtualizar([...guardadas, ...fila]);
 
+  const novas = await baixarFotos(caixaId);
+  if (novas) aoAtualizar([...novas, ...(await daFila())]);
+}
+
+// Baixa (o que faltar) e guarda no celular as fotos de uma caixa; null quando não há sinal.
+async function baixarFotos(caixaId: string): Promise<FotoCaixa[] | null> {
   try {
     const { data, error } = await supabase.rpc('fotos_da_caixa', { p_caixa: caixaId });
-    if (error || !data) return;
+    if (error || !data) return null;
     const lista = data as { caminho: string; tipo: string; bandeja: number | null; fibra: number | null; tirada_em: string | null }[];
+    if (!lista.length) { await AsyncStorage.setItem(chave(caixaId), '[]'); return []; }
     if (!pasta(caixaId).exists) pasta(caixaId).create({ intermediates: true });
     const novas: FotoCaixa[] = [];
     for (const a of lista) {
@@ -39,6 +46,33 @@ export async function fotosDaCaixa(caixaId: string, aoAtualizar: (f: FotoCaixa[]
       novas.push({ uri: local.uri, tipo: a.tipo, bandeja: a.bandeja, fibra: a.fibra, tiradaEm: a.tirada_em });
     }
     await AsyncStorage.setItem(chave(caixaId), JSON.stringify(novas));
-    aoAtualizar([...novas, ...(await daFila())]);
-  } catch { /* sem sinal: fica o que já estava guardado */ }
+    return novas;
+  } catch {
+    return null;
+  }
+}
+
+// Antes de entrar na área sem sinal: baixa as fotos das caixas dos trechos das O.S. abertas do técnico
+// (e das caixas dessas O.S.). Roda uma vez por abertura do app, só o que ainda não está no celular.
+let baixando = false;
+export async function baixarFotosDaRota() {
+  if (baixando) return;
+  baixando = true;
+  try {
+    const { data: sessao } = await supabase.auth.getSession();
+    const eu = sessao.session?.user.id;
+    if (!eu) return;
+    const { data: ordens } = await supabase.from('ordens_servico').select('id, rota:rotas(trecho)')
+      .eq('tecnico_id', eu).in('status', ['enviada', 'aceita', 'em_execucao', 'pausada', 'devolvida']);
+    if (!ordens?.length) return;
+    const trechos = ordens.map((o) => (o.rota as unknown as { trecho: string } | null)?.trecho).filter(Boolean) as string[];
+    const ids = ordens.map((o) => o.id);
+    const filtro = [`os_id.in.(${ids.join(',')})`, ...(trechos.length ? [`trecho.in.(${trechos.map((t) => `"${t.replace(/"/g, '')}"`).join(',')})`] : [])].join(',');
+    const { data: caixas } = await supabase.from('caixas_mapa').select('id').or(filtro).limit(500);
+    for (const c of caixas ?? []) {
+      if ((await baixarFotos(c.id)) === null) break; // perdeu o sinal: tenta de novo na próxima abertura
+    }
+  } catch { /* sem sinal */ } finally {
+    baixando = false;
+  }
 }
