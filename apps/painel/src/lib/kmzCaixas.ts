@@ -1,15 +1,21 @@
 // KMZ das caixas de emenda (painel e backup semanal). Recebe o cliente do Supabase para rodar também fora do navegador.
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { CaixaPainel } from "@/componentes/CaixaDetalhe";
-import { descreverFibra, descreverSaidas, faixasDaBandeja, FotoKmz, htmlPreviaPlano, localDgo, midiasKmz, origemNaoCadastrada, posicoesDgo, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from "./fusao";
+import { CaixaRede, descreverFibra, descreverSaidas, faixasDaBandeja, FotoKmz, htmlPreviaPlano, localDgo, midiasKmz, origemNaoCadastrada, posicoesDgo, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from "./fusao";
 
-const origemDe = (c: CaixaPainel) => c.origem_identificacao ?? (origemNaoCadastrada(c) || null);
+// Sem imports do painel além de fusao.ts: a função backup-drive do Supabase usa uma cópia idêntica deste arquivo.
+export type CaixaKmz = CaixaRede & {
+  tipo: string; os_numero: number; trecho: string | null; tecnico: string | null; latitude: number | null; longitude: number | null;
+  grupos_fusionados: number; grupos_vagos: number; observacao: string | null; origem_identificacao: string | null;
+  parceiro?: string | null; instalacao?: string | null; bastidor?: string | null; fila?: string | null; rack?: string | null;
+};
+
+const origemDe = (c: CaixaKmz) => c.origem_identificacao ?? (origemNaoCadastrada(c) || null);
 
 const esc = (t: unknown) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 // Fotos da acomodação / DGO e das bandejas de cada caixa, como links longos (o Google Earth só aceita foto por link).
-async function fotosParaKmz(cliente: SupabaseClient, caixas: CaixaPainel[]) {
+async function fotosParaKmz(cliente: SupabaseClient, caixas: CaixaKmz[]) {
   const porCaixa: Record<string, FotoKmz[]> = {};
   const ids = caixas.map((c) => c.id);
   const tipoDe = new Map(caixas.map((c) => [c.id, c.tipo]));
@@ -30,7 +36,7 @@ async function fotosParaKmz(cliente: SupabaseClient, caixas: CaixaPainel[]) {
 
 // KMZ com um pin por caixa / DGO / site de parceiro e, na descrição, a prévia do plano de fusão com os clientes.
 // rede: todas as caixas conhecidas, para achar a posição no DGO de cada fibra mesmo que o DGO não esteja no arquivo.
-export async function montarKmz(cliente: SupabaseClient, caixas: CaixaPainel[], rede: CaixaPainel[] = caixas): Promise<Uint8Array> {
+export async function montarKmz(cliente: SupabaseClient, caixas: CaixaKmz[], rede: CaixaKmz[] = caixas): Promise<Uint8Array> {
   const fotos = await fotosParaKmz(cliente, caixas.filter((c) => c.latitude != null));
   const estilos = { emenda: "ff00a5ff", entroncamento: "ff0000ff", dgo: "ffff0000", site: "ff00b000" } as Record<string, string>;
   const pins = caixas.filter((c) => c.latitude != null).map((c) => {
