@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler", "strict": true, "noEmit": true, "skipLibCheck": true,
+    "jsx": "preserve", "lib": ["ES2022", "DOM"],
+    "paths": { "@/*": ["../../apps/painel/src/*"] }
+  },
+  "files": ["backup.ts"]
+}

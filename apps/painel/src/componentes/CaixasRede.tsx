@@ -3,72 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 
 import CaixaDetalhe, { CaixaPainel, ehPonta, origemDe } from "@/componentes/CaixaDetalhe";
-import { clienteDoCaminho, descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, localDgo, midiasKmz, posicoesDgo, rastrearFibra, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ, descreverSaidas } from "@/lib/fusao";
+import { clienteDoCaminho, descreverFibra, localDgo, rastrearFibra, rotuloPonto } from "@/lib/fusao";
 import { excluirComConfirmacao } from "@/lib/excluir";
+import { montarKmz } from "@/lib/kmzCaixas";
 import { supabase } from "@/lib/supabase";
 
-const esc = (t: unknown) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-// Fotos da acomodação / DGO e das bandejas de cada caixa, como links longos (o Google Earth só aceita foto por link).
-async function fotosParaKmz(caixas: CaixaPainel[]) {
-  const porCaixa: Record<string, FotoKmz[]> = {};
-  const ids = caixas.map((c) => c.id);
-  const tipoDe = new Map(caixas.map((c) => [c.id, c.tipo]));
-  for (let i = 0; i < ids.length; i += 100) {
-    const { data: anexos } = await supabase.from("os_anexos").select("caminho_arquivo, tipo, caixa_id, bandeja")
-      .in("caixa_id", ids.slice(i, i + 100)).in("tipo", ["foto_caixa", "foto_olt", "foto_bandeja"]).order("tipo").order("bandeja").order("criado_em");
-    if (!anexos?.length) continue;
-    const { data: urls } = await supabase.storage.from("os-anexos").createSignedUrls(anexos.map((a) => a.caminho_arquivo), VALIDADE_LINK_FOTO_KMZ);
-    anexos.forEach((a, j) => {
-      const url = urls?.[j]?.signedUrl;
-      if (!url) return;
-      (porCaixa[a.caixa_id] ??= []).push({ url, legenda: a.tipo === "foto_olt" ? "OLT e cordões" : a.tipo === "foto_bandeja"
-        ? `Bandeja ${a.bandeja ?? "?"} · fibras acomodadas` : tipoDe.get(a.caixa_id) === "dgo" ? "DGO" : "Acomodação da caixa" });
-    });
-  }
-  return porCaixa;
-}
-
-// KMZ com um pin por caixa / DGO / site de parceiro e, na descrição, a prévia do plano de fusão com os clientes.
-// rede: todas as caixas conhecidas, para achar a posição no DGO de cada fibra mesmo que o DGO não esteja no arquivo.
 export async function baixarKmz(caixas: CaixaPainel[], arquivo = `caixas-emenda-${new Date().toISOString().slice(0, 10)}`, rede: CaixaPainel[] = caixas) {
-  const fotos = await fotosParaKmz(caixas.filter((c) => c.latitude != null));
-  const estilos = { emenda: "ff00a5ff", entroncamento: "ff0000ff", dgo: "ffff0000", site: "ff00b000" } as Record<string, string>;
-  const pins = caixas.filter((c) => c.latitude != null).map((c) => {
-    const linhas = [
-      `${rotuloPonto(c.tipo, c.swap)}${rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ""} · O.S. ${c.os_numero}${c.trecho ? ` · ${c.trecho}` : ""}`,
-      c.parceiro ? `Parceiro: ${c.parceiro}` : null,
-      localDgo(c) || null,
-      origemDe(c) ? `Vem de: ${origemDe(c)}${c.origem_saida ? ` (saída ${c.origem_saida})` : ""}` : null,
-      `Entrada ${c.capacidade_fibras} FO → ${descreverSaidas(c) || "sem saída"}`,
-      `Grupos: ${c.grupos_fusionados} fusionados, ${c.grupos_vagos} vagos`,
-      ...(c.tipo === "dgo" ? [] : separarBandejas(c)).map((b) => `Bandeja ${b.numero}: ${b.ligacoes.length} fusões (${faixasDaBandeja(b)})`),
-      ...c.manobras.map((m) => `Manobra: ${descreverFibra(m.fibra_entrada, c.capacidade_fibras, c.padrao_cores_entrada ?? undefined)} → Saída ${m.saida} FO ${m.fibra_saida}${m.motivo ? ` (${m.motivo})` : ""}`),
-      c.observacao ? `Obs.: ${c.observacao}` : null,
-      c.tecnico ? `Técnico: ${c.tecnico}` : null,
-    ].filter(Boolean);
-    return `    <Placemark>
-      <name>${esc(c.identificacao)}</name>
-      <styleUrl>#${c.tipo}</styleUrl>
-      <description><![CDATA[${linhas.map(esc).join("<br>")}${htmlPreviaPlano({ ...c, posicoes_dgo: posicoesDgo(rede, c) })}]]></description>
-      ${midiasKmz(fotos[c.id] ?? [])}
-      <Point><coordinates>${c.longitude},${c.latitude},0</coordinates></Point>
-    </Placemark>`;
-  });
-  const kml = `<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-  <Document>
-    <name>Caixas de emenda - Técnico Plus</name>
-${Object.entries(estilos).map(([id, cor]) => `    <Style id="${id}"><IconStyle><color>${cor}</color><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle></Style>`).join("\n")}
-${pins.join("\n")}
-  </Document>
-</kml>
-`;
-  const JSZip = (await import("jszip")).default;
-  const zip = new JSZip();
-  zip.file("doc.kml", kml);
-  const blob = await zip.generateAsync({ type: "blob", mimeType: "application/vnd.google-earth.kmz" });
-  const url = URL.createObjectURL(blob);
+  const bytes = await montarKmz(supabase, caixas, rede);
+  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/vnd.google-earth.kmz" }));
   const a = document.createElement("a");
   a.href = url;
   a.download = `${arquivo}.kmz`;
