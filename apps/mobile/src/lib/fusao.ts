@@ -223,7 +223,7 @@ export function linhasDaBandeja(caixa: PlanoCaixa, b: { ligacoes: Ligacao[] }) {
     return {
       fibra: l.entrada,
       entrada: descreverFibra(l.entrada, caixa.capacidade_fibras, caixa.padrao_cores_entrada ?? undefined).replace(/^FO \d+ · /, ''),
-      destino: `${caixa.tipo === 'dgo' ? 'Cabo' : 'Saída'} ${l.saida} · ${descreverFibra(l.fibraSaida, capS, padraoS)}${l.manobra ? ' (manobra)' : ''}`,
+      destino: l.saida === 0 ? 'Pigtail no DGO' : `${caixa.tipo === 'dgo' ? 'Cabo' : 'Saída'} ${l.saida} · ${descreverFibra(l.fibraSaida, capS, padraoS)}${l.manobra ? ' (manobra)' : ''}`,
       situacao: s?.sem_potencia ? 'Apagada' : s?.acesa || s?.cliente ? 'Acesa' : '—',
       cliente: s?.cliente ?? '',
       posicao: s?.posicao_dgo || posicoes[l.entrada] || '',
@@ -238,7 +238,13 @@ export type Bandeja = { numero: number; ligacoes: Ligacao[] };
 export function separarBandejas(caixa: PlanoCaixa): Bandeja[] {
   const porBandeja = caixa.fusoes_por_bandeja || 12;
   const bandejas: Bandeja[] = [];
-  calcularPlano(caixa).ligacoes.forEach((l, i) => {
+  const ligacoes = calcularPlano(caixa).ligacoes;
+  // No DGO toda fibra do cabo é fusionada a um pigtail do DIO: as bandejas seguem a ordem das fibras,
+  // com ou sem cabo de saída cadastrado (saida 0 = termina no DGO).
+  const fusoes = caixa.tipo === 'dgo'
+    ? Array.from({ length: caixa.capacidade_fibras }, (_, i) => ligacoes.find((l) => l.entrada === i + 1) ?? { entrada: i + 1, saida: 0, fibraSaida: 0, manobra: false })
+    : ligacoes;
+  fusoes.forEach((l, i) => {
     const b = Math.floor(i / porBandeja);
     if (!bandejas[b]) bandejas[b] = { numero: b + 1, ligacoes: [] };
     bandejas[b].ligacoes.push(l);
@@ -347,6 +353,7 @@ export function svgMapaFusao(caixa: PlanoCaixa, opcoes: { todosTubos?: boolean; 
   const situacao = new Map((caixa.fibras ?? []).map((f) => [f.fibra, f]));
   const partes: string[] = [];
   let y = 40;
+  let bandejaAnterior: number | undefined;
   // No DGO a esquerda são as posições do DGO; nas caixas, o cabo que chega.
   const titulo = dgo ? `DGO · ${cap} posições${localDgo(caixa) ? ` · ${localDgo(caixa)}` : ''}`
     : `Entrada · ${cap} FO${rotuloPadrao(caixa.padrao_cores_entrada) ? ` · ${rotuloPadrao(caixa.padrao_cores_entrada)}` : ''}${caixa.origem ? ` · de ${caixa.origem}` : ''}`;
@@ -362,6 +369,14 @@ export function svgMapaFusao(caixa: PlanoCaixa, opcoes: { todosTubos?: boolean; 
       const n = primeiro + k;
       const f = fibra(n, cap, padraoE);
       const yy = y + k * L + L / 2;
+      const bn = bandejaDe.get(n);
+      if (bn != null && bn !== bandejaAnterior && bandejaAnterior !== undefined) {
+        partes.push(`<line x1="12" y1="${yy - L / 2}" x2="258" y2="${yy - L / 2}" stroke="#0572CE" stroke-dasharray="4 3"/>`);
+      }
+      if (bn != null && bn !== bandejaAnterior) {
+        partes.push(`<text x="262" y="${yy - L / 2 + 3}" font-size="8" fill="#0572CE" font-weight="bold">BANDEJA ${bn}</text>`);
+      }
+      if (bn != null) bandejaAnterior = bn;
       yEntrada.set(n, yy);
       opcoes.alvos?.push({ fibra: n, y: yy });
       if (opcoes.selecionada === n) partes.push(`<rect x="12" y="${yy - L / 2}" width="214" height="${L}" rx="3" fill="#dbeafe"/>`);
@@ -417,14 +432,10 @@ export function svgMapaFusao(caixa: PlanoCaixa, opcoes: { todosTubos?: boolean; 
   // Linhas: cor com cor contínua; manobra tracejada em vermelho com "M" no meio.
   // Etiqueta da bandeja de cada fusão (B1, B2...) logo depois da fibra de entrada; as cores alternam por bandeja.
   const x1 = 262, x2 = W - 224;
-  if (dgo) for (const [entrada] of bandejaDe) {
-    const ya = yEntrada.get(entrada);
-    if (ya != null) partes.push(`<line x1="224" y1="${ya}" x2="${x1}" y2="${ya}" stroke="#4b5563"/>`);
-  }
-  for (const [entrada, b] of dgo ? [] : bandejaDe) {
+  for (const [entrada, b] of bandejaDe) {
     const ya = yEntrada.get(entrada);
     if (ya == null) continue;
-    partes.push(`<line x1="224" y1="${ya}" x2="${x1}" y2="${ya}" stroke="#4b5563"/>`);
+    if (!dgo || ligacoes.some((l) => l.entrada === entrada)) partes.push(`<line x1="224" y1="${ya}" x2="${x1}" y2="${ya}" stroke="#4b5563"/>`);
     partes.push(`<rect x="229" y="${ya - 6}" width="28" height="12" rx="3" fill="${b % 2 ? '#0572CE' : '#d97706'}"/><text x="243" y="${ya + 3}" font-size="8" fill="#fff" text-anchor="middle" font-weight="bold">B${b}</text>`);
   }
   for (const l of ligacoes) {
@@ -443,7 +454,7 @@ export function svgMapaFusao(caixa: PlanoCaixa, opcoes: { todosTubos?: boolean; 
 
   const altura = Math.max(alturaEsq, alturaDir, 60);
   const semPotencia = (caixa.fibras ?? []).filter((f) => f.sem_potencia).length;
-  const legenda = `${resumoPadroes(caixa) ? `cores ${resumoPadroes(caixa)} · ` : ''}${cap} fibras · ${ligacoes.length} fusionadas · ${param} param nesta caixa (⊣) · ${caixa.manobras.length} manobra(s) (M, tracejado) ${semPotencia ? ` · ${semPotencia} apagada(s)` : ''} ${dgo ? '' : ` · ${bandejas.length} bandeja(s) de ${caixa.fusoes_por_bandeja || 12} fusões (B)`} · só tubos com fusão`;
+  const legenda = `${resumoPadroes(caixa) ? `cores ${resumoPadroes(caixa)} · ` : ''}${cap} fibras · ${ligacoes.length} fusionadas · ${param} param nesta caixa (⊣) · ${caixa.manobras.length} manobra(s) (M, tracejado) ${semPotencia ? ` · ${semPotencia} apagada(s)` : ''} ${` · ${bandejas.length} bandeja(s) de ${caixa.fusoes_por_bandeja || 12} fusões (B)`} · só tubos com fusão`;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -20 ${W} ${altura + 20}" width="100%" font-family="sans-serif">` +
     `<text x="0" y="-6" font-size="11" fill="#6b7280">${esc(`Mapa de fusão · ${caixa.identificacao} · ${legenda}`)}</text>${partes.join('')}</svg>`;
 }

@@ -59,6 +59,8 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const [manobra, setManobra] = useState({ entrada: '', saida: 1, fibra: '', motivo: '' });
   const FIBRA_VAZIA = { numero: '', cliente: '', semPotencia: false, potencia: '', reflexao: '', perda: '', posicao: '', tx: '', rx: '', olt: false, oltPosicao: '', sfp: '', sfpModelo: '', cordao: '', oltModelo: '' };
   const [fibra, setFibra] = useState(FIBRA_VAZIA);
+  // Roteamento: só as fibras trabalhadas, sem TX/RX/reflexão/perda (tudo da fibra é complementar).
+  const [semMedicao, setSemMedicao] = useState(false);
   // Balão do mapa de fusão: fibra tocada, acesa/apagada e cliente.
   const [balao, setBalao] = useState<number | null>(null);
   const teclado = useAlturaTeclado();
@@ -245,40 +247,30 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   function salvarBalao() {
     if (balao == null) return;
     if (!balaoEstado) return Alert.alert('Marque se a fibra está acesa ou apagada');
-    if (ponta) {
-      setFibra((f) => ({ ...f, numero: String(balao), cliente: balaoCliente, semPotencia: balaoEstado === 'apagada' }));
-      setBalao(null);
-      return Alert.alert('Complete abaixo', dgo ? 'Informe a posição no DGO e as medições, depois toque em Lançar fibra.' : 'Informe as medições do OTDR, depois toque em Lançar fibra.');
-    }
     const antiga = c.fibras.find((x) => x.fibra === balao);
     const f: SituacaoFibra = { ...(antiga ?? {}), fibra: balao, cliente: balaoCliente.trim() || null, sem_potencia: balaoEstado === 'apagada', acesa: balaoEstado === 'acesa' };
     mudar({ fibras: [...c.fibras.filter((x) => x.fibra !== balao), f].sort((a, b) => a.fibra - b.fibra) });
-    setFibra(FIBRA_VAZIA);
+    // Nas pontas deixa a fibra aberta no formulário para, se quiser, completar posição e medições.
+    if (ponta && !semMedicao) setFibra({ ...FIBRA_VAZIA, numero: String(balao), cliente: balaoCliente, semPotencia: balaoEstado === 'apagada', posicao: f.posicao_dgo ?? '' });
+    else setFibra(FIBRA_VAZIA);
     setBalao(null);
   }
 
   function adicionarFibra() {
     const n = numero(fibra.numero);
     if (!n || n > c.capacidade_fibras) return Alert.alert('Fibra inválida', `De 1 a ${c.capacidade_fibras}.`);
-    const potencia = ponta && !dgo ? numero(fibra.potencia) : null;
-    const reflexao = ponta ? numero(fibra.reflexao) : null;
-    const perda = ponta ? numero(fibra.perda) : null;
-    // No DGO a potência é TX/RX e opcional; o sinal só é obrigatório nas outras pontas.
-    if (ponta && !fibra.semPotencia && ((!dgo && potencia == null) || reflexao == null || perda == null)) {
-      return Alert.alert('Medição do OTDR', dgo
-        ? 'No DGO informe reflexão (dB) e perda (dB/km) da fibra, ou marque sem potência. TX/RX são opcionais.'
-        : 'Na ponta informe sinal (dBm), reflexão (dB) e perda (dB/km) da fibra, ou marque sem potência.');
-    }
-    if (dgo && !fibra.posicao.trim()) return Alert.alert('Informe a posição da fibra no DGO', 'Ex.: DIO 2 · posição 14');
-    if (dgo && fibra.olt && !fibra.oltPosicao.trim()) return Alert.alert('Informe a posição na OLT', 'Ex.: OLT-01 · slot 2 · PON 5');
-    if (!ponta && !fibra.cliente.trim() && !fibra.semPotencia) return Alert.alert('Informe o cliente ou marque sem potência');
+    // Tudo da fibra é complementar: só o número é exigido (no roteamento nem sempre há medição).
+    const medir = ponta && !semMedicao;
+    const potencia = medir && !dgo ? numero(fibra.potencia) : null;
+    const reflexao = medir ? numero(fibra.reflexao) : null;
+    const perda = medir ? numero(fibra.perda) : null;
     const f: SituacaoFibra = {
       fibra: n, cliente: fibra.cliente.trim() || null, sem_potencia: fibra.semPotencia,
       acesa: !fibra.semPotencia && (!!fibra.cliente.trim() || !!c.fibras.find((x) => x.fibra === n)?.acesa),
       potencia_dbm: potencia, reflexao_db: reflexao, perda_db_km: perda,
-      posicao_dgo: dgo ? fibra.posicao.trim() : null,
-      potencia_tx_dbm: dgo ? numero(fibra.tx) : null, potencia_rx_dbm: dgo ? numero(fibra.rx) : null,
-      cordao_olt: dgo && fibra.olt, olt_posicao: dgo && fibra.olt ? fibra.oltPosicao.trim() : null,
+      posicao_dgo: dgo ? fibra.posicao.trim() || null : null,
+      potencia_tx_dbm: dgo && !semMedicao ? numero(fibra.tx) : null, potencia_rx_dbm: dgo && !semMedicao ? numero(fibra.rx) : null,
+      cordao_olt: dgo && fibra.olt, olt_posicao: dgo && fibra.olt ? fibra.oltPosicao.trim() || null : null,
       sfp_tipo: dgo && fibra.olt ? fibra.sfp.trim() || null : null,
       cordao_tipo: dgo && fibra.olt ? fibra.cordao || null : null, olt_modelo: dgo && fibra.olt ? fibra.oltModelo.trim() || null : null,
       sfp_modelo: dgo && fibra.olt ? fibra.sfpModelo.trim() || null : null,
@@ -825,17 +817,24 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
               </View>
             </>
           ) : null}
+          {ponta ? (
+            <Pressable style={[chip(semMedicao), { alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setSemMedicao(!semMedicao)}>
+              <Text style={textoChip(semMedicao)}>{semMedicao ? '✓ Sem medição (não informar TX/RX/OTDR)' : 'Sem medição (não informar TX/RX/OTDR)'}</Text>
+            </Pressable>
+          ) : null}
           {dgo ? (
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Campo caixa={{ flex: 1.4 }} placeholder="Posição no DGO *" value={fibra.posicao}
+              <Campo caixa={{ flex: 1.4 }} placeholder="Posição no DGO (opcional)" value={fibra.posicao}
                 onChangeText={(t) => setFibra({ ...fibra, posicao: t })} />
+              {semMedicao ? null : <>
               <Campo caixa={{ flex: 1 }} keyboardType="numbers-and-punctuation" placeholder={fibra.olt ? 'Saída OLT dBm' : 'TX dBm'}
                 value={fibra.tx} onChangeText={(t) => setFibra({ ...fibra, tx: t })} />
               <Campo caixa={{ flex: 1 }} keyboardType="numbers-and-punctuation" placeholder="RX dBm"
                 value={fibra.rx} onChangeText={(t) => setFibra({ ...fibra, rx: t })} />
+              </>}
             </View>
           ) : null}
-          {ponta ? (
+          {ponta && !semMedicao ? (
             <View style={{ flexDirection: 'row', gap: 8 }}>
               {dgo ? null : (
                 <Campo caixa={{ flex: 1 }} keyboardType="numbers-and-punctuation" placeholder="Sinal dBm"
