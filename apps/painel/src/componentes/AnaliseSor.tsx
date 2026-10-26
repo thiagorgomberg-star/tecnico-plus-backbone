@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { pdfDoElemento } from "@/lib/pdfDoElemento";
 import { analisarSor, km, lerSor, Nivel, Sor } from "@/lib/sor";
 import { supabase } from "@/lib/supabase";
 
@@ -10,8 +11,9 @@ const ROTULO: Record<Nivel, string> = { ok: "OK", atencao: "Atenção", critico:
 
 // Análise de um arquivo .SOR do OTDR: resumo da fibra, traço com os eventos marcados e o que fazer em cada evento.
 // A curva vem do armazenamento (bucket + caminho) ou de um arquivo escolhido no computador (arquivo).
-export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm, fechar }: {
+export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm, fechar, aoAnalisar }: {
   bucket?: string; caminho?: string; arquivo?: File; nome: string; extensaoKm: number | null; fechar: () => void;
+  aoAnalisar?: (resumo: { comprimentoKm: number; perdaTotalDb: number; criticos: number; atencao: number }) => void;
 }) {
   const [sor, setSor] = useState<Sor | null>(null);
   const [erro, setErro] = useState("");
@@ -32,6 +34,41 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
   }, [bucket, caminho, arquivo]);
 
   const analise = useMemo(() => (sor ? analisarSor(sor, extensaoKm) : null), [sor, extensaoKm]);
+  useEffect(() => {
+    if (analise) aoAnalisar?.({ comprimentoKm: analise.comprimentoKm, perdaTotalDb: analise.perdaTotalDb, criticos: analise.criticos, atencao: analise.atencao });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analise]);
+
+  // PDF com o mesmo nome do .SOR: compartilha (WhatsApp, e-mail...) pelo menu do sistema ou baixa, se o navegador não compartilhar arquivo.
+  const conteudo = useRef<HTMLDivElement>(null);
+  const [gerando, setGerando] = useState(false);
+  const nomePdf = `${nome.replace(/\.sor$/i, "").replace(/[\\/:*?"<>|]/g, "_") || "analise-curva"}.pdf`;
+  async function pdf(compartilhar: boolean) {
+    if (!conteudo.current || gerando) return;
+    setGerando(true);
+    try {
+      const arquivoPdf = new File([await pdfDoElemento(conteudo.current)], nomePdf, { type: "application/pdf" });
+      if (compartilhar && navigator.canShare?.({ files: [arquivoPdf] })) {
+        try { await navigator.share({ files: [arquivoPdf], title: nomePdf }); } catch (e) { if ((e as Error).name !== "AbortError") throw e; }
+      } else {
+        const url = URL.createObjectURL(arquivoPdf);
+        const a = Object.assign(document.createElement("a"), { href: url, download: nomePdf });
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        if (compartilhar) alert(`Este navegador não abre o menu de compartilhar. O PDF foi baixado como "${nomePdf}" para você anexar.`);
+      }
+    } catch (e) {
+      alert(`Não foi possível gerar o PDF: ${(e as Error).message}`);
+    } finally {
+      setGerando(false);
+    }
+  }
+  function imprimir() {
+    const titulo = document.title;
+    document.title = nomePdf.replace(/\.pdf$/, "");
+    window.print();
+    document.title = titulo;
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={fechar}>
@@ -41,12 +78,20 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
             <h2 className="font-semibold">Análise da curva OTDR</h2>
             <p className="text-xs text-gray-500">{nome}</p>
           </div>
-          <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={() => window.print()}>Imprimir</button>
+          <button className="rounded-lg bg-[#163A6B] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50" disabled={!analise || gerando} onClick={() => pdf(true)}>
+            {gerando ? "Gerando PDF..." : "Compartilhar PDF"}
+          </button>
+          <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50" disabled={!analise || gerando} onClick={() => pdf(false)}>Baixar PDF</button>
+          <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={imprimir}>Imprimir</button>
           <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={fechar}>Fechar</button>
         </div>
 
         {erro ? <p className="p-6 text-red-700">{erro}</p> : !sor || !analise ? <p className="p-6 text-gray-500">Lendo o arquivo...</p> : (
-          <div className="grid gap-4 p-4 text-sm">
+          <div ref={conteudo} className="grid gap-4 bg-white p-4 text-sm">
+            <div>
+              <div className="text-base font-semibold">Análise da curva OTDR · {nome}</div>
+              <div className="text-xs text-gray-500">Técnico Plus · Multivale Backbone · gerado em {new Date().toLocaleString("pt-BR")}</div>
+            </div>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
               <Indicador rotulo="Comprimento da fibra" valor={km(analise.comprimentoKm)}
                 alerta={!!extensaoKm && analise.comprimentoKm < extensaoKm * 0.97} extra={extensaoKm ? `trecho: ${km(extensaoKm)}` : undefined} />

@@ -260,12 +260,14 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
         if (item.tipo === 'os' && typeof item.campos.status === 'string' && status.has(item.osId)) status.set(item.osId, item.campos.status);
         if (item.tipo === 'inserir' && item.tabela === 'ordens_servico') status.set(String(item.linha.id), String(item.linha.status));
       }
-      const emAndamento = [...status].find(([id, st]) => st === 'em_execucao' || (st === 'pausada' && !continua.get(id)));
+      // Só encerra com a fila vazia: qualquer O.S. aberta bloqueia (Thiago).
+      const ABERTAS = ['enviada', 'aceita', 'em_execucao', 'devolvida'];
+      const emAndamento = [...status].find(([id, st]) => ABERTAS.includes(st) || (st === 'pausada' && !continua.get(id)));
       if (emAndamento) {
         const os = ordens.find((o) => o.id === emAndamento[0]);
         return Alert.alert(
-          'O.S. em andamento',
-          `Conclua ${os ? `a O.S. #${os.numero}` : 'a O.S. em execução'} ou peça ao supervisor para pausá-la antes de encerrar o expediente.`,
+          'Ainda tem O.S. aberta',
+          `Conclua ${os ? `a O.S. #${os.numero}` : 'as O.S. abertas'} antes de encerrar o expediente. Se não der para fazer hoje, peça ao supervisor para tirar de você ou devolver ao backlog.`,
         );
       }
     } else {

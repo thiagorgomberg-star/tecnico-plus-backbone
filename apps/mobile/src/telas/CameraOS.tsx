@@ -29,7 +29,7 @@ type Props = {
 };
 
 // 1280 px com JPEG 0,72: a máscara continua legível e cada foto fica bem mais leve para dados móveis.
-const LARGURA_FINAL = 1280;
+const LARGURA_FINAL = 1920;
 
 // Foto tirada mas ainda sem máscara. Fica gravada no celular (arquivo + dados) desde o clique,
 // para não se perder se o app fechar antes da máscara: na próxima abertura da câmera ela é terminada.
@@ -96,6 +96,10 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
   const dados: DadosMascara | null = atual ? { ...atual, tiradaEm: new Date(atual.tiradaEm) } : null;
   const [tirando, setTirando] = useState(false);
   const [tamanho, setTamanho] = useState<string | undefined>();
+  // Lente mais aberta do celular (0,5x, quando tem). Zoom 0 = lente mais aberta (APK 15+); quase 0 = 1x.
+  // Só vai para 0 depois que a câmera abre, quando o aparelho já informou as lentes.
+  const [ampla, setAmpla] = useState(true);
+  const [pronta, setPronta] = useState(false);
   const posicao = useRef<{ latitude: number; longitude: number } | null>(null);
   const endereco = useRef<{ latitude: number; longitude: number; texto: string } | null>(null);
   const consultando = useRef(false);
@@ -161,6 +165,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
   }, []);
 
   async function cameraPronta() {
+    setTimeout(() => setPronta(true), 300);
     try {
       setTamanho(melhorTamanho((await camera.current?.getAvailablePictureSizesAsync()) ?? []));
     } catch {
@@ -222,7 +227,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
     if (!atual || !dados || !mascara.current) return;
     try {
       const alturaFinal = Math.round((LARGURA_FINAL * dados.alturaFoto * 1.137) / dados.larguraFoto);
-      const temporario = await captureRef(mascara, { format: 'jpg', quality: 0.72, width: LARGURA_FINAL, height: alturaFinal });
+      const temporario = await captureRef(mascara, { format: 'jpg', quality: 0.85, width: LARGURA_FINAL, height: alturaFinal });
       const pasta = new Directory(Paths.document, 'fotos');
       if (!pasta.exists) pasta.create();
       const destino = new File(pasta, `${randomUUID()}.jpg`);
@@ -273,7 +278,8 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
 
   return (
     <View style={estilos.tela}>
-      <CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back" pictureSize={tamanho} onCameraReady={cameraPronta} />
+      <CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back" pictureSize={tamanho} onCameraReady={cameraPronta}
+        zoom={ampla && pronta ? 0 : 0.000001} />
       {referencia && sobrepor ? (
         <Image source={{ uri: referencia }} style={[StyleSheet.absoluteFill, { opacity: 0.35 }]} resizeMode="cover" pointerEvents="none" />
       ) : null}
@@ -302,6 +308,10 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
         <Text style={[estilos.texto, { color: !minimo ? '#fff' : total >= minimo ? '#8BE28F' : '#FFD54F' }]}>
           {minimo ? `${total}/${minimo}` : total} {total === 1 && !minimo ? 'foto' : 'fotos'}{fila.length ? ` · gravando ${fila.length}` : ''}
         </Text>
+        <Pressable onPress={() => setAmpla((v) => !v)} style={[estilos.chip, ampla && { backgroundColor: cores.primaria }]}
+          accessibilityLabel={ampla ? 'Lente aberta (0,5x). Tocar para 1x' : 'Lente normal (1x). Tocar para abrir'}>
+          <Text style={estilos.texto}>{ampla ? '0,5x' : '1x'}</Text>
+        </Pressable>
         {caixa || ponto || unica ? <Text style={estilos.texto}>{caixa?.titulo ?? ponto?.titulo ?? unica?.titulo}</Text> : (
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {(['foto_antes', 'foto_depois'] as const).map((t) => (

@@ -1,9 +1,15 @@
 {
   "name": "tecnico-plus-backbone",
   "private": true,
-  "workspaces": ["apps/*"],
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
     "mobile": "npm run start -w @tecnico/mobile",
-    "painel": "npm run dev -w @tecnico/painel"
+    "painel": "npm run dev -w @tecnico/painel",
+    "postinstall": "patch-package"
+  },
+  "devDependencies": {
+    "patch-package": "^8.0.0"
   }
 }
