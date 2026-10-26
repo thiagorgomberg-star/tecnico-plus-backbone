@@ -9,7 +9,7 @@ const doisDig = (n: number) => String(n).padStart(2, "0");
 const diaLocal = (d: Date) => `${d.getFullYear()}-${doisDig(d.getMonth() + 1)}-${doisDig(d.getDate())}`;
 
 // Programa uma O.S. do backlog para um dia: até lá ela fica fora do backlog do app;
-// no dia, se tiver técnico, vai para ele às 06h (com o aviso de Nova O.S.); sem técnico, entra no backlog geral.
+// no dia, se tiver técnico, vai para ele às 08h (com o aviso de Nova O.S.); sem técnico, entra no backlog geral.
 export default function ProgramarOS({ os, fechar, salva }: { os: OrdemServico; fechar: () => void; salva: () => void }) {
   const atual = os.programada_inicio ? new Date(os.programada_inicio) : null;
   const amanha = new Date(Date.now() + 86400000);
@@ -52,7 +52,7 @@ export default function ProgramarOS({ os, fechar, salva }: { os: OrdemServico; f
       <div className="w-full max-w-md rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold">Programar O.S. #{os.numero}</h2>
         <p className="mt-1 text-sm text-gray-500">
-          Até o dia escolhido ela fica fora do backlog do app. No dia, com técnico escolhido, vai para ele às 06h com o aviso de Nova O.S.; sem técnico, entra no backlog geral.
+          Até o dia escolhido ela fica fora do backlog do app. No dia, com técnico escolhido, vai para ele às 08h com o aviso de Nova O.S.; sem técnico, entra no backlog geral.
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3">
           <label className={rotulo}><span className="font-medium text-gray-700">Dia</span>
