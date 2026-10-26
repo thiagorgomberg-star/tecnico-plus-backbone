@@ -7,7 +7,7 @@ import { Caixa, caixasDaRede, PREFIXO_TAG, proximaTag, salvarCaixa } from '../li
 import { cores } from '../lib/estilo';
 import {
   calcularPlano, CAPACIDADES, CaixaRede, descreverFibra, Destino, origemNaoCadastrada, rotuloDestino, TIPOS_DESTINO, faixasDaBandeja, FUSOES_POR_BANDEJA, herdarDaAnterior, Manobra, PADROES_CORES, rotuloPonto,
-  descreverOlt, ehPonta, rastrearFibra, clienteDoCaminho, instalacoesDoTipo, MODELOS_OLT, TIPOS_SFP, TIPOS_CORDAO, separarBandejas, SituacaoFibra, TIPOS_PONTO,
+  descreverOlt, ehPonta, rastrearFibra, medirLance, fmtMetros, clienteDoCaminho, instalacoesDoTipo, MODELOS_OLT, TIPOS_SFP, TIPOS_CORDAO, separarBandejas, SituacaoFibra, TIPOS_PONTO,
 } from '../lib/fusao';
 import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
 import { enderecoDe, posicaoAtual } from '../lib/localizacao';
@@ -16,6 +16,7 @@ import { supabase } from '../lib/supabase';
 import Icone from '../componentes/Icone';
 import MapaCaixas from '../componentes/MapaCaixas';
 import MapaFusaoToque from '../componentes/MapaFusaoToque';
+import SimularRompimento from '../componentes/SimularRompimento';
 import CameraOS from './CameraOS';
 
 type Props = {
@@ -48,6 +49,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const [origemTipo, setOrigemTipo] = useState<'caixa' | 'dgo' | 'nenhuma'>(
     inicial ? (inicial.origem_caixa_id ? 'caixa' : inicial.origem_dgo ? 'dgo' : 'nenhuma') : ultima ? 'caixa' : 'nenhuma');
   const [rede, setRede] = useState<CaixaRede[]>([]);
+  const [simular, setSimular] = useState(false);
   const [mapa, setMapa] = useState<{ tipo: 'anterior' } | { tipo: 'seguinte'; saida: number } | null>(null);
   // Caixa seguinte de cada saída escolhida nesta edição (saída → id; null desliga). Vai para o servidor ao salvar.
   const [seguintesNovas, setSeguintesNovas] = useState<Record<number, string | null>>({});
@@ -122,6 +124,8 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
     return [...daOs, ...rede.filter((x) => !ids.has(x.id))].filter((x) => x.id !== c.id && x.saidas.length > 0);
   }, [daOs, rede, c.id]);
   const anterior = candidatas.find((x) => x.id === c.origem_caixa_id);
+  // O DGO é o começo do enlace: vem da OLT pelos cordões, nunca de outra caixa.
+  useEffect(() => { if (c.tipo === 'dgo' && origemTipo !== 'nenhuma') setOrigemTipo('nenhuma'); }, [c.tipo]);
   const todasCaixas = useMemo(() => {
     const ids = new Set(daOs.map((x) => x.id));
     return [...daOs, ...rede.filter((x) => !ids.has(x.id))];
@@ -406,6 +410,30 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           ) : null}
         </View>
 
+        {dgo ? (
+          <View style={s.bloco}>
+            <Text style={s.rotulo}>VEM DE · OLT E CORDÃO</Text>
+            <Text style={s.suave}>O DGO é o começo do enlace: as fibras vêm da OLT pelos cordões. Escolha aqui o padrão; em cada fibra do mapa de fusão dá para ajustar posição na OLT, SFP e cordão.</Text>
+            <Text style={s.rotuloCampo}>Modelo da OLT</Text>
+            <View style={s.chips}>
+              {MODELOS_OLT.map((m) => (
+                <Pressable key={m} style={chip(fibra.olt && fibra.oltModelo === m)} onPress={() => setFibra({ ...fibra, olt: true, oltModelo: m })}>
+                  <Text style={textoChip(fibra.olt && fibra.oltModelo === m)}>{m}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={s.rotuloCampo}>Cordão OLT ↔ DGO</Text>
+            <View style={s.chips}>
+              {TIPOS_CORDAO.map((x) => (
+                <Pressable key={x} style={chip(fibra.olt && fibra.cordao === x)} onPress={() => setFibra({ ...fibra, olt: true, cordao: x })}>
+                  <Text style={textoChip(fibra.olt && fibra.cordao === x)}>{x}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Campo placeholder="Reserva técnica de cabo no DGO (m, opcional)" keyboardType="numeric"
+              value={c.reserva_m != null ? String(c.reserva_m) : ''} onChangeText={(x) => mudar({ reserva_m: numero(x) })} />
+          </View>
+        ) : (
         <View style={s.bloco}>
           <Text style={s.rotulo}>VEM DE</Text>
           <View style={s.chips}>
@@ -475,7 +503,56 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
               </>
             )
           ) : null}
+          <Text style={[s.rotulo, { marginTop: 14 }]}>METRAGEM DO CABO</Text>
+          <Text style={s.suave}>A marca impressa no cabo que chega aqui e a reserva enrolada neste ponto. Com a marca da saída do ponto anterior, o app calcula o lance e localiza rompimentos pelo OTDR.</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Campo caixa={{ flex: 1 }} placeholder="Marca na entrada (m)" keyboardType="numeric"
+              value={c.metragem_entrada != null ? String(c.metragem_entrada) : ''} onChangeText={(x) => mudar({ metragem_entrada: numero(x) })} />
+            <Campo caixa={{ flex: 1 }} placeholder="Reserva neste ponto (m)" keyboardType="numeric"
+              value={c.reserva_m != null ? String(c.reserva_m) : ''} onChangeText={(x) => mudar({ reserva_m: numero(x) })} />
+          </View>
+          {anterior && origemTipo === 'caixa' && c.origem_saida ? (() => {
+            const m = medirLance(anterior as CaixaRede, c.origem_saida, c as unknown as CaixaRede);
+            return (
+              <Text style={[s.suave, { marginTop: 6, color: m.fonte === 'cabo' ? cores.sucesso : cores.suave, fontWeight: '700' }]}>
+                {m.metros == null ? `Lance desde ${anterior.identificacao}: falta a marca da saída ${c.origem_saida} de lá ou o GPS`
+                  : m.fonte === 'cabo' ? `Lance desde ${anterior.identificacao}: ${fmtMetros(m.metros)} (${m.marcaSaida} → ${m.marcaEntrada})`
+                    : `Lance desde ${anterior.identificacao}: ≈ ${fmtMetros(m.metros)} pelo GPS${m.marcaSaida == null ? ` (sem a marca da saída ${c.origem_saida} lá)` : ''}`}
+              </Text>
+            );
+          })() : null}
+          <Text style={[s.rotuloCampo, { marginTop: 12 }]}>Reservas encontradas no caminho desde o ponto anterior</Text>
+          {(c.reservas_lance ?? []).map((r, i) => (
+            <View key={i} style={s.reserva}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Campo caixa={{ flex: 1 }} placeholder="Tamanho (m)" keyboardType="numeric" value={r.metros ? String(r.metros) : ''}
+                  onChangeText={(x) => mudar({ reservas_lance: (c.reservas_lance ?? []).map((y, k) => (k === i ? { ...y, metros: numero(x) ?? 0 } : y)) })} />
+                <Campo caixa={{ flex: 1 }} placeholder="Marca do cabo (m)" keyboardType="numeric" value={r.marca != null ? String(r.marca) : ''}
+                  onChangeText={(x) => mudar({ reservas_lance: (c.reservas_lance ?? []).map((y, k) => (k === i ? { ...y, marca: numero(x) } : y)) })} />
+              </View>
+              <Campo placeholder="Onde (ex.: poste 123, travessia)" value={r.obs ?? ''}
+                onChangeText={(x) => mudar({ reservas_lance: (c.reservas_lance ?? []).map((y, k) => (k === i ? { ...y, obs: x } : y)) })} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 }}>
+                <Text style={[s.suave, { flex: 1 }]}>{r.lat != null ? `GPS ${r.lat.toFixed(5)}, ${r.lng!.toFixed(5)}` : 'Sem GPS'}</Text>
+                <Pressable onPress={async () => {
+                  const pos = await posicaoAtual().catch(() => null);
+                  if (!pos) return Alert.alert('Não foi possível pegar o GPS');
+                  mudar({ reservas_lance: (c.reservas_lance ?? []).map((y, k) => (k === i ? { ...y, lat: pos.latitude, lng: pos.longitude } : y)) });
+                }}>
+                  <Text style={{ color: cores.primaria, fontWeight: '700' }}>{r.lat != null ? 'Pegar de novo' : 'Usar meu GPS'}</Text>
+                </Pressable>
+                <Pressable onPress={() => mudar({ reservas_lance: (c.reservas_lance ?? []).filter((_, k) => k !== i) })}>
+                  <Text style={{ color: cores.perigo }}>remover</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+          <Pressable style={[s.botaoPequeno, { alignSelf: 'flex-start', marginTop: 8 }]}
+            onPress={() => mudar({ reservas_lance: [...(c.reservas_lance ?? []), { metros: 0, marca: null, lat: null, lng: null, obs: '' }] })}>
+            <Text style={s.botaoPequenoTexto}>+ Reserva no caminho</Text>
+          </Pressable>
         </View>
+        )}
 
         <View style={s.bloco}>
           <Text style={s.rotulo}>LOCALIZAÇÃO</Text>
@@ -529,6 +606,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
                 ))}
               </View>
               {padroes(padroesSaidas[i], (v) => mudar({ padrao_cores_saidas: padroesSaidas.map((x, k) => (k === i ? v : x)) }))}
+              <Campo placeholder={`Marca do cabo na ${dgo ? 'saída do cabo' : 'saída'} ${i + 1} (m)`} keyboardType="numeric"
+                value={c.metragens_saida?.[i] != null ? String(c.metragens_saida[i]) : ''}
+                onChangeText={(x) => mudar({ metragens_saida: c.saidas.map((_, k) => (k === i ? numero(x) : c.metragens_saida?.[k] ?? null)) })} />
               {(() => {
                 const seg = seguinteDa(i + 1);
                 const d = destinos[i];
@@ -770,6 +850,17 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           </Pressable>
         </View>
 
+        {!nova ? (
+          <View style={s.bloco}>
+            <Text style={s.rotulo}>ROMPIMENTO · OTDR</Text>
+            <Text style={s.suave}>Ligou o OTDR neste ponto? Informe a fibra e a distância do evento: o app anda pelos lances e mostra onde procurar.</Text>
+            <Pressable style={[s.botaoMapa, { marginTop: 8 }]} onPress={() => setSimular(true)}>
+              <Icone nome="map-marker-distance" tamanho={18} cor={cores.primaria} />
+              <Text style={s.botaoMapaTexto}>Localizar rompimento a partir de {c.identificacao || 'este ponto'}</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <View style={s.bloco}>
           <Text style={s.rotulo}>OBSERVAÇÃO</Text>
           <TextInput style={[s.campo, { minHeight: 60, textAlignVertical: 'top' }]} multiline value={c.observacao ?? ''}
@@ -791,6 +882,8 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           )}
         </View>
       </ScrollView>
+      <SimularRompimento aberto={simular} fechar={() => setSimular(false)} medicao={c as unknown as CaixaRede}
+        caixas={[c as unknown as CaixaRede, ...todasCaixas.filter((x) => x.id !== c.id)]} />
       <Modal visible={balao != null} transparent animationType="fade" onRequestClose={() => setBalao(null)}>
         <Pressable style={s.balaoFundo} onPress={() => setBalao(null)}>
           <Pressable style={s.balao} onPress={() => undefined}>
@@ -873,6 +966,7 @@ const s = StyleSheet.create({
   suave: { fontSize: 13, color: cores.suave, marginTop: 4 },
   campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 6, padding: 10, fontSize: 15, color: cores.texto, backgroundColor: '#fff', marginTop: 6 },
   rotuloCampo: { fontSize: 12, fontWeight: '700', color: cores.texto2 },
+  reserva: { marginTop: 8, padding: 10, borderRadius: 10, backgroundColor: '#F6F8FB', borderWidth: 1, borderColor: cores.borda },
   balaoFundo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 20 },
   balao: { backgroundColor: '#fff', borderRadius: 16, padding: 16 },
   balaoTitulo: { fontSize: 16, fontWeight: '800', color: cores.texto, marginBottom: 2 },

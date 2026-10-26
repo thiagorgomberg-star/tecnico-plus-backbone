@@ -459,7 +459,13 @@ export type CaixaRede = PlanoCaixa & {
   origem_saida: number | null;
   origem_dgo: string | null;
   origem_tipo?: string | null;
+  latitude?: number | null; longitude?: number | null;
+  // Marca de metragem impressa no cabo (m): na entrada e em cada saída; reserva técnica enrolada no ponto (m).
+  metragem_entrada?: number | null; metragens_saida?: (number | null)[] | null; reserva_m?: number | null;
+  // Reservas de cabo encontradas no caminho desde o ponto anterior (ex.: no poste).
+  reservas_lance?: ReservaLance[] | null;
 };
+export type ReservaLance = { metros: number; marca?: number | null; lat?: number | null; lng?: number | null; obs?: string | null };
 
 export type PassoRastreio = {
   caixa: CaixaRede;
@@ -538,4 +544,169 @@ export function posicoesDgo(caixas: CaixaRede[], caixa: CaixaRede): Record<numbe
     if (pos) resultado[n] = pos;
   }
   return resultado;
+}
+
+// ---------------------------------------------------------------------------
+// Enlace pela metragem do cabo e simulação do local de rompimento pela distância do OTDR.
+// A medição é sempre feita numa ponta (DGO ou entroncamento) e anda pelo caminho da fibra.
+
+export type ReservaNoLance = ReservaLance & { pos: number };   // pos: metros de cabo desde o início do lance até a reserva
+export type LanceCabo = {
+  de: CaixaRede; para: CaixaRede;    // na ordem em que o OTDR "anda"
+  metros: number | null;             // comprimento do cabo entre os dois pontos (já com as reservas do caminho)
+  fonte: 'cabo' | 'gps' | null;      // cabo: marcas de metragem; gps: linha reta mais as reservas do caminho (estimativa)
+  marcaDe: number | null; marcaPara: number | null;
+  reservaDe: number;                 // reserva técnica enrolada no ponto de partida do lance
+  reservas: ReservaNoLance[];
+};
+
+const R_TERRA = 6371000;
+export function distanciaMetros(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const r = Math.PI / 180;
+  const h = Math.sin(((b.lat - a.lat) * r) / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(((b.lng - a.lng) * r) / 2) ** 2;
+  return 2 * R_TERRA * Math.asin(Math.sqrt(h));
+}
+const temLocal = (c: { latitude?: number | null; longitude?: number | null }) => c.latitude != null && c.longitude != null;
+const somaReservas = (c: CaixaRede) => (c.reservas_lance ?? []).reduce((s, r) => s + (Number(r.metros) || 0), 0);
+
+// Lance entre um ponto (saída) e o seguinte (entrada), no sentido do cabo: diferença das marcas impressas;
+// sem as duas marcas, linha reta pelo GPS mais as reservas anotadas no caminho (estimativa).
+export function medirLance(anterior: CaixaRede, saida: number, seguinte: CaixaRede) {
+  const ms = anterior.metragens_saida?.[saida - 1] ?? null;
+  const me = seguinte.metragem_entrada ?? null;
+  if (ms != null && me != null) return { metros: Math.abs(me - ms), fonte: 'cabo' as const, marcaSaida: ms, marcaEntrada: me };
+  if (temLocal(anterior) && temLocal(seguinte)) {
+    const reta = distanciaMetros({ lat: anterior.latitude!, lng: anterior.longitude! }, { lat: seguinte.latitude!, lng: seguinte.longitude! });
+    return { metros: Math.round(reta + somaReservas(seguinte)), fonte: 'gps' as const, marcaSaida: ms, marcaEntrada: me };
+  }
+  return { metros: null, fonte: null, marcaSaida: ms, marcaEntrada: me };
+}
+
+// Reservas do caminho em ordem a partir da saída do ponto anterior (posição pela marca do cabo ou, sem ela, pelo GPS).
+function reservasEmOrdem(anterior: CaixaRede, seguinte: CaixaRede, metros: number | null, marcaSaida: number | null, invertido: boolean): ReservaNoLance[] {
+  const lista = (seguinte.reservas_lance ?? []).filter((r) => Number(r.metros) > 0);
+  if (!lista.length || metros == null) return [];
+  const reta = Math.max(metros - somaReservas(seguinte), 0);
+  const fracaoGps = (r: ReservaLance) => {
+    if (r.lat == null || r.lng == null || !temLocal(anterior) || !temLocal(seguinte)) return 0.5;
+    const a = distanciaMetros({ lat: anterior.latitude!, lng: anterior.longitude! }, { lat: r.lat, lng: r.lng });
+    const b = distanciaMetros({ lat: r.lat, lng: r.lng }, { lat: seguinte.latitude!, lng: seguinte.longitude! });
+    return a + b ? a / (a + b) : 0.5;
+  };
+  const ordenadas = lista.map((r) => ({ r, chave: r.marca != null && marcaSaida != null ? Math.abs(r.marca - marcaSaida) / (metros || 1) : fracaoGps(r) }))
+    .sort((a, b) => a.chave - b.chave);
+  let antes = 0;
+  const comPos = ordenadas.map(({ r, chave }) => {
+    const pos = r.marca != null && marcaSaida != null ? Math.abs(r.marca - marcaSaida) : chave * reta + antes;
+    antes += Number(r.metros);
+    return { ...r, metros: Number(r.metros), pos };
+  });
+  // No sentido contrário, a reserva começa em (comprimento - fim dela).
+  return invertido ? comPos.map((r) => ({ ...r, pos: metros - r.pos - r.metros })).reverse() : comPos;
+}
+
+// Lances do caminho da fibra a partir do ponto de medição, para frente (sentido das saídas)
+// ou para trás (em direção ao ponto anterior / DGO). Segue as manobras de cada ponto.
+export function lancesDoEnlace(caixas: CaixaRede[], inicioId: string, fibraEntrada: number, sentido: 'frente' | 'tras' = 'frente'): LanceCabo[] {
+  const { passos } = rastrearFibra(caixas, inicioId, fibraEntrada);
+  const i0 = Math.max(passos.findIndex((p) => p.caixa.id === inicioId), 0);
+  const pares: [PassoRastreio, PassoRastreio, number][] = [];
+  for (let i = 0; i < passos.length - 1; i++) if (passos[i].saida) pares.push([passos[i], passos[i + 1], i]);
+  const usados = sentido === 'frente' ? pares.filter(([, , i]) => i >= i0) : pares.filter(([, , i]) => i < i0).reverse();
+  return usados.map(([a, b]) => {
+    const m = medirLance(a.caixa, a.saida!, b.caixa);
+    const tras = sentido === 'tras';
+    const de = tras ? b.caixa : a.caixa, para = tras ? a.caixa : b.caixa;
+    return {
+      de, para, metros: m.metros, fonte: m.fonte,
+      marcaDe: tras ? m.marcaEntrada : m.marcaSaida, marcaPara: tras ? m.marcaSaida : m.marcaEntrada,
+      reservaDe: de.reserva_m ?? 0,
+      reservas: reservasEmOrdem(a.caixa, b.caixa, m.metros, m.marcaSaida, tras),
+    };
+  });
+}
+
+// Sentido padrão da medição: do DGO (ou ponta sem origem) para frente; do entroncamento com origem, de volta para o DGO.
+export const sentidoPadrao = (c: CaixaRede): 'frente' | 'tras' => (c.tipo !== 'dgo' && c.origem_caixa_id ? 'tras' : 'frente');
+
+export type Rompimento =
+  | { tipo: 'reserva'; caixa: CaixaRede; metrosNaReserva: number; lat: number | null; lng: number | null }
+  | { tipo: 'reserva_lance'; lance: LanceCabo; reserva: ReservaNoLance; metrosNaReserva: number; marca: number | null; lat: number | null; lng: number | null }
+  | { tipo: 'lance'; lance: LanceCabo; metrosDoInicio: number; metrosAteFim: number; marca: number | null; lat: number | null; lng: number | null }
+  | { tipo: 'alem'; ultima: CaixaRede; metrosDepois: number; lat: number | null; lng: number | null }
+  | { tipo: 'sem_medida'; lance: LanceCabo };
+
+// Marca impressa no cabo a x metros do início do lance (quando as duas pontas têm marca).
+const marcaEm = (l: LanceCabo, x: number) => (l.marcaDe != null && l.marcaPara != null
+  ? Math.round(l.marcaDe + Math.sign(l.marcaPara - l.marcaDe) * x) : null);
+
+// Ponto no mapa a x metros de cabo do início do lance: anda entre os pontos com GPS (início, reservas, fim),
+// sem contar o cabo enrolado nas reservas.
+function pontoNoLance(l: LanceCabo, x: number) {
+  type P = { ini: number; fim: number; lat: number; lng: number };
+  const pts = [
+    { ini: 0, fim: 0, lat: l.de.latitude ?? null, lng: l.de.longitude ?? null },
+    ...l.reservas.map((r) => ({ ini: r.pos, fim: r.pos + r.metros, lat: r.lat ?? null, lng: r.lng ?? null })),
+    { ini: l.metros ?? 0, fim: l.metros ?? 0, lat: l.para.latitude ?? null, lng: l.para.longitude ?? null },
+  ].filter((p): p is P => p.lat != null && p.lng != null);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    if (x >= a.fim && x <= b.ini) {
+      const f = b.ini > a.fim ? (x - a.fim) / (b.ini - a.fim) : 0;
+      return { lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f };
+    }
+  }
+  const perto = pts.reduce<P | null>((m, p) => (!m || Math.abs(p.ini - x) < Math.abs(m.ini - x) ? p : m), null);
+  return { lat: perto?.lat ?? null, lng: perto?.lng ?? null };
+}
+
+// distanciaKm: distância do evento na curva do OTDR. excessoPct: fibra a mais que o cabo (fibra solta no tubo);
+// com 0 a distância do OTDR é tratada como metros de cabo.
+export function localizarRompimento(lances: LanceCabo[], distanciaKm: number, excessoPct = 0): Rompimento | null {
+  if (!lances.length || !(distanciaKm >= 0)) return null;
+  let resta = (distanciaKm * 1000) / (1 + excessoPct / 100);
+  for (const l of lances) {
+    if (resta <= l.reservaDe) return { tipo: 'reserva', caixa: l.de, metrosNaReserva: resta, lat: l.de.latitude ?? null, lng: l.de.longitude ?? null };
+    resta -= l.reservaDe;
+    if (l.metros == null) return { tipo: 'sem_medida', lance: l };
+    if (resta <= l.metros) {
+      const r = l.reservas.find((x) => resta >= x.pos && resta <= x.pos + x.metros);
+      if (r) return { tipo: 'reserva_lance', lance: l, reserva: r, metrosNaReserva: resta - r.pos, marca: marcaEm(l, resta), lat: r.lat ?? null, lng: r.lng ?? null };
+      return { tipo: 'lance', lance: l, metrosDoInicio: resta, metrosAteFim: l.metros - resta, marca: marcaEm(l, resta), ...pontoNoLance(l, resta) };
+    }
+    resta -= l.metros;
+  }
+  const ultima = lances[lances.length - 1].para;
+  const reservaFinal = ultima.reserva_m ?? 0;
+  if (resta <= reservaFinal) return { tipo: 'reserva', caixa: ultima, metrosNaReserva: resta, lat: ultima.latitude ?? null, lng: ultima.longitude ?? null };
+  return { tipo: 'alem', ultima, metrosDepois: resta - reservaFinal, lat: null, lng: null };
+}
+
+export const fmtMetros = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(2).replace('.', ',')} km` : `${Math.round(m)} m`);
+const fmtMarca = (m: number) => `${m.toLocaleString('pt-BR')} m`;
+
+export function descreverRompimento(r: Rompimento) {
+  if (r.tipo === 'reserva') return `Na reserva técnica de ${r.caixa.identificacao} (${fmtMetros(r.metrosNaReserva)} dentro da reserva)`;
+  if (r.tipo === 'reserva_lance') return `Na reserva do caminho entre ${r.lance.de.identificacao} e ${r.lance.para.identificacao}${r.reserva.obs ? ` (${r.reserva.obs})` : ''}: ${fmtMetros(r.metrosNaReserva)} dentro da reserva${r.marca != null ? ` · marca do cabo ≈ ${fmtMarca(r.marca)}` : ''}`;
+  if (r.tipo === 'lance') return `Entre ${r.lance.de.identificacao} e ${r.lance.para.identificacao}: ${fmtMetros(r.metrosDoInicio)} depois de ${r.lance.de.identificacao} (${fmtMetros(r.metrosAteFim)} antes de ${r.lance.para.identificacao})${r.marca != null ? ` · marca do cabo ≈ ${fmtMarca(r.marca)}` : ''}${r.lance.fonte === 'gps' ? ' · lance estimado pelo GPS' : ''}`;
+  if (r.tipo === 'alem') return `Depois do último ponto cadastrado (${r.ultima.identificacao}): ${fmtMetros(r.metrosDepois)} além dele`;
+  return `Falta a metragem do lance ${r.lance.de.identificacao} → ${r.lance.para.identificacao} (e o GPS de um dos pontos)`;
+}
+
+// KML com o ponto de medição (DGO / entroncamento) e o ponto estimado do rompimento (Google Earth e apps de mapa).
+export function kmlRompimento(r: Rompimento, medicao: CaixaRede, distanciaKm: number, titulo: string) {
+  if (r.tipo === 'sem_medida' || r.lat == null || r.lng == null) return null;
+  const marca = (nome: string, desc: string, estilo: string, lat: number, lng: number) =>
+    `<Placemark><name>${esc(nome)}</name><description>${esc(desc)}</description><styleUrl>#${estilo}</styleUrl>`
+    + `<Point><coordinates>${lng.toFixed(7)},${lat.toFixed(7)},0</coordinates></Point></Placemark>`;
+  const linha = temLocal(medicao)
+    ? `<Placemark><name>OTDR ${String(distanciaKm).replace('.', ',')} km</name><styleUrl>#l</styleUrl><LineString><tessellate>1</tessellate><coordinates>`
+      + `${medicao.longitude!.toFixed(7)},${medicao.latitude!.toFixed(7)},0 ${r.lng.toFixed(7)},${r.lat.toFixed(7)},0</coordinates></LineString></Placemark>` : '';
+  return `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${esc(titulo)}</name>`
+    + `<Style id="r"><IconStyle><color>ff0000ff</color><scale>1.4</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/caution.png</href></Icon></IconStyle></Style>`
+    + `<Style id="m"><IconStyle><color>ffff7f00</color><scale>1.2</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/triangle.png</href></Icon></IconStyle></Style>`
+    + `<Style id="l"><LineStyle><color>a00000ff</color><width>3</width></LineStyle></Style>`
+    + marca(`Possível rompimento (${String(distanciaKm).replace('.', ',')} km)`, `${descreverRompimento(r)}. Medido em ${medicao.identificacao}.`, 'r', r.lat, r.lng)
+    + (temLocal(medicao) ? marca(`Medição OTDR: ${medicao.identificacao}`, 'Ponto onde o OTDR foi ligado', 'm', medicao.latitude!, medicao.longitude!) : '')
+    + linha + `</Document></kml>`;
 }

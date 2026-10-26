@@ -52,6 +52,15 @@ export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
     <div className="text-sm">
       <dl className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
         <div><dt className="text-gray-500">Tipo</dt><dd>{rotuloPonto(c.tipo, c.swap)}{rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ""}{c.parceiro ? ` · ${c.parceiro}` : ""}</dd></div>
+        {(c.metragem_entrada != null || c.metragens_saida?.some((m) => m != null) || c.reserva_m || c.reservas_lance?.length) ? (
+          <div><dt className="text-gray-500">Metragem do cabo</dt><dd>
+            {[c.metragem_entrada != null ? `entrada ${c.metragem_entrada} m` : null,
+              ...(c.metragens_saida ?? []).map((m, i) => (m != null ? `saída ${i + 1}: ${m} m` : null)),
+              c.reserva_m ? `reserva ${c.reserva_m} m` : null,
+              c.reservas_lance?.length ? `${c.reservas_lance.length} reserva(s) no caminho (${c.reservas_lance.reduce((s, r) => s + r.metros, 0)} m)` : null,
+            ].filter(Boolean).join(" · ")}
+          </dd></div>
+        ) : null}
         <div><dt className="text-gray-500">Vem de</dt><dd>{origemDe(c) ?? "—"}{c.origem_saida ? ` (saída ${c.origem_saida})` : ""}</dd></div>
         <div>
           <dt className="text-gray-500">Localização</dt>

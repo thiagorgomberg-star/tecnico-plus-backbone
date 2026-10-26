@@ -40,7 +40,7 @@ async function ler<T>(chave: string, padrao: T): Promise<T> {
 }
 
 const CAMPOS = 'id, os_id, tipo, identificacao, capacidade_fibras, saidas, grupos_fusionados, grupos_vagos, observacao, endereco, ' +
-  'latitude, longitude, precisao_m, localizada_em, origem_caixa_id, origem_saida, origem_dgo, origem_identificacao, manobras, fibras, fusoes_por_bandeja, parceiro, instalacao, bastidor, padrao_cores_entrada, padrao_cores_saidas, fila, rack, swap, destinos, origem_tipo';
+  'latitude, longitude, precisao_m, localizada_em, origem_caixa_id, origem_saida, origem_dgo, origem_identificacao, manobras, fibras, fusoes_por_bandeja, parceiro, instalacao, bastidor, padrao_cores_entrada, padrao_cores_saidas, fila, rack, swap, destinos, origem_tipo, metragem_entrada, metragens_saida, reserva_m, reservas_lance';
 
 // Caixas da O.S.: na hora vem do celular; com internet atualiza do servidor (sem perder o que ainda está na fila).
 export async function caixasDaOs(osId: string, aoAtualizar: (c: Caixa[]) => void) {
@@ -123,6 +123,11 @@ export async function salvarCaixa(caixa: Caixa, nova: boolean) {
     origem_saida: caixa.origem_saida,
     origem_dgo: caixa.origem_dgo,
     origem_tipo: caixa.origem_dgo ? caixa.origem_tipo || 'dgo' : null,
+    metragem_entrada: caixa.tipo === 'dgo' ? null : caixa.metragem_entrada ?? null,
+    metragens_saida: caixa.saidas.some((_, i) => caixa.metragens_saida?.[i] != null) ? caixa.saidas.map((_, i) => caixa.metragens_saida?.[i] ?? null) : null,
+    reserva_m: caixa.reserva_m ?? null,
+    reservas_lance: caixa.tipo !== 'dgo' && caixa.reservas_lance?.some((r) => r.metros > 0)
+      ? caixa.reservas_lance.filter((r) => r.metros > 0).map((r) => ({ metros: r.metros, marca: r.marca ?? null, lat: r.lat ?? null, lng: r.lng ?? null, obs: r.obs?.trim() || null })) : null,
   };
   if (nova) {
     await enfileirar({ tipo: 'inserir', tabela: 'caixas_emenda', linha: { id: caixa.id, os_id: caixa.os_id, ...campos } });

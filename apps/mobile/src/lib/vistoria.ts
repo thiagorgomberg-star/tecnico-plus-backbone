@@ -88,11 +88,13 @@ export type PontoVistoria = {
   observacao: string | null;
   gerar_os?: boolean | null;     // vira O.S. preventiva no backlog para correção posterior
   os_gerada_numero?: number | null;
+  metragem_cabo?: number | null;  // marca de metragem impressa no cabo neste ponto (m)
+  reserva_m?: number | null;      // reserva de cabo encontrada neste ponto (m)
 };
 
 const chaveOs = (osId: string) => `vistoria-pontos-${osId}`;
 const CAMPOS = 'id, os_id, categoria, identificacao, latitude, longitude, precisao_m, localizada_em, endereco, material, estado_base, ' +
-  'inclinado, rachado, estai, precisa_troca, tipo_via, licenciamento, via_nome, ocorrencia, gravidade, observacao, gerar_os, os_gerada_numero';
+  'inclinado, rachado, estai, precisa_troca, tipo_via, licenciamento, via_nome, ocorrencia, gravidade, observacao, gerar_os, os_gerada_numero, metragem_cabo, reserva_m';
 
 async function lerLocais(osId: string): Promise<PontoVistoria[]> {
   try {
@@ -149,6 +151,8 @@ export async function salvarPonto(p: PontoVistoria, novo: boolean) {
     gravidade: poste ? null : p.gravidade,
     observacao: p.observacao?.trim() || null,
     gerar_os: !!p.gerar_os,
+    metragem_cabo: p.metragem_cabo ?? null,
+    reserva_m: p.reserva_m ?? null,
   };
   if (novo) await enfileirar({ tipo: 'inserir', tabela: 'vistoria_pontos', linha: { id: p.id, os_id: p.os_id, ...campos } });
   else await enfileirar({ tipo: 'atualizar', tabela: 'vistoria_pontos', linhaId: p.id, campos });

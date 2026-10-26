@@ -229,6 +229,25 @@ export default function PontoVistoria({ osId, tipoOs, ponto: inicial, categoria,
         ) : null}
 
         <View style={s.bloco}>
+          <Text style={s.rotulo}>CABO NESTE PONTO</Text>
+          <Text style={s.suave}>Anote a metragem impressa no cabo e a reserva, se houver: ajuda a achar o local de um rompimento pelo OTDR.</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.rotuloCampo}>Metragem do cabo (m)</Text>
+              <TextInput placeholderTextColor={cores.apagado} style={s.campo} keyboardType="numeric" editable={podeEditar} placeholder="Ex.: 1830"
+                value={p.metragem_cabo != null ? String(p.metragem_cabo) : ''}
+                onChangeText={(t) => mudar({ metragem_cabo: t.trim() ? Number(t.replace(',', '.')) || null : null })} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.rotuloCampo}>Reserva neste ponto (m)</Text>
+              <TextInput placeholderTextColor={cores.apagado} style={s.campo} keyboardType="numeric" editable={podeEditar} placeholder="Ex.: 30"
+                value={p.reserva_m != null ? String(p.reserva_m) : ''}
+                onChangeText={(t) => mudar({ reserva_m: t.trim() ? Number(t.replace(',', '.')) || null : null })} />
+            </View>
+          </View>
+        </View>
+
+        <View style={s.bloco}>
           <Text style={s.rotulo}>ONDE ESTÁ (DEFINE O LICENCIAMENTO) *</Text>
           {chips(TIPOS_VIA, p.tipo_via, (v) => mudar({ tipo_via: v }))}
           <Text style={s.rotulo}>LICENCIAMENTO DO TRECHO *</Text>
@@ -288,6 +307,7 @@ const s = StyleSheet.create({
   texto: { fontSize: 15, color: cores.texto },
   suave: { fontSize: 13, color: cores.suave, marginTop: 6 },
   campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 6, padding: 10, fontSize: 15, color: cores.texto, backgroundColor: '#fff', marginTop: 6 },
+  rotuloCampo: { fontSize: 12, fontWeight: '700', color: cores.texto2, marginTop: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   chip: { borderWidth: 1, borderColor: cores.borda, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 7, backgroundColor: '#fff' },
   chipAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
