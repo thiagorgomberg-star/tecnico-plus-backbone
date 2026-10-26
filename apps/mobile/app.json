@@ -4,7 +4,7 @@
     "slug": "tecnico-plus",
     "owner": "tgomberg",
     "version": "1.0.0",
-    "runtimeVersion": "1",
+    "runtimeVersion": "2",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -55,7 +55,10 @@
       [
         "expo-notifications",
         {
-          "color": "#0572CE"
+          "color": "#0572CE",
+          "sounds": [
+            "./assets/sons/alarme_os.wav"
+          ]
         }
       ],
       "expo-sharing",
@@ -66,6 +69,10 @@
           "photosPermission": "O Técnico Plus acessa suas fotos para anexar comprovantes de despesas.",
           "cameraPermission": "O Técnico Plus usa a câmera para registrar as fotos das O.S. e dos comprovantes."
         }
+      ],
+      [
+        "@maplibre/maplibre-react-native",
+        {}
       ]
     ],
     "updates": {

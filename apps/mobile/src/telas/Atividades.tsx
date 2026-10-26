@@ -9,6 +9,7 @@ import DetalheBacklog from '../componentes/DetalheBacklog';
 import Icone, { iconeDoTipo, NomeIcone } from '../componentes/Icone';
 import { caixasDaRede } from '../lib/caixas';
 import { baixarFotosDaRota } from '../lib/fotosCaixa';
+import { baixarMapaOffline } from '../lib/mapaOffline';
 import { LINK_APK, VERSAO_APP, versaoPublicada } from '../lib/atualizacao';
 import { bloqueioDeHoje, rotuloEscala } from '../lib/escala';
 import { cores, corDoStatus, fundoDe, sombra } from '../lib/estilo';
@@ -119,7 +120,12 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
   useEffect(() => {
     if (!VERSAO_APP) return;
     // Guarda as caixas da rede no celular sempre que houver sinal (o mapa de caixas funciona sem internet).
-    caixasDaRede().catch(() => undefined);
+    // E o mapa de fundo em volta das caixas e do backlog (vetorial, pouco dado: baixa no Wi-Fi ou nos dados móveis).
+    Promise.all([caixasDaRede().catch(() => []), backlogGuardado().catch(() => [])]).then(([caixas, bl]) => baixarMapaOffline([
+      ...(caixas as { latitude?: number | null; longitude?: number | null }[]).filter((c) => c.latitude != null && c.longitude != null)
+        .map((c) => ({ lat: c.latitude!, lng: c.longitude! })),
+      ...bl.filter((b) => b.lat != null && b.lng != null).map((b) => ({ lat: b.lat!, lng: b.lng! })),
+    ])).catch(() => undefined);
     baixarFotosDaRota().catch(() => undefined);
     versaoPublicada().then((v) => v && v > VERSAO_APP && setNovaVersao(v));
   }, []);

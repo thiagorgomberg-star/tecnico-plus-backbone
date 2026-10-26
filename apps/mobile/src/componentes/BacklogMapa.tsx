@@ -7,12 +7,13 @@ import { cores, sombra } from '../lib/estilo';
 import { idadeOs } from '../lib/formato';
 import { distanciaKm, navegarAte } from '../lib/navegacao';
 import Icone from './Icone';
+import MapaVetorial from './MapaVetorial';
 
 type Item = ItemBacklog & { distancia: number | null };
 const ALTURA = 340;
 const MARGEM = 28;
 
-// Mapa do backlog desenhado no próprio app (funciona sem internet): pins pela posição, cor pela idade, você em azul.
+// Mapa do backlog com ruas de fundo guardadas no celular (sem o fundo, usa o desenho próprio do app): pins pela posição, cor pela idade, você em azul.
 // Ajuda a juntar numa mesma saída as O.S. próximas umas das outras.
 export default function BacklogMapa({ itens, posicao, abrir, exportar }: {
   itens: Item[]; posicao: { lat: number; lng: number } | null; abrir: (id: string) => void; exportar: () => void;
@@ -52,6 +53,18 @@ export default function BacklogMapa({ itens, posicao, abrir, exportar }: {
       {!projecao ? (
         <Text style={s.vazio}>Nenhuma O.S. do backlog tem localização.</Text>
       ) : (
+        <MapaVetorial
+          altura={ALTURA}
+          aqui={posicao}
+          enquadrar={[...comLocal.map((b) => ({ lat: b.lat!, lng: b.lng! })), ...(posicao ? [posicao] : [])]}
+          foco={sel ? { lat: sel.lat!, lng: sel.lng! } : null}
+          tocar={setSelecionado}
+          pontos={comLocal.map((b) => ({
+            id: b.id, lat: b.lat!, lng: b.lng!, rotulo: `#${b.numero}`, ativo: b.id === selecionado, cor: idadeOs(b.criado_em).cor,
+            contorno: '#FFFFFF', marca: b.prioridade === 'alta' || b.prioridade === 'emergencia' ? '!' : '',
+          }))}
+          linhas={sel ? vizinhas.map((v) => ({ id: v.id, de: { lat: sel.lat!, lng: sel.lng! }, para: { lat: v.lat!, lng: v.lng! }, cor: cores.primaria, tracejada: true })) : []}
+          reserva={
         <Svg width={largura} height={ALTURA}>
           <Rect x={0} y={0} width={largura} height={ALTURA} fill="#EEF3F8" rx={14} />
           {Array.from({ length: 7 }, (_, i) => (
@@ -90,6 +103,7 @@ export default function BacklogMapa({ itens, posicao, abrir, exportar }: {
           <SvgText x={12} y={ALTURA - 20} fontSize={11} fill={cores.texto2}>{projecao.passo < 1 ? `${projecao.passo * 1000} m` : `${projecao.passo} km`}</SvgText>
           <SvgText x={largura - 12} y={ALTURA - 12} fontSize={13} fontWeight="bold" fill={cores.suave} textAnchor="end">N ↑</SvgText>
         </Svg>
+          } />
       )}
 
       <View style={s.legenda}>

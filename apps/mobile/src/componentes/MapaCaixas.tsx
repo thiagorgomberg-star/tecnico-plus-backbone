@@ -7,6 +7,7 @@ import { CaixaRede, descreverFibra, descreverSaidas, origemNaoCadastrada, rotulo
 import { FotoCaixa, fotosDaCaixa, rotuloFotoCaixa } from '../lib/fotosCaixa';
 import { distanciaKm } from '../lib/navegacao';
 import Icone, { NomeIcone } from './Icone';
+import MapaVetorial from './MapaVetorial';
 
 type ComLocal = CaixaRede & {
   latitude?: number | null; longitude?: number | null; endereco?: string | null;
@@ -20,7 +21,7 @@ const MARGEM = 44;
 const este = (tipo?: string) => (tipo === 'dgo' ? 'este DGO' : tipo === 'site' ? 'este site' : 'esta caixa');
 const fmtKm = (k: number) => (k < 1 ? `${Math.round(k * 1000)} m` : `${k.toFixed(1).replace('.', ',')} km`);
 
-// Mapa das caixas já cadastradas na rede (desenhado no próprio app, funciona sem internet com o que está guardado).
+// Mapa das caixas já cadastradas na rede, com ruas de fundo guardadas no celular (sem o fundo, usa o desenho próprio do app).
 // Toca no pin e escolhe a caixa de onde vem a fibra (anterior) ou para onde vai uma saída (seguinte).
 export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher, fechar }: {
   aberto: boolean; modo: { tipo: 'anterior' } | { tipo: 'seguinte'; saida: number };
@@ -95,6 +96,25 @@ export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher
         <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
           <View style={s.cartao}>
             {!projecao ? <Text style={s.vazio}>Nenhuma caixa da rede tem localização ainda.</Text> : (
+              <MapaVetorial
+                altura={ALTURA}
+                aqui={aqui}
+                aquiEstilo="novo"
+                enquadrar={[...itens.slice(0, 15).map((c) => ({ lat: c.lat, lng: c.lng })), ...(aqui ? [aqui] : [])]}
+                foco={sel ? { lat: sel.lat, lng: sel.lng } : null}
+                tocar={setSelecionado}
+                pontos={itens.map((c) => ({
+                  id: c.id, lat: c.lat, lng: c.lng, rotulo: c.identificacao, ativo: c.id === selecionado,
+                  cor: serve(c) ? COR_TIPO[c.tipo ?? 'emenda'] ?? cores.primaria : '#B8C0CC',
+                }))}
+                linhas={[
+                  ...itens.flatMap((c) => {
+                    const ant = itens.find((x) => x.id === c.origem_caixa_id);
+                    return ant ? [{ id: c.id, de: ant, para: c, cor: '#7D8BA0' }] : [];
+                  }),
+                  ...(sel && aqui ? [{ id: 'ate-aqui', de: aqui, para: sel, cor: cores.primaria, tracejada: true }] : []),
+                ]}
+                reserva={
               <View>
                 <Svg width={largura} height={ALTURA}>
                   <Rect x={0} y={0} width={largura} height={ALTURA} fill="#EEF3F8" />
@@ -141,6 +161,7 @@ export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher
                   <Pressable style={s.zoomBotao} onPress={() => setZoom((z) => Math.max(z / 2, 1))}><Icone nome="minus" tamanho={22} cor={cores.primaria} /></Pressable>
                 </View>
               </View>
+                } />
             )}
             <View style={s.legenda}>
               {[['#1F6FD1', 'Emenda'], ['#7A5AA6', 'Entroncamento'], ['#163A6B', 'DGO'], ...(seguinte ? [] : [['#B8C0CC', 'Sem saída']]), ['#D0453B', 'Ponto novo']].map(([c, t]) => (

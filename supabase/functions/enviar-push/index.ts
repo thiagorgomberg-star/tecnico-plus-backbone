@@ -77,6 +77,8 @@ Deno.serve(async (req) => {
     return new Response("sem dispositivo", { status: 200 });
   }
 
+  // Nova O.S., reaberta e ocorrência perto tocam o alarme próprio do app (canal criado pelo APK 14 em diante).
+  const alarme = ["nova_os", "os_reaberta", "backlog_proximo"].includes(alerta.tipo);
   let enviados = 0;
   try {
     const conta = JSON.parse(segredo) as Conta;
@@ -90,7 +92,7 @@ Deno.serve(async (req) => {
             token,
             notification: { title: titulos[alerta.tipo] ?? "Técnico Plus", body: alerta.mensagem },
             data: { osId: alerta.os_id ?? "", alertaId: alerta.id },
-            android: { priority: "HIGH", notification: { channel_id: "alertas-os", sound: "default", default_vibrate_timings: true } },
+            android: { priority: "HIGH", notification: alarme ? { channel_id: "alarme-os", sound: "alarme_os" } : { channel_id: "alertas-os", sound: "default", default_vibrate_timings: true } },
           },
         }),
       });

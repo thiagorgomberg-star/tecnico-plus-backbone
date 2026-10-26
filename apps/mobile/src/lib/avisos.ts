@@ -8,6 +8,11 @@ import { supabase } from './supabase';
 // Roda com o app aberto (tempo real) e em segundo plano junto com o rastreio do expediente.
 
 const CANAL = 'alertas-os';
+// Nova O.S., O.S. reaberta e ocorrência perto: toque de alarme próprio (o som de um canal do Android não muda depois de criado,
+// por isso é um canal novo).
+const CANAL_ALARME = 'alarme-os';
+const SOM_ALARME = 'alarme_os.wav';
+const COM_ALARME = ['nova_os', 'os_reaberta', 'backlog_proximo'];
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -67,6 +72,14 @@ export async function prepararAvisos() {
       vibrationPattern: [0, 400, 200, 400],
       lightColor: '#0572CE',
     });
+    await Notifications.setNotificationChannelAsync(CANAL_ALARME, {
+      name: 'Nova O.S. (alarme)',
+      importance: Notifications.AndroidImportance.MAX,
+      sound: SOM_ALARME,
+      vibrationPattern: [0, 600, 250, 600, 250, 600],
+      lightColor: '#0572CE',
+      audioAttributes: { usage: Notifications.AndroidAudioUsage.ALARM, contentType: Notifications.AndroidAudioContentType.SONIFICATION },
+    });
   }
   const atual = await Notifications.getPermissionsAsync();
   if (!atual.granted) await Notifications.requestPermissionsAsync();
@@ -90,15 +103,16 @@ export async function verificarAlertas() {
       .gte('criado_em', new Date(Date.now() - 24 * 3600_000).toISOString())
       .select('id, tipo, mensagem, os_id');
     for (const alerta of data ?? []) {
+      const alarme = COM_ALARME.includes(alerta.tipo);
       await Notifications.scheduleNotificationAsync({
         content: {
           title: titulos[alerta.tipo] ?? 'Técnico Plus',
           body: alerta.mensagem,
           data: { osId: alerta.os_id },
-          sound: 'default',
+          sound: alarme ? SOM_ALARME : 'default',
           priority: Notifications.AndroidNotificationPriority.MAX,
         },
-        trigger: Platform.OS === 'android' ? { channelId: CANAL } : null,
+        trigger: Platform.OS === 'android' ? { channelId: alarme ? CANAL_ALARME : CANAL } : null,
       });
     }
   } catch {
@@ -122,14 +136,14 @@ export function ouvirAlertas(usuarioId: string) {
 }
 
 // Som do aviso de O.S. nova na tela: se a notificação dessa O.S. já tocou (push), não repete;
-// senão (ex.: chegou enquanto estava sem sinal), toca uma notificação com som no canal de alertas.
+// senão (ex.: chegou enquanto estava sem sinal), toca uma notificação com o alarme.
 export async function tocarAvisoOS(osId: string, titulo: string, corpo: string) {
   try {
     const presentes = await Notifications.getPresentedNotificationsAsync();
     if (presentes.some((n) => (n.request.content.data as { osId?: string } | null)?.osId === osId)) return;
     await Notifications.scheduleNotificationAsync({
-      content: { title: titulo, body: corpo, data: { osId }, sound: 'default', priority: Notifications.AndroidNotificationPriority.MAX },
-      trigger: Platform.OS === 'android' ? { channelId: CANAL } : null,
+      content: { title: titulo, body: corpo, data: { osId }, sound: SOM_ALARME, priority: Notifications.AndroidNotificationPriority.MAX },
+      trigger: Platform.OS === 'android' ? { channelId: CANAL_ALARME } : null,
     });
   } catch {
     // sem permissão de notificação: fica só a vibração
