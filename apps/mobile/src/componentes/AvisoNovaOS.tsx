@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, Vibration, View } from 'react-native';
 
 import Icone from './Icone';
+import { tocarAvisoOS } from '../lib/avisos';
 import { cores } from '../lib/estilo';
 import { OrdemServico } from '../lib/tipos';
 
@@ -10,7 +11,7 @@ const VISTAS = 'os-avisadas';
 // Cada envio é único (reaberta gera novo envio); guarda só os mais recentes.
 const chave = (os: OrdemServico) => `${os.id}:${os.enviada_em ?? ''}`;
 
-// Aviso em tela cheia quando chega O.S. nova (ou reaberta) para o técnico, além da notificação do celular.
+// Aviso em tela cheia, com som e vibração, quando chega O.S. nova (ou reaberta) para o técnico, além da notificação do celular.
 // Vale também para o que chegou enquanto estava sem sinal: aparece assim que a lista atualizar.
 export default function AvisoNovaOS({ ordens, abrir }: { ordens: OrdemServico[]; abrir: (os: OrdemServico) => void }) {
   const [novas, setNovas] = useState<OrdemServico[]>([]);
@@ -24,6 +25,8 @@ export default function AvisoNovaOS({ ordens, abrir }: { ordens: OrdemServico[];
       if (!faltam.length) return;
       setNovas(faltam);
       Vibration.vibrate([0, 400, 200, 400]);
+      const os = faltam[0];
+      tocarAvisoOS(os.id, os.reaberta_em ? 'O.S. reaberta' : 'Nova O.S. recebida', `#${os.numero}: ${os.titulo}`);
     }).catch(() => {});
   }, [ordens]);
 

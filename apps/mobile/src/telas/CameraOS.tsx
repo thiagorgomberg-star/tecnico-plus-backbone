@@ -298,8 +298,8 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
         <Pressable onPress={() => (fila.length ? Alert.alert('Aguarde', 'Ainda gravando as últimas fotos.') : fechar())}>
           <Text style={estilos.texto}>‹ Concluir fotos</Text>
         </Pressable>
-        <Text style={[estilos.texto, { color: total >= minimo ? '#8BE28F' : '#FFD54F' }]}>
-          {total}/{minimo} fotos{fila.length ? ` · gravando ${fila.length}` : ''}
+        <Text style={[estilos.texto, { color: !minimo ? '#fff' : total >= minimo ? '#8BE28F' : '#FFD54F' }]}>
+          {minimo ? `${total}/${minimo}` : total} {total === 1 && !minimo ? 'foto' : 'fotos'}{fila.length ? ` · gravando ${fila.length}` : ''}
         </Text>
         {caixa || ponto || unica ? <Text style={estilos.texto}>{caixa?.titulo ?? ponto?.titulo ?? unica?.titulo}</Text> : (
         <View style={{ flexDirection: 'row', gap: 8 }}>

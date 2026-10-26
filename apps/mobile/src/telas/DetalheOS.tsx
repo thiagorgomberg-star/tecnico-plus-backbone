@@ -31,7 +31,6 @@ type Props = {
 };
 type Aba = 'detalhes' | 'execucao' | 'postes' | 'caixas' | 'fotos' | 'historico';
 
-const MINIMO_FOTOS = 10;
 // Campo que guarda a hora real de cada etapa (enviada mesmo se a ação foi offline).
 const campoHora: Partial<Record<StatusOS, string>> = {
   aceita: 'aceita_em',
@@ -127,10 +126,6 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
 
   async function avancar() {
     if (!acao) return;
-    if (acao.status === 'concluida' && totalFotos < MINIMO_FOTOS) {
-      setAba('fotos');
-      return Alert.alert('Faltam fotos', `Tire pelo menos ${MINIMO_FOTOS} fotos na horizontal antes de concluir (${totalFotos} até agora).`);
-    }
     if (acao.status === 'concluida' && !assinadoPor) {
       const seguir = await new Promise<boolean>((ok) => Alert.alert('O.S. sem assinatura', 'Assinar a O.S. antes de concluir?', [
         { text: 'Assinar O.S.', onPress: () => { assinar(); ok(false); } },
@@ -276,7 +271,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
         {([
           ['detalhes', 'Detalhes', 'information-outline'], ['execucao', 'Execução', 'wrench-outline'],
           ...(vistoriaMg ? [['postes', 'Postes', 'transmission-tower']] : []), ['caixas', 'Caixas', 'package-variant'],
-          ['fotos', `Fotos ${totalFotos}/${MINIMO_FOTOS}`, 'camera-outline'], ['historico', 'Histórico', 'history'],
+          ['fotos', `Fotos ${totalFotos}`, 'camera-outline'], ['historico', 'Histórico', 'history'],
         ] as [Aba, string, NomeIcone][]).map(([valor, rotulo, icone]) => (
           <Pressable key={valor} style={[s.aba, aba === valor && s.abaAtiva]} onPress={() => setAba(valor)}>
             <Icone nome={icone} tamanho={20} cor={aba === valor ? cores.primaria : cores.suave} />
@@ -317,7 +312,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
                 <Acao icone="crosshairs-gps" rotulo={os.evento_localizado_em ? 'Evento localizado' : 'Localizei o evento'} cor={cores.perigo}
                   feito={!!os.evento_localizado_em} aoTocar={localizarEvento} />
               ) : null}
-              <Acao icone="camera-outline" rotulo={`Fotos ${totalFotos}/${MINIMO_FOTOS}`} cor={cores.primaria} feito={totalFotos >= MINIMO_FOTOS}
+              <Acao icone="camera-outline" rotulo={`Fotos ${totalFotos}`} cor={cores.primaria} feito={totalFotos > 0}
                 aoTocar={podeFotografar ? () => abrirCamera(totalFotos) : () => setAba('fotos')} />
               <Acao icone="draw-pen" rotulo={assinadoPor ? 'O.S. assinada' : 'Assinar O.S.'} cor={cores.texto2} feito={!!assinadoPor}
                 aoTocar={podeEditar && !assinadoPor ? () => assinar() : undefined} />
@@ -382,9 +377,9 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
 
         {aba === 'fotos' ? (
           <View style={s.bloco}>
-            <Text style={[s.fotosNumero, { color: totalFotos >= MINIMO_FOTOS ? cores.sucesso : cores.perigo }]}>{totalFotos}</Text>
+            <Text style={[s.fotosNumero, { color: totalFotos > 0 ? cores.sucesso : cores.suave }]}>{totalFotos}</Text>
             <Text style={s.valor}>
-              de no mínimo {MINIMO_FOTOS} fotos na horizontal{fotosNaFila > 0 ? ` · ${fotosNaFila} aguardando internet` : ''}
+              {totalFotos === 1 ? 'foto' : 'fotos'} na horizontal{fotosNaFila > 0 ? ` · ${fotosNaFila} aguardando internet` : ''}
             </Text>
             {os.origem_ponto_id || os.informado_por ? <Text style={[s.valor, { marginTop: 8 }]}>As fotos da vistoria aparecem na câmera como guia: repita o mesmo ângulo.</Text> : null}
             {podeFotografar ? (

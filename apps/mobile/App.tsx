@@ -135,7 +135,7 @@ export default function App() {
     return (
       <>
         <StatusBar hidden />
-        <CameraOS osId={camera.osId} fotosJaFeitas={camera.fotosJaFeitas} minimo={10} usuario={perfil}
+        <CameraOS osId={camera.osId} fotosJaFeitas={camera.fotosJaFeitas} minimo={0} usuario={perfil}
           fechar={() => setCamera(null)} />
       </>
     );

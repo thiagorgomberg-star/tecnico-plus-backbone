@@ -120,3 +120,18 @@ export function ouvirAlertas(usuarioId: string) {
     supabase.removeChannel(canal);
   };
 }
+
+// Som do aviso de O.S. nova na tela: se a notificação dessa O.S. já tocou (push), não repete;
+// senão (ex.: chegou enquanto estava sem sinal), toca uma notificação com som no canal de alertas.
+export async function tocarAvisoOS(osId: string, titulo: string, corpo: string) {
+  try {
+    const presentes = await Notifications.getPresentedNotificationsAsync();
+    if (presentes.some((n) => (n.request.content.data as { osId?: string } | null)?.osId === osId)) return;
+    await Notifications.scheduleNotificationAsync({
+      content: { title: titulo, body: corpo, data: { osId }, sound: 'default', priority: Notifications.AndroidNotificationPriority.MAX },
+      trigger: Platform.OS === 'android' ? { channelId: CANAL } : null,
+    });
+  } catch {
+    // sem permissão de notificação: fica só a vibração
+  }
+}

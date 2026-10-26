@@ -185,7 +185,7 @@ export async function sincronizar() {
           ouvintes.forEach((f) => f());
           return; // sem internet: tenta de novo no próximo ciclo
         }
-        // Regra do banco recusou (ex.: O.S. sem 10 fotos): guarda para revisão e segue a fila.
+        // Regra do banco recusou (ex.: mudança de status não permitida): guarda para revisão e segue a fila.
         const recusados = JSON.parse((await AsyncStorage.getItem(CHAVE_RECUSADOS)) ?? '[]');
         recusados.push({ item: itens[0], erro: ultimoErro, em: new Date().toISOString() });
         await AsyncStorage.setItem(CHAVE_RECUSADOS, JSON.stringify(recusados));
