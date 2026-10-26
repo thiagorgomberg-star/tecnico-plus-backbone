@@ -26,7 +26,7 @@ type Props = { dados: DadosMascara; aoCarregar?: () => void; ref?: Ref<RefMascar
 export default function MascaraFoto({ dados, aoCarregar, ref }: Props) {
   const s = LARGURA_MASCARA / REF;
   const alturaFoto = (LARGURA_MASCARA * dados.alturaFoto) / dados.larguraFoto;
-  const alturaBarra = alturaFoto * 0.137;
+  const alturaBarra = alturaFoto * 0.15;
 
   return (
     <View ref={ref} collapsable={false} style={{ width: LARGURA_MASCARA, backgroundColor: '#fff' }}>
@@ -44,14 +44,18 @@ export default function MascaraFoto({ dados, aoCarregar, ref }: Props) {
             </View>
           </View>
           {dados.endereco ? (
-            <Text style={[estilos.sombra, { color: '#fff', fontSize: 30 * s, maxWidth: 560 * s, marginTop: 6 * s, fontFamily: 'RobotoCondensed_400Regular' }]}>
-              {dados.endereco}
-            </Text>
+            // Endereço numa caixa escura, maior e em negrito: legível mesmo sobre céu ou estrada clara.
+            <View style={{ marginTop: 10 * s, paddingHorizontal: 12 * s, paddingVertical: 6 * s, borderRadius: 4 * s,
+              backgroundColor: 'rgba(0,0,0,0.6)', alignSelf: 'flex-start', maxWidth: 940 * s }}>
+              <Text style={{ color: '#fff', fontSize: 40 * s, lineHeight: 48 * s, fontFamily: 'RobotoCondensed_700Bold' }}>
+                {dados.endereco}
+              </Text>
+            </View>
           ) : null}
           {dados.latitude != null && dados.longitude != null ? (
             <View style={{ marginTop: 12 * s, paddingHorizontal: 12 * s, paddingVertical: 8 * s, borderRadius: 4 * s,
-              backgroundColor: 'rgba(60,60,60,0.75)', alignSelf: 'flex-start', minWidth: 480 * s }}>
-              <Text style={{ color: '#fff', fontSize: 30 * s, fontFamily: 'RobotoCondensed_400Regular' }}>
+              backgroundColor: 'rgba(0,0,0,0.6)', alignSelf: 'flex-start', minWidth: 480 * s }}>
+              <Text style={{ color: '#fff', fontSize: 34 * s, fontFamily: 'RobotoCondensed_400Regular' }}>
                 Lat/Long: {latLong(dados.latitude, dados.longitude)}
               </Text>
             </View>
@@ -60,11 +64,11 @@ export default function MascaraFoto({ dados, aoCarregar, ref }: Props) {
       </View>
       <View style={{ height: alturaBarra, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 28 * s }}>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: '#222', fontSize: 27 * s, fontFamily: 'RobotoCondensed_700Bold' }}>{dados.nome}</Text>
-          {dados.cargo ? <Text style={{ color: '#333', fontSize: 23 * s, marginTop: 6 * s, fontFamily: 'RobotoCondensed_400Regular' }}>{dados.cargo}</Text> : null}
+          <Text style={{ color: '#111', fontSize: 48 * s, fontFamily: 'RobotoCondensed_700Bold' }} numberOfLines={1}>{dados.nome}</Text>
+          {dados.cargo ? <Text style={{ color: '#333', fontSize: 38 * s, marginTop: 2 * s, fontFamily: 'RobotoCondensed_400Regular' }} numberOfLines={1}>{dados.cargo}</Text> : null}
         </View>
         <Image source={require('../../assets/mascara/logo-multivale.png')}
-          style={{ width: 140 * s, height: 74 * s }} resizeMode="contain" />
+          style={{ width: 180 * s, height: 96 * s }} resizeMode="contain" />
       </View>
     </View>
   );
