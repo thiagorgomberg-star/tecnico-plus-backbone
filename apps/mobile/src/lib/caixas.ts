@@ -137,12 +137,12 @@ export async function salvarCaixa(caixa: Caixa, nova: boolean) {
       linhas: caixa.manobras.map((m) => ({ caixa_id: caixa.id, fibra_entrada: m.fibra_entrada, saida: m.saida, fibra_saida: m.fibra_saida, motivo: m.motivo || null })),
     });
   }
-  const fibras = caixa.fibras.filter((f) => f.cliente || f.sem_potencia || f.potencia_dbm != null || f.reflexao_db != null || f.perda_db_km != null
+  const fibras = caixa.fibras.filter((f) => f.cliente || f.sem_potencia || f.acesa || f.potencia_dbm != null || f.reflexao_db != null || f.perda_db_km != null
     || f.posicao_dgo || f.potencia_tx_dbm != null || f.potencia_rx_dbm != null || f.cordao_olt);
   if (fibras.length) {
     await enfileirar({
       tipo: 'inserirVarios', tabela: 'caixa_fibras',
-      linhas: fibras.map((f) => ({ caixa_id: caixa.id, fibra: f.fibra, cliente: f.cliente || null, sem_potencia: f.sem_potencia,
+      linhas: fibras.map((f) => ({ caixa_id: caixa.id, fibra: f.fibra, cliente: f.cliente || null, sem_potencia: f.sem_potencia, acesa: !f.sem_potencia && (!!f.acesa || !!f.cliente),
         potencia_dbm: f.potencia_dbm ?? null, reflexao_db: f.reflexao_db ?? null, perda_db_km: f.perda_db_km ?? null,
         posicao_dgo: f.posicao_dgo || null, potencia_tx_dbm: f.potencia_tx_dbm ?? null, potencia_rx_dbm: f.potencia_rx_dbm ?? null,
         cordao_olt: !!f.cordao_olt, olt_posicao: f.cordao_olt ? f.olt_posicao || null : null, sfp_tipo: f.cordao_olt ? f.sfp_tipo || null : null,

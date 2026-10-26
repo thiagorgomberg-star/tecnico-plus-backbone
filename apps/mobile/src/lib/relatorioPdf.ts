@@ -7,7 +7,7 @@ import * as Sharing from 'expo-sharing';
 import { Caixa } from './caixas';
 import { itensPendentes } from './fila';
 import { referenciasLocais } from './referencia';
-import { calcularPlano, descreverFibra, descreverOlt, padroesPorExtenso, ehPonta, faixasDaBandeja, localDgo, rotuloInstalacao, rotuloPonto, posicoesDgo, separarBandejas, svgMapaFusao, descreverSaidas } from './fusao';
+import { calcularPlano, descreverFibra, descreverOlt, padroesPorExtenso, ehPonta, faixasDaBandeja, localDgo, rotuloInstalacao, rotuloPonto, posicoesDgo, separarBandejas, svgMapaFusao, descreverSaidas, linhasDaBandeja } from './fusao';
 import { descreverVeiculo, meuVeiculo } from './veiculo';
 import { supabase } from './supabase';
 import { OrdemServico, rotuloStatus } from './tipos';
@@ -164,8 +164,16 @@ export async function compartilharRelatorio(os: OrdemServico) {
       ${manobras ? `<p class="l" style="margin-top:8px">Manobras</p><table><tr class="l"><td>Fibra de entrada</td><td>Ligada a</td><td>Motivo</td></tr>${manobras}</table>` : ''}
       ${fibras ? `<p class="l" style="margin-top:8px">Fibras</p><table><tr class="l"><td>Fibra</td><td>Cliente</td>${dgo ? '<td>Posição DGO</td><td>OLT · SFP · cordão</td><td>TX / saída OLT dBm</td><td>RX dBm</td>' : ponta ? '<td>Sinal dBm</td>' : ''}${ponta ? '<td>Reflexão dB</td><td>Perda dB/km</td>' : ''}<td>Situação</td></tr>${fibras}</table>` : ''}
       ${c.saidas.length ? `<div style="margin-top:8px">${svgMapaFusao({ ...c, posicoes_dgo: posicoesDgo(caixas, c) })}</div>` : ''}
-      ${separarBandejas(c).length ? `<p class="l" style="margin-top:8px">Bandejas (${c.fusoes_por_bandeja || 12} fusões por bandeja)</p><table><tr class="l"><td>Bandeja</td><td>Fusões</td><td>Fibras de entrada</td></tr>${
-        separarBandejas(c).map((b) => `<tr><td>Bandeja ${b.numero}</td><td>${b.ligacoes.length}</td><td>${esc(faixasDaBandeja(b))}</td></tr>`).join('')}</table>` : ''}
+      ${separarBandejas(c).length ? `<p class="l" style="margin-top:8px">Bandejas (${c.fusoes_por_bandeja || 12} fusões por bandeja)</p>${
+        separarBandejas(c).map((b) => {
+          const cx = { ...c, posicoes_dgo: posicoesDgo(caixas, c) };
+          const linhas = linhasDaBandeja(cx, b);
+          const comPos = linhas.some((l) => l.posicao);
+          return `<p style="margin:8px 0 2px;font-weight:bold">Bandeja ${b.numero} · ${b.ligacoes.length} fusões · ${esc(faixasDaBandeja(b))}</p>`
+            + `<table><tr class="l"><td>Fibra</td><td>Cores</td>${comPos ? '<td>Posição DGO</td>' : ''}<td>Vai para</td><td>Situação</td><td>Cliente</td></tr>${linhas.map((l) =>
+              `<tr><td>FO ${l.fibra}</td><td>${esc(l.entrada)}</td>${comPos ? `<td>${esc(l.posicao)}</td>` : ''}<td>${esc(l.destino)}</td>`
+              + `<td style="color:${l.situacao === 'Apagada' ? '#dc2626' : l.situacao === 'Acesa' ? '#15803d' : '#6b7280'};font-weight:bold">${l.situacao}</td><td>${esc(l.cliente)}</td></tr>`).join('')}</table>`;
+        }).join('')}` : ''}
       ${daCaixa.length ? `<div class="fotos" style="margin-top:8px">${daCaixa.map((f) =>
         `<figure><img src="${f.src}"><figcaption>${f.tipo === 'foto_otdr' ? `OTDR · fibra ${f.fibra}` : f.tipo === 'foto_olt' ? 'OLT e cordões' : f.tipo === 'foto_bandeja' ? `Bandeja ${f.bandeja} · fibras acomodadas` : dgo ? 'DGO' : 'Acomodação da caixa'} · ${quando(f.tiradaEm)}</figcaption></figure>`).join('')}</div>` : ''}
     </div>`;

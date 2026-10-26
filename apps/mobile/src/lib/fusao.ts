@@ -109,6 +109,8 @@ export function resumoPadroes(c: { padrao_cores_entrada?: string | null; padrao_
 export type Manobra = { fibra_entrada: number; saida: number; fibra_saida: number; motivo?: string | null };
 export type SituacaoFibra = {
   fibra: number; cliente: string | null; sem_potencia: boolean;
+  // Fibra acesa (ativa), mesmo sem o nome do cliente.
+  acesa?: boolean | null;
   // Só nas pontas (DGO / entroncamento), medidos com OTDR:
   potencia_dbm?: number | null; reflexao_db?: number | null; perda_db_km?: number | null;
   // Só no DGO: posição da fibra no DGO e potência TX/RX (opcionais).
@@ -210,6 +212,25 @@ export function calcularPlano(caixa: PlanoCaixa) {
   };
 }
 
+// Linhas da tabela de uma bandeja no relatório: fibra, cores, destino, acesa/apagada e cliente.
+export function linhasDaBandeja(caixa: PlanoCaixa, b: { ligacoes: Ligacao[] }) {
+  const situacao = new Map((caixa.fibras ?? []).map((f) => [f.fibra, f]));
+  const posicoes = caixa.posicoes_dgo ?? {};
+  return b.ligacoes.map((l) => {
+    const s = situacao.get(l.entrada);
+    const capS = caixa.saidas[l.saida - 1] ?? caixa.capacidade_fibras;
+    const padraoS = caixa.padrao_cores_saidas?.[l.saida - 1] ?? undefined;
+    return {
+      fibra: l.entrada,
+      entrada: descreverFibra(l.entrada, caixa.capacidade_fibras, caixa.padrao_cores_entrada ?? undefined).replace(/^FO \d+ · /, ''),
+      destino: `${caixa.tipo === 'dgo' ? 'Cabo' : 'Saída'} ${l.saida} · ${descreverFibra(l.fibraSaida, capS, padraoS)}${l.manobra ? ' (manobra)' : ''}`,
+      situacao: s?.sem_potencia ? 'Apagada' : s?.acesa || s?.cliente ? 'Acesa' : '—',
+      cliente: s?.cliente ?? '',
+      posicao: s?.posicao_dgo || posicoes[l.entrada] || '',
+    };
+  });
+}
+
 // Bandejas: as fusões (em ordem de fibra de entrada) ocupam as bandejas em sequência.
 export const FUSOES_POR_BANDEJA = [6, 8, 12, 16, 24];
 export type Bandeja = { numero: number; ligacoes: Ligacao[] };
@@ -300,7 +321,9 @@ export const midiasKmz = (fotos: FotoKmz[]) => (fotos.length
 export const VALIDADE_LINK_FOTO_KMZ = 10 * 365 * 24 * 3600;
 
 // Desenho no estilo do mapa de fusão: entrada à esquerda, saídas à direita, só os tubos com fusão.
-export function svgMapaFusao(caixa: PlanoCaixa) {
+// opcoes.todosTubos: mostra também os tubos de entrada sem fusão (no app, para tocar em qualquer fibra);
+// opcoes.alvos: recebe a altura (no desenho) de cada fibra de entrada, para o toque; opcoes.selecionada: destaca a fibra.
+export function svgMapaFusao(caixa: PlanoCaixa, opcoes: { todosTubos?: boolean; alvos?: { fibra: number; y: number }[]; selecionada?: number | null } = {}) {
   const { ligacoes, param } = calcularPlano(caixa);
   const bandejas = separarBandejas(caixa);
   const bandejaDe = new Map(bandejas.flatMap((b) => b.ligacoes.map((l) => [l.entrada, b.numero] as const)));
@@ -316,7 +339,9 @@ export function svgMapaFusao(caixa: PlanoCaixa) {
   ]);
 
   // Esquerda: tubos de entrada com alguma fusão.
-  const tubosEntrada = [...new Set(ligacoes.map((l) => fibra(l.entrada, cap).tubo))].sort((a, b) => a - b);
+  const tubosEntrada = opcoes.todosTubos
+    ? Array.from({ length: Math.ceil(cap / fibrasPorTubo(cap)) }, (_, i) => i + 1)
+    : [...new Set(ligacoes.map((l) => fibra(l.entrada, cap).tubo))].sort((a, b) => a - b);
   const porTuboE = fibrasPorTubo(cap);
   const yEntrada = new Map<number, number>();
   const situacao = new Map((caixa.fibras ?? []).map((f) => [f.fibra, f]));
@@ -338,15 +363,18 @@ export function svgMapaFusao(caixa: PlanoCaixa) {
       const f = fibra(n, cap, padraoE);
       const yy = y + k * L + L / 2;
       yEntrada.set(n, yy);
+      opcoes.alvos?.push({ fibra: n, y: yy });
+      if (opcoes.selecionada === n) partes.push(`<rect x="12" y="${yy - L / 2}" width="214" height="${L}" rx="3" fill="#dbeafe"/>`);
       const usada = ligacoes.some((l) => l.entrada === n);
       partes.push(`<text x="16" y="${yy + 4}" font-size="10" fill="${usada ? '#111827' : '#9ca3af'}">${n}  ${f.corFibra.nome}</text>`);
       const sit = situacao.get(n);
       const pos = posicaoDe.get(n);
-      if (sit?.sem_potencia) partes.push(`<text x="92" y="${yy + 4}" font-size="9" fill="#dc2626" font-weight="bold">${pos ? `${esc(pos)} · ` : ''}sem potência</text>`);
+      if (sit?.sem_potencia) partes.push(`<text x="92" y="${yy + 4}" font-size="9" fill="#dc2626" font-weight="bold">${pos ? `${esc(pos)} · ` : ''}apagada</text>`);
+      else if (sit?.acesa && !sit.cliente && !pos) partes.push(`<text x="92" y="${yy + 4}" font-size="9" fill="#15803d" font-weight="bold">acesa</text>`);
       else if (sit?.cliente || sit?.potencia_dbm != null || pos) {
         const texto = [pos, sit?.cordao_olt ? 'OLT' : null, sit?.cliente?.slice(0, 14),
           sit?.potencia_dbm != null ? `${sit.potencia_dbm} dBm` : null].filter(Boolean).join(' · ').slice(0, 22);
-        partes.push(`<text x="92" y="${yy + 4}" font-size="9" fill="#1d4ed8">${esc(texto)}</text>`);
+        partes.push(`<text x="92" y="${yy + 4}" font-size="9" fill="${sit?.acesa || sit?.cliente ? '#15803d' : '#1d4ed8'}">${esc(texto)}</text>`);
       }
       partes.push(`<rect x="200" y="${yy - 5}" width="22" height="10" rx="2" fill="${f.corFibra.hex}" stroke="#6b7280" stroke-width="0.5" opacity="${usada ? 1 : 0.35}"/>`);
       if (!usada) partes.push(`<line x1="224" y1="${yy}" x2="234" y2="${yy}" stroke="#9ca3af"/><line x1="234" y1="${yy - 4}" x2="234" y2="${yy + 4}" stroke="#9ca3af"/>`);
@@ -415,7 +443,7 @@ export function svgMapaFusao(caixa: PlanoCaixa) {
 
   const altura = Math.max(alturaEsq, alturaDir, 60);
   const semPotencia = (caixa.fibras ?? []).filter((f) => f.sem_potencia).length;
-  const legenda = `${resumoPadroes(caixa) ? `cores ${resumoPadroes(caixa)} · ` : ''}${cap} fibras · ${ligacoes.length} fusionadas · ${param} param nesta caixa (⊣) · ${caixa.manobras.length} manobra(s) (M, tracejado) ${semPotencia ? ` · ${semPotencia} sem potência` : ''} ${dgo ? '' : ` · ${bandejas.length} bandeja(s) de ${caixa.fusoes_por_bandeja || 12} fusões (B)`} · só tubos com fusão`;
+  const legenda = `${resumoPadroes(caixa) ? `cores ${resumoPadroes(caixa)} · ` : ''}${cap} fibras · ${ligacoes.length} fusionadas · ${param} param nesta caixa (⊣) · ${caixa.manobras.length} manobra(s) (M, tracejado) ${semPotencia ? ` · ${semPotencia} apagada(s)` : ''} ${dgo ? '' : ` · ${bandejas.length} bandeja(s) de ${caixa.fusoes_por_bandeja || 12} fusões (B)`} · só tubos com fusão`;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -20 ${W} ${altura + 20}" width="100%" font-family="sans-serif">` +
     `<text x="0" y="-6" font-size="11" fill="#6b7280">${esc(`Mapa de fusão · ${caixa.identificacao} · ${legenda}`)}</text>${partes.join('')}</svg>`;
 }

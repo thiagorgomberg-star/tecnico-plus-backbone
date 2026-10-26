@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import type { CaixaPainel } from "@/componentes/CaixaDetalhe";
-import { calcularPlano, descreverFibra, descreverOlt, localDgo, padroesPorExtenso, ehPonta, faixasDaBandeja, rotuloInstalacao, rotuloPonto, posicoesDgo, separarBandejas, svgMapaFusao, descreverSaidas, origemNaoCadastrada } from "@/lib/fusao";
+import { calcularPlano, descreverFibra, descreverOlt, localDgo, padroesPorExtenso, ehPonta, faixasDaBandeja, rotuloInstalacao, rotuloPonto, posicoesDgo, separarBandejas, svgMapaFusao, descreverSaidas, origemNaoCadastrada, linhasDaBandeja } from "@/lib/fusao";
 import { rotuloStatus, StatusOS } from "@/lib/tipos";
 
 // Relatório do evento aberto pelo link compartilhado com parceiros (sem login).
@@ -233,17 +233,33 @@ function Conteudo() {
               <div className="mt-3" dangerouslySetInnerHTML={{ __html: svgMapaFusao({ ...c, origem: origem(c), posicoes_dgo: posicoesDgo(dados.caixas ?? [], c) }) }} />
             )}
             {separarBandejas(c).length > 0 && (
-              <table className="mt-3 w-full break-inside-avoid">
-                <thead className="text-left text-xs text-gray-500"><tr><th>Bandeja</th><th>Fusões</th><th>Fibras de entrada</th><th>Foto</th></tr></thead>
-                <tbody>
-                  {separarBandejas(c).map((b) => (
-                    <tr key={b.numero} className="border-b border-gray-100">
-                      <td className="py-1">Bandeja {b.numero}</td><td>{b.ligacoes.length}</td><td>{faixasDaBandeja(b)}</td>
-                      <td>{daCaixa.some((f) => f.tipo === "foto_bandeja" && f.bandeja === b.numero) ? "✓" : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="mt-3">
+                <div className="text-xs text-gray-500">Bandejas ({c.fusoes_por_bandeja || 12} fusões por bandeja)</div>
+                {separarBandejas(c).map((b) => {
+                  const linhas = linhasDaBandeja({ ...c, posicoes_dgo: posicoesDgo(dados.caixas ?? [], c) }, b);
+                  const comPos = linhas.some((l) => l.posicao);
+                  const temFoto = daCaixa.some((f) => f.tipo === "foto_bandeja" && f.bandeja === b.numero);
+                  return (
+                    <div key={b.numero} className="mt-2 break-inside-avoid">
+                      <div className="text-sm font-semibold">Bandeja {b.numero} · {b.ligacoes.length} fusões · {faixasDaBandeja(b)} · foto {temFoto ? "✓" : "—"}</div>
+                      <table className="w-full text-sm">
+                        <thead className="text-left text-xs text-gray-500">
+                          <tr><th>Fibra</th><th>Cores</th>{comPos && <th>Posição DGO</th>}<th>Vai para</th><th>Situação</th><th>Cliente</th></tr>
+                        </thead>
+                        <tbody>
+                          {linhas.map((l) => (
+                            <tr key={l.fibra} className="border-b border-gray-100">
+                              <td className="py-0.5">FO {l.fibra}</td><td>{l.entrada}</td>{comPos && <td>{l.posicao}</td>}<td>{l.destino}</td>
+                              <td className={`font-semibold ${l.situacao === "Apagada" ? "text-red-600" : l.situacao === "Acesa" ? "text-green-700" : "text-gray-400"}`}>{l.situacao}</td>
+                              <td>{l.cliente}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
+              </div>
             )}
             {daCaixa.length > 0 && (
               <div className="mt-3 grid grid-cols-2 gap-3">
