@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import RolarComTeclado, { useAlturaTeclado } from '../componentes/RolarComTeclado';
 
 import Cabecalho from '../componentes/Cabecalho';
 import Icone, { iconeDoTipo, NomeIcone } from '../componentes/Icone';
@@ -49,6 +50,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
   const [fotosEnviadas, setFotosEnviadas] = useState(0);
   const [fotosNaFila, setFotosNaFila] = useState(0);
   const [pedindoPausa, setPedindoPausa] = useState(false);
+  const tecladoAberto = useAlturaTeclado();
   const [motivoPausa, setMotivoPausa] = useState('');
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [caixaAberta, setCaixaAberta] = useState<{ caixa: Caixa | null; daOs: Caixa[] } | null>(null);
@@ -280,7 +282,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
         ))}
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+      <RolarComTeclado style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
         {aba === 'detalhes' ? (
           <>
             {os.reaberta_em && os.reaberta_motivo && !['concluida', 'baixada', 'cancelada'].includes(os.status) ? (
@@ -405,10 +407,10 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
             ))}
           </View>
         ) : null}
-      </ScrollView>
+      </RolarComTeclado>
 
       {pedindoPausa ? (
-        <View style={s.rodape}>
+        <View style={[s.rodape, { marginBottom: tecladoAberto }]}>
           <TextInput placeholderTextColor={cores.apagado} style={[s.campo, { minHeight: 44 }]} placeholder="Motivo da pausa (ex.: chuva, falta de material)" value={motivoPausa}
             onChangeText={setMotivoPausa} autoFocus />
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>

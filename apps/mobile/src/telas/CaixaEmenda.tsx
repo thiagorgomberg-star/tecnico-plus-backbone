@@ -1,6 +1,7 @@
 import { randomUUID } from 'expo-crypto';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
+import RolarComTeclado, { useAlturaTeclado } from '../componentes/RolarComTeclado';
 
 import Cabecalho from '../componentes/Cabecalho';
 import { Caixa, caixasDaRede, PREFIXO_TAG, proximaTag, salvarCaixa } from '../lib/caixas';
@@ -60,6 +61,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const [fibra, setFibra] = useState(FIBRA_VAZIA);
   // Balão do mapa de fusão: fibra tocada, acesa/apagada e cliente.
   const [balao, setBalao] = useState<number | null>(null);
+  const teclado = useAlturaTeclado();
   const [balaoEstado, setBalaoEstado] = useState<'acesa' | 'apagada' | null>(null);
   const [balaoCliente, setBalaoCliente] = useState('');
   const [camera, setCamera] = useState<Camera | null>(null);
@@ -347,7 +349,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   return (
     <View style={{ flex: 1, backgroundColor: cores.fundo }}>
       <Cabecalho titulo={nova ? `Nova caixa · ${tagAuto}` : c.identificacao} subtitulo={rotuloPonto(c.tipo, c.swap)} voltar={voltar} />
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 32 }} pointerEvents={podeEditar ? 'auto' : 'none'}>
+      <RolarComTeclado keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 32 }} pointerEvents={podeEditar ? 'auto' : 'none'}>
         <View style={s.bloco}>
           <Text style={s.rotulo}>TIPO</Text>
           <View style={s.chips}>
@@ -881,11 +883,11 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
             <Text style={s.suave}>Depois de salvar, tire as fotos da acomodação da caixa{ponta ? ' e do OTDR' : ''}.</Text>
           )}
         </View>
-      </ScrollView>
+      </RolarComTeclado>
       <SimularRompimento aberto={simular} fechar={() => setSimular(false)} medicao={c as unknown as CaixaRede}
         caixas={[c as unknown as CaixaRede, ...todasCaixas.filter((x) => x.id !== c.id)]} />
       <Modal visible={balao != null} transparent animationType="fade" onRequestClose={() => setBalao(null)}>
-        <Pressable style={s.balaoFundo} onPress={() => setBalao(null)}>
+        <Pressable style={[s.balaoFundo, { paddingBottom: 20 + teclado }]} onPress={() => setBalao(null)}>
           <Pressable style={s.balao} onPress={() => undefined}>
             {balao != null ? (() => {
               const lig = plano.ligacoes.find((l) => l.entrada === balao);

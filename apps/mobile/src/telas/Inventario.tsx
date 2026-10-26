@@ -1,6 +1,7 @@
 import { randomUUID } from 'expo-crypto';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import RolarComTeclado from '../componentes/RolarComTeclado';
 
 import Cabecalho from '../componentes/Cabecalho';
 import Icone from '../componentes/Icone';
@@ -85,7 +86,7 @@ export default function Inventario({ voltar, usuario }: { voltar: () => void; us
   return (
     <View style={estilo.tela}>
       <Cabecalho titulo="Inventário Matinal" subtitulo="Ferramentas e EPI · ciclo de 30 dias" voltar={voltar} />
-      <ScrollView refreshControl={<RefreshControl refreshing={carregando} onRefresh={carregar} />}>
+      <RolarComTeclado refreshControl={<RefreshControl refreshing={carregando} onRefresh={carregar} />}>
         <View style={[s.resumo, { borderColor: faltam.length ? cores.perigo : cores.sucesso, backgroundColor: fundoDe(faltam.length ? cores.perigo : cores.sucesso) }]}>
           <Icone nome={faltam.length ? 'camera-account' : 'check-decagram'} tamanho={28} cor={faltam.length ? cores.perigo : cores.sucesso} />
           <View style={{ flex: 1 }}>
@@ -104,7 +105,7 @@ export default function Inventario({ voltar, usuario }: { voltar: () => void; us
         {grupo('ferramenta', 'FERRAMENTAS')}
         {grupo('epi', 'EPI')}
         <View style={{ height: 32 }} />
-      </ScrollView>
+      </RolarComTeclado>
     </View>
   );
 }
@@ -155,7 +156,7 @@ function Inspecao({ item, usuario, fechar, feito, restantes }: {
   return (
     <View style={estilo.tela}>
       <Cabecalho titulo={item.nome} subtitulo={item.categoria === 'epi' ? 'EPI' : 'Ferramenta'} voltar={fechar} />
-      <ScrollView keyboardShouldPersistTaps="handled">
+      <RolarComTeclado keyboardShouldPersistTaps="handled">
         <View style={estilo.cartao}>
           <Text style={estilo.suave}>
             {[item.marca_modelo, item.numero_serie ? `S/N ${item.numero_serie}` : null, item.patrimonio ? `Patrimônio ${item.patrimonio}` : null,
@@ -203,7 +204,7 @@ function Inspecao({ item, usuario, fechar, feito, restantes }: {
             </Pressable>
           )}
         </View>
-      </ScrollView>
+      </RolarComTeclado>
       <Modal visible={camera} onRequestClose={() => setCamera(false)} animationType="fade" supportedOrientations={['landscape', 'portrait']}>
         {camera ? (
           <CameraOS osId="" fotosJaFeitas={0} minimo={1} usuario={usuario} fechar={() => setCamera(false)}

@@ -1,6 +1,7 @@
 import { randomUUID } from 'expo-crypto';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import RolarComTeclado from '../componentes/RolarComTeclado';
 
 import Cabecalho from '../componentes/Cabecalho';
 import { cores } from '../lib/estilo';
@@ -172,7 +173,7 @@ export default function PontoVistoria({ osId, tipoOs, ponto: inicial, categoria,
     <View style={{ flex: 1, backgroundColor: cores.fundo }}>
       <Cabecalho titulo={nova ? `Novo ${poste ? 'poste' : 'registro de ocorrência'}` : titulo} subtitulo={tipoOs} voltar={voltar}
         acoes={!nova && podeEditar ? [{ icone: 'delete-outline', rotulo: 'Excluir', aoTocar: excluir }] : undefined} />
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+      <RolarComTeclado keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
         <View style={s.bloco}>
           {poste ? (
             <>
@@ -276,7 +277,7 @@ export default function PontoVistoria({ osId, tipoOs, ponto: inicial, categoria,
             <Text style={s.suave}>Depois de salvar, tire a foto do {poste ? 'poste (base e topo)' : 'ponto'}.</Text>
           )}
         </View>
-      </ScrollView>
+      </RolarComTeclado>
 
       <Modal visible={camera} onRequestClose={() => setCamera(false)} animationType="fade" supportedOrientations={['landscape', 'portrait']}>
         {camera ? (

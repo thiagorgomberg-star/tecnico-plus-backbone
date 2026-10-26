@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { randomUUID } from 'expo-crypto';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import RolarComTeclado from '../componentes/RolarComTeclado';
 
 import Cabecalho from '../componentes/Cabecalho';
 import { cores, estilo } from '../lib/estilo';
@@ -153,7 +154,7 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
   const chip = (ativo: boolean) => [s.chip, ativo && { backgroundColor: cores.primaria, borderColor: cores.primaria }];
 
   return (
-    <ScrollView style={estilo.tela} keyboardShouldPersistTaps="handled">
+    <RolarComTeclado style={estilo.tela} keyboardShouldPersistTaps="handled">
       <Cabecalho titulo="Iniciar atividade" voltar={voltar} />
       <Text style={[estilo.suave, { marginHorizontal: 16, marginTop: 12 }]}>
         A preventiva já começa em execução, com a sua localização. Depois é igual a uma O.S.: fotos (mínimo 10) e conclusão.
@@ -247,7 +248,7 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
         </Pressable>
       </View>
       <View style={{ height: 32 }} />
-    </ScrollView>
+    </RolarComTeclado>
   );
 }
 

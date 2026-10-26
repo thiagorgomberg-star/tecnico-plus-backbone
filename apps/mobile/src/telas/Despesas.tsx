@@ -4,6 +4,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import RolarComTeclado from '../componentes/RolarComTeclado';
 
 import Cabecalho from '../componentes/Cabecalho';
 import Icone from '../componentes/Icone';
@@ -122,7 +123,7 @@ export default function Despesas({ voltar, modo = 'despesas' }: { voltar: () => 
   return (
     <View style={estilo.tela}>
       <Cabecalho titulo={modo === 'frota' ? 'Frota' : 'Despesas'} subtitulo={`Este mês: ${reais(totalMes)}`} voltar={voltar} />
-      <ScrollView refreshControl={<RefreshControl refreshing={carregando} onRefresh={carregar} />}>
+      <RolarComTeclado refreshControl={<RefreshControl refreshing={carregando} onRefresh={carregar} />}>
         {modo === 'frota' && <CartaoVeiculo veiculo={veiculo} />}
         <Pressable style={[estilo.botao, { marginHorizontal: 16, marginTop: 12 }]} onPress={() => setEditando('nova')}>
           <Text style={estilo.botaoTexto}>{modo === 'frota' ? '+ Abastecimento, pedágio ou manutenção' : '+ Lançar despesa'}</Text>
@@ -155,7 +156,7 @@ export default function Despesas({ voltar, modo = 'despesas' }: { voltar: () => 
           );
         })}
         <View style={{ height: 32 }} />
-      </ScrollView>
+      </RolarComTeclado>
     </View>
   );
 }
@@ -314,7 +315,7 @@ function FormDespesa({ despesa, fechar, modo, veiculo }: { despesa: Despesa | nu
   return (
     <View style={estilo.tela}>
       <Cabecalho titulo={despesa ? 'Corrigir lançamento' : modo === 'frota' ? 'Lançar gasto do veículo' : 'Lançar despesa'} voltar={fechar} />
-      <ScrollView keyboardShouldPersistTaps="handled">
+      <RolarComTeclado keyboardShouldPersistTaps="handled">
         {despesa?.motivo_recusa ? (
           <Text style={{ color: cores.perigo, marginHorizontal: 16, marginTop: 12 }}>Recusada: {despesa.motivo_recusa}</Text>
         ) : null}
@@ -421,7 +422,7 @@ function FormDespesa({ despesa, fechar, modo, veiculo }: { despesa: Despesa | nu
           </Pressable>
         </View>
         <View style={{ height: 32 }} />
-      </ScrollView>
+      </RolarComTeclado>
     </View>
   );
 }

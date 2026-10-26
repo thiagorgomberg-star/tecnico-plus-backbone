@@ -1,6 +1,7 @@
 import { randomUUID } from 'expo-crypto';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import RolarComTeclado from '../componentes/RolarComTeclado';
 
 import Cabecalho from '../componentes/Cabecalho';
 import Icone from '../componentes/Icone';
@@ -125,7 +126,7 @@ export default function InformarEvento({ usuario, voltar }: { usuario: { nome: s
   return (
     <View style={{ flex: 1, backgroundColor: cores.fundo }}>
       <Cabecalho titulo="Informar ocorrência" subtitulo="Vira O.S. no backlog" voltar={sair} />
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+      <RolarComTeclado keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
         <View style={s.cartao}>
           <Text style={s.rotulo}>O QUE É A OCORRÊNCIA *</Text>
           {chips(CATEGORIAS.map((c) => ({ valor: c, rotulo: c })), categoria, setCategoria)}
@@ -191,7 +192,7 @@ export default function InformarEvento({ usuario, voltar }: { usuario: { nome: s
             <Text style={s.capturarTexto}>{fotos > 0 ? 'TIRAR MAIS FOTOS' : 'FOTOGRAFAR'}</Text>
           </Pressable>
         </View>
-      </ScrollView>
+      </RolarComTeclado>
 
       <View style={s.rodape}>
         <Pressable style={[s.concluir, { backgroundColor: cores.sucesso }]} onPress={concluir}>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { useAlturaTeclado } from '../componentes/RolarComTeclado';
 
 import { cores, estilo } from '../lib/estilo';
 import { supabase } from '../lib/supabase';
@@ -7,6 +8,7 @@ import { supabase } from '../lib/supabase';
 export default function Login() {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+  const teclado = useAlturaTeclado();
   const [entrando, setEntrando] = useState(false);
 
   async function entrar() {
@@ -17,7 +19,7 @@ export default function Login() {
   }
 
   return (
-    <View style={[estilo.tela, { justifyContent: 'center', padding: 24 }]}>
+    <View style={[estilo.tela, { justifyContent: 'center', padding: 24, paddingBottom: 24 + teclado }]}>
       <Text style={[estilo.titulo, { fontSize: 26 }]}>Técnico Plus</Text>
       <Text style={[estilo.suave, { marginBottom: 24 }]}>Backbone Multivale</Text>
       <TextInput placeholderTextColor={cores.apagado}

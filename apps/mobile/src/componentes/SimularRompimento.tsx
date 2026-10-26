@@ -2,6 +2,7 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import RolarComTeclado from './RolarComTeclado';
 
 import { cores } from '../lib/estilo';
 import {
@@ -59,7 +60,7 @@ export default function SimularRompimento({ aberto, fechar, caixas, medicao }: {
             <Text style={s.topoSub}>Medição em {medicao.identificacao} · {rotuloPonto(medicao.tipo ?? 'emenda', medicao.swap)}</Text>
           </View>
         </View>
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+        <RolarComTeclado contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
           <View style={s.cartao}>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <View style={{ width: 90 }}>
@@ -119,7 +120,7 @@ export default function SimularRompimento({ aberto, fechar, caixas, medicao }: {
           <Text style={[s.suave, { marginTop: 12 }]}>
             Quanto mais pontos com a metragem do cabo (caixas e postes da vistoria) e reservas anotadas, mais perto fica o resultado.
           </Text>
-        </ScrollView>
+        </RolarComTeclado>
       </View>
     </Modal>
   );
