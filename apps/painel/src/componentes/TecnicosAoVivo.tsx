@@ -5,6 +5,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { GeoJSONSource, Map as Mapa } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { atualizarGeocarAgora } from "@/lib/geocar";
 import { supabase } from "@/lib/supabase";
 import { duracao, fmtKm, kmPercorridos, paradas, PARADA_MIN_MINUTOS, type Parada } from "@/lib/trajeto";
 
@@ -43,6 +44,7 @@ export default function TecnicosAoVivo() {
   const [selecionado, setSelecionado] = useState<string | null>(null);
   const [intervalo, setIntervalo] = useState(30);
   const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null);
+  const [atualizando, setAtualizando] = useState(false);
   const divMapa = useRef<HTMLDivElement>(null);
   const mapa = useRef<Mapa | null>(null);
   const [mapaPronto, setMapaPronto] = useState(false);
@@ -276,7 +278,10 @@ export default function TecnicosAoVivo() {
             <option value={60}>a cada 1 min</option>
             <option value={300}>a cada 5 min</option>
           </select>
-          <button className="rounded px-1.5 py-0.5 text-blue-700 hover:bg-blue-50" onClick={carregar} title="Atualizar agora">↻</button>
+          <button className="rounded px-1.5 py-0.5 text-blue-700 hover:bg-blue-50 disabled:opacity-50" disabled={atualizando} title="Atualizar agora (inclui os carros da GEOCAR)"
+            onClick={async () => { setAtualizando(true); try { await atualizarGeocarAgora(); } finally { carregar(); setAtualizando(false); } }}>
+            {atualizando ? "..." : "↻"}
+          </button>
         </div>
         <h2 className="flex items-center border-b border-gray-200 p-4 font-semibold">
           Em expediente ({posicoes.length})

@@ -6,6 +6,7 @@ import type { GeoJSONSource, Map as Mapa } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import DetalheOS from "@/componentes/DetalheOS";
+import { atualizarGeocarAgora } from "@/lib/geocar";
 import { supabase } from "@/lib/supabase";
 import { OrdemServico, rotuloStatus, StatusOS, Tecnico } from "@/lib/tipos";
 
@@ -14,6 +15,8 @@ type OsConsole = OrdemServico & {
 };
 type Intervalo = { tecnico_id: string; inicio: string; fim: string | null };
 type Posicao = { tecnico_id: string; nome: string; latitude: number | null; longitude: number | null; registrado_em: string };
+type Carro = { matricula: string; latitude: number | null; longitude: number | null; datahora: string | null; veiculos: { tecnico_id: string | null } | null };
+type Fonte = "celular" | "veiculo";
 
 // Cores por status (com o nome do status escrito na barra e na legenda, nunca só a cor).
 const COR: Record<StatusOS, { fundo: string; texto: string }> = {
@@ -41,6 +44,10 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
   const [expedientes, setExpedientes] = useState<Intervalo[]>([]);
   const [refeicoes, setRefeicoes] = useState<Intervalo[]>([]);
   const [posicoes, setPosicoes] = useState<Posicao[]>([]);
+  const [carros, setCarros] = useState<Carro[]>([]);
+  const [fonte, setFonte] = useState<Fonte>("celular");
+  const [atualizando, setAtualizando] = useState(false);
+  const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null);
   const [busca, setBusca] = useState("");
   const [agora, setAgora] = useState(0);
   const [detalhe, setDetalhe] = useState<OsConsole | null>(null);
@@ -63,8 +70,21 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
     supabase.from("refeicoes").select("tecnico_id, inicio, fim").lt("inicio", fim).or(`fim.is.null,fim.gt.${ini}`)
       .then(({ data }) => setRefeicoes(data ?? []));
     supabase.from("posicao_atual_tecnicos").select("tecnico_id, nome, latitude, longitude, registrado_em")
-      .then(({ data }) => setPosicoes(data ?? []));
+      .then(({ data }) => { setPosicoes(data ?? []); setAtualizadoEm(new Date()); });
+    supabase.from("geocar_viaturas").select("matricula, latitude, longitude, datahora, veiculos(tecnico_id)")
+      .then(({ data }) => setCarros(((data as unknown as Carro[]) ?? []).filter((c) => c.veiculos?.tecnico_id)));
   }, [inicioDia, fimDia]);
+
+  // Botão Atualizar: busca os carros na GEOCAR na hora e recarrega tudo.
+  async function forcarAtualizacao() {
+    setAtualizando(true);
+    try {
+      await atualizarGeocarAgora();
+    } finally {
+      carregar();
+      setAtualizando(false);
+    }
+  }
 
   useEffect(() => {
     carregar();
@@ -150,7 +170,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
           layout: { "text-field": ["get", "numero"], "text-size": 11, "text-offset": [0, 1.3], "text-anchor": "top" },
           paint: { "text-halo-color": "#fff", "text-halo-width": 2 } });
         m.addLayer({ id: "tecnicos", type: "circle", source: "tecnicos",
-          paint: { "circle-radius": 13, "circle-color": "#312D2A", "circle-stroke-width": 3, "circle-stroke-color": "#fff" } });
+          paint: { "circle-radius": 13, "circle-color": ["get", "cor"], "circle-stroke-width": 3, "circle-stroke-color": "#fff" } });
         m.addLayer({ id: "tecnicos-sigla", type: "symbol", source: "tecnicos",
           layout: { "text-field": ["get", "sigla"], "text-size": 11, "text-allow-overlap": true },
           paint: { "text-color": "#fff" } });
@@ -174,13 +194,17 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
       features: doDia.map((o) => ({ type: "Feature", geometry: { type: "Point", coordinates: [o.longitude!, o.latitude!] },
         properties: { id: o.id, numero: String(o.numero), cor: COR[o.status].fundo } })),
     });
-    const tecs = ehHoje ? posicoes.filter((p) => p.latitude != null && p.longitude != null) : [];
+    // Técnico pelo celular (GPS do app) ou pelo carro (GEOCAR), conforme a escolha no mapa.
+    const nomeDe = (id: string) => tecnicos.find((t) => t.id === id)?.nome ?? posicoes.find((p) => p.tecnico_id === id)?.nome ?? "?";
+    const tecs = !ehHoje ? [] : fonte === "celular"
+      ? posicoes.filter((p) => p.latitude != null && p.longitude != null).map((p) => ({ lon: p.longitude!, lat: p.latitude!, sigla: iniciais(p.nome), cor: "#312D2A" }))
+      : carros.filter((c) => c.latitude != null && c.longitude != null).map((c) => ({ lon: c.longitude!, lat: c.latitude!, sigla: iniciais(nomeDe(c.veiculos!.tecnico_id!)), cor: "#163A6B" }));
     (m.getSource("tecnicos") as GeoJSONSource).setData({
       type: "FeatureCollection",
-      features: tecs.map((p) => ({ type: "Feature", geometry: { type: "Point", coordinates: [p.longitude!, p.latitude!] },
-        properties: { sigla: iniciais(p.nome) } })),
+      features: tecs.map((p) => ({ type: "Feature", geometry: { type: "Point", coordinates: [p.lon, p.lat] },
+        properties: { sigla: p.sigla, cor: p.cor } })),
     });
-    const pts = [...doDia.map((o) => [o.longitude!, o.latitude!]), ...tecs.map((p) => [p.longitude!, p.latitude!])];
+    const pts = [...doDia.map((o) => [o.longitude!, o.latitude!]), ...tecs.map((p) => [p.lon, p.lat])];
     if (pts.length && !enquadrado.current) {
       enquadrado.current = true;
       const lons = pts.map((p) => p[0]), lats = pts.map((p) => p[1]);
@@ -193,7 +217,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
     };
     m.on("click", "os", abrir);
     return () => { m.off("click", "os", abrir); };
-  }, [ordens, barras, posicoes, ehHoje, mapaPronto]);
+  }, [ordens, barras, posicoes, carros, fonte, tecnicos, ehHoje, mapaPronto]);
 
   const mudarDia = (n: number) => {
     const d = new Date(inicioDia.getTime() + n * 86400000 + 3600000);
@@ -218,8 +242,28 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[1fr_300px]">
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+        <div className="relative overflow-hidden rounded-xl border border-gray-200 bg-white">
           <div ref={divMapa} className="h-80 w-full" />
+          <div className="absolute left-2 top-2 flex flex-wrap items-center gap-2">
+            <div className="flex overflow-hidden rounded-lg border border-gray-300 bg-white text-sm shadow-sm" role="group" aria-label="Posição do técnico pelo">
+              {([["celular", "Celular"], ["veiculo", "Veículo (GEOCAR)"]] as const).map(([v, rotulo]) => (
+                <button key={v} onClick={() => setFonte(v)} aria-pressed={fonte === v}
+                  className={`px-3 py-1.5 ${fonte === v ? "bg-[#163A6B] text-white" : "text-gray-700 hover:bg-gray-50"}`}>
+                  {rotulo}
+                </button>
+              ))}
+            </div>
+            <button onClick={forcarAtualizacao} disabled={atualizando}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60">
+              {atualizando ? "Atualizando..." : "↻ Atualizar"}
+            </button>
+            {atualizadoEm && <span className="rounded bg-white/90 px-2 py-0.5 text-xs text-gray-600">às {atualizadoEm.toLocaleTimeString("pt-BR")}</span>}
+          </div>
+          {fonte === "veiculo" && ehHoje && carros.length === 0 && (
+            <p className="absolute bottom-2 left-2 right-2 rounded-lg bg-white/95 px-3 py-2 text-xs text-gray-700 shadow">
+              Nenhum carro da GEOCAR ligado a técnico. Cadastre a placa na Frota e vincule ao técnico.
+            </p>
+          )}
         </div>
         <section className="flex max-h-80 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white">
           <div className="flex items-center justify-between border-b border-gray-200 px-3 py-2">
