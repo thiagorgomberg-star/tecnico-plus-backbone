@@ -324,7 +324,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[1fr_300px]">
-        <div className="relative overflow-hidden rounded-xl border border-gray-200 bg-white">
+        <div className="relative isolate overflow-hidden rounded-xl border border-gray-200 bg-white">
           <div ref={divMapa} className="h-80 w-full" />
           <div className="absolute left-2 top-2 flex flex-wrap items-center gap-2">
             <div className="flex overflow-hidden rounded-lg border border-gray-300 bg-white text-sm shadow-sm" role="group" aria-label="Posição do técnico pelo">
