@@ -39,6 +39,12 @@ jobs:
       - name: Dependências
         run: npm ci
 
+      # Ajustes em bibliotecas nativas (patches/): expo-camera com zoom 0 = lente mais aberta (0,5x).
+      - name: Patches
+        run: |
+          npx patch-package
+          grep -q "minZoomRatio" node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
+
       - name: Número da versão
         working-directory: apps/mobile
         run: |
