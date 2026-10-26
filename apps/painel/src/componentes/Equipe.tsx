@@ -6,6 +6,8 @@ import ExcluirDados from "@/componentes/ExcluirDados";
 import FichaTecnico from "@/componentes/FichaTecnico";
 import { supabase } from "@/lib/supabase";
 
+const CARGO_PADRAO: Record<string, string> = { tecnico: "Técnico de Backbone", auxiliar: "Auxiliar técnico", supervisor: "Supervisor" };
+
 type Membro = {
   id: string; nome: string; cargo: string | null; matricula: string | null; documento: string | null; papel: string; ativo: boolean; tecnico_responsavel_id: string | null;
   inicio_jornada: string; fim_jornada: string; fim_jornada_sexta: string; regime_horas: "hora_extra" | "banco_horas";
@@ -15,12 +17,18 @@ export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
   const [membros, setMembros] = useState<Membro[]>([]);
   const [form, setForm] = useState({ papel: "tecnico", tecnico_responsavel_id: "", nome: "", email: "", senha: "", cargo: "Técnico de Backbone", matricula: "" });
   const auxiliarForm = form.papel === "auxiliar";
+  const supervisorForm = form.papel === "supervisor";
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState("");
   const [versao, setVersao] = useState(0);
   const [excluir, setExcluir] = useState<Membro | null>(null);
   const [ficha, setFicha] = useState<string | null>(null);
+  const [euId, setEuId] = useState<string | null>(null);
   const recarregar = useCallback(() => { setVersao((v) => v + 1); aoMudar(); }, [aoMudar]);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setEuId(data.user?.id ?? null));
+  }, []);
 
   useEffect(() => {
     supabase.from("usuarios").select("id, nome, cargo, matricula, documento, papel, ativo, tecnico_responsavel_id, inicio_jornada, fim_jornada, fim_jornada_sexta, regime_horas").is("excluido_em", null).order("nome")
@@ -40,7 +48,9 @@ export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
     if (data?.erro) return setMensagem(data.erro);
     setMensagem(auxiliarForm && !form.email
       ? `${form.nome} cadastrado como auxiliar (sem acesso ao app).`
-      : `${form.nome} cadastrado. Passe o e-mail e a senha inicial para entrar no app.`);
+      : supervisorForm
+        ? `${form.nome} cadastrado como supervisor. Passe o e-mail e a senha inicial para entrar neste painel.`
+        : `${form.nome} cadastrado. Passe o e-mail e a senha inicial para entrar no app.`);
     setForm({ ...form, nome: "", email: "", senha: "", matricula: "", tecnico_responsavel_id: "" });
     recarregar();
   }
@@ -60,9 +70,10 @@ export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
       <h2 className="border-b border-gray-200 p-4 font-semibold">Equipe</h2>
       <form onSubmit={cadastrar} className="grid gap-2 border-b border-gray-100 p-4 sm:grid-cols-3">
         <select className={campo} value={form.papel}
-          onChange={(e) => setForm({ ...form, papel: e.target.value, cargo: e.target.value === "auxiliar" ? "Auxiliar técnico" : "Técnico de Backbone" })}>
+          onChange={(e) => setForm({ ...form, papel: e.target.value, cargo: CARGO_PADRAO[e.target.value] ?? "Técnico de Backbone" })}>
           <option value="tecnico">Técnico</option>
           <option value="auxiliar">Auxiliar</option>
+          <option value="supervisor">Supervisor</option>
         </select>
         {auxiliarForm && (
           <select className={campo} value={form.tecnico_responsavel_id} onChange={(e) => setForm({ ...form, tecnico_responsavel_id: e.target.value })} required>
@@ -78,8 +89,9 @@ export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
         <input className={campo} placeholder="Cargo (sai na foto)" value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} />
         <input className={campo} placeholder="Matrícula (opcional)" value={form.matricula} onChange={(e) => setForm({ ...form, matricula: e.target.value })} />
         <button className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800 disabled:opacity-50" disabled={salvando}>
-          {salvando ? "Cadastrando..." : auxiliarForm ? "Cadastrar auxiliar" : "Cadastrar técnico"}
+          {salvando ? "Cadastrando..." : auxiliarForm ? "Cadastrar auxiliar" : supervisorForm ? "Cadastrar supervisor" : "Cadastrar técnico"}
         </button>
+        {supervisorForm && <p className="text-sm text-gray-600 sm:col-span-3">O supervisor entra neste painel (não no app do técnico) e enxerga todas as O.S., a equipe e os custos.</p>}
         {mensagem && <p className="text-sm text-gray-700 sm:col-span-3">{mensagem}</p>}
       </form>
       <ul>
@@ -123,12 +135,12 @@ export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
                 <option value="banco_horas">Banco de horas</option>
               </select>
             )}
-            {["tecnico", "auxiliar"].includes(m.papel) && (
+            {m.id !== euId && (
               <button className="ml-auto text-gray-600 hover:underline" onClick={() => atualizar(m, { ativo: !m.ativo })}>
                 {m.ativo ? "Desativar" : "Reativar"}
               </button>
             )}
-            {["tecnico", "auxiliar"].includes(m.papel) && (
+            {m.id !== euId && (
               <button className="text-red-700 hover:underline" onClick={() => setExcluir(m)}>Excluir</button>
             )}
           </li>

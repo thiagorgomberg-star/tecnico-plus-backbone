@@ -1,4 +1,4 @@
-// Cadastro de técnico ou auxiliar pelo painel: só um supervisor logado pode chamar.
+// Cadastro de técnico, auxiliar ou supervisor pelo painel: só um supervisor logado pode chamar.
 // Cria o login (e-mail + senha inicial) com a chave de serviço e grava nome e cargo
 // com o próprio login do supervisor, para passar pelas regras de acesso normais.
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
 
   const corpo = await req.json();
   const { nome, cargo, matricula } = corpo;
-  const papel = corpo.papel === "auxiliar" ? "auxiliar" : "tecnico";
+  const papel = ["auxiliar", "supervisor"].includes(corpo.papel) ? corpo.papel : "tecnico";
   const tecnicoResponsavel = papel === "auxiliar" ? corpo.tecnico_responsavel_id || null : null;
   // Auxiliar pode ficar sem acesso ao app: cria um login interno que ninguém usa.
   const semLogin = papel === "auxiliar" && !corpo.email;
@@ -35,6 +35,7 @@ Deno.serve(async (req) => {
   const senha = semLogin ? crypto.randomUUID() + crypto.randomUUID() : corpo.senha;
   if (!nome) return responder({ erro: "Informe o nome." }, 400);
   if (!email || !senha) return responder({ erro: "Informe e-mail e senha." }, 400);
+  // Supervisor sempre tem login próprio: o painel só abre com e-mail e senha.
   if (String(senha).length < 8) return responder({ erro: "A senha inicial precisa de pelo menos 8 caracteres." }, 400);
 
   const admin = createClient(url, chaveServico, { auth: { persistSession: false } });
@@ -50,7 +51,7 @@ Deno.serve(async (req) => {
   const { error: erroPerfil } = await comoSupervisor
     .from("usuarios")
     .update({
-      nome, cargo: cargo || (papel === "auxiliar" ? "Auxiliar técnico" : "Técnico"), matricula: matricula || null, papel,
+      nome, cargo: cargo || (papel === "auxiliar" ? "Auxiliar técnico" : papel === "supervisor" ? "Supervisor" : "Técnico"), matricula: matricula || null, papel,
       tecnico_responsavel_id: tecnicoResponsavel,
     })
     .eq("id", criado.user.id);

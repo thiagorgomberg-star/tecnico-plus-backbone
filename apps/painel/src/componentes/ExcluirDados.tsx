@@ -55,7 +55,7 @@ export default function ExcluirDados({ tipo, id, nome, fechar, aoExcluir }: Prop
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={fechar}>
       <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h2 className="mb-2 text-lg font-semibold text-red-700">Excluir {nome}</h2>
-        {!resumo && !erro && <p className="text-sm text-gray-500">Verificando o que está ligado a {tipo === "os" ? "esta O.S." : "este técnico"}...</p>}
+        {!resumo && !erro && <p className="text-sm text-gray-500">Verificando o que está ligado a {tipo === "os" ? "esta O.S." : "esta pessoa"}...</p>}
 
         {resumo && etapa === 1 && (
           <div className="space-y-2 text-sm text-gray-700">
@@ -71,14 +71,14 @@ export default function ExcluirDados({ tipo, id, nome, fechar, aoExcluir }: Prop
               </>
             ) : resumo.temHistorico ? (
               <>
-                <p>Este técnico tem histórico que não pode ser apagado sem perder dados da rede e das O.S.:</p>
+                <p>Esta pessoa tem histórico que não pode ser apagado sem perder dados da rede e das O.S.:</p>
                 <ul className="list-disc pl-5">
                   {historico.map(([k, n]) => <li key={k}>{n} {k}</li>)}
                 </ul>
                 <p>Ele vai <b>perder o acesso ao app</b> e sumir das listas. O histórico continua com o nome dele, e o e-mail fica livre para outro cadastro.</p>
               </>
             ) : (
-              <p>O técnico não tem O.S. nem outros registros. O login, expedientes, trajeto e escala dele serão apagados de vez.</p>
+              <p>Não há O.S. nem outros registros ligados a esta pessoa. O login, expedientes, trajeto e escala serão apagados de vez.</p>
             )}
             <p className="font-semibold text-red-700">Não dá para desfazer.</p>
           </div>

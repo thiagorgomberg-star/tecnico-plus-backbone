@@ -78,8 +78,11 @@ Deno.serve(async (req) => {
   }
 
   const { data: usuario } = await admin.from("usuarios").select("papel").eq("id", id).maybeSingle();
-  if (!usuario) return responder({ erro: "Técnico não encontrado." }, 404);
-  if (!["tecnico", "auxiliar"].includes(usuario.papel)) return responder({ erro: "Só é possível excluir técnicos e auxiliares." }, 400);
+  if (!usuario) return responder({ erro: "Pessoa não encontrada." }, 404);
+  if (usuario.papel === "admin") return responder({ erro: "Não é possível excluir o administrador." }, 400);
+  // Supervisor não exclui a si mesmo (sobraria o painel sem ninguém para administrar).
+  const { data: eu } = await comoSupervisor.auth.getUser();
+  if (eu.user?.id === id) return responder({ erro: "Você não pode excluir o seu próprio acesso." }, 400);
   const vinculos = await vinculosTecnico(admin, id);
   const temHistorico = Object.keys(vinculos).length > 0;
   if (acao === "resumo") return responder({ vinculos, temHistorico });
