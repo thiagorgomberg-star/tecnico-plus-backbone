@@ -113,8 +113,9 @@ export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm:
   </body></html>`;
 
   const { uri } = await Print.printToFileAsync({ html });
-  const base = nome.replace(/\.sor$/i, '').normalize('NFD').replace(/[^\w.-]+/g, '_').slice(0, 60) || 'curva';
-  const destino = new File(Paths.cache, `Analise-OTDR-${base}.pdf`);
+  // O PDF leva o mesmo nome do arquivo .sor (só tira caracteres que o Android não aceita em nome de arquivo).
+  const base = nome.replace(/\.sor$/i, '').replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 120) || 'curva';
+  const destino = new File(Paths.cache, `${base}.pdf`);
   if (destino.exists) destino.delete();
   new File(uri).move(destino);
   await Sharing.shareAsync(destino.uri, { mimeType: 'application/pdf', dialogTitle: 'Análise da curva OTDR', UTI: 'com.adobe.pdf' });
