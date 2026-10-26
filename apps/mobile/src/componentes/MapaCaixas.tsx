@@ -140,7 +140,7 @@ export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher
               <View style={s.selecao}>
                 <Text style={s.selTitulo}>{sel.identificacao}</Text>
                 <Text style={s.selSub}>
-                  {rotuloPonto(sel.tipo ?? 'emenda')}{sel.distancia != null ? (sel.distancia < 0.02 ? ' · no mesmo local' : ` · ${fmtKm(sel.distancia)} daqui`) : ''}
+                  {rotuloPonto(sel.tipo ?? 'emenda', sel.swap)}{sel.distancia != null ? (sel.distancia < 0.02 ? ' · no mesmo local' : ` · ${fmtKm(sel.distancia)} daqui`) : ''}
                   {sel.saidas.length ? ` · ${sel.saidas.length} saída(s): ${sel.saidas.map((q) => `${q} FO`).join(', ')}` : ''}
                 </Text>
                 {sel.endereco ? <Text style={s.selSub}>{sel.endereco}</Text> : null}
@@ -162,7 +162,7 @@ export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher
               <View style={[s.bolinha, { width: 12, height: 12, borderRadius: 6, backgroundColor: serve(c) ? COR_TIPO[c.tipo ?? 'emenda'] ?? cores.primaria : '#B8C0CC' }]} />
               <View style={{ flex: 1 }}>
                 <Text style={{ color: cores.texto, fontWeight: '700' }}>{c.identificacao}</Text>
-                <Text style={s.selSub}>{rotuloPonto(c.tipo ?? 'emenda')}{c.saidas.length ? ` · ${c.saidas.length} saída(s)` : ' · sem saída'}</Text>
+                <Text style={s.selSub}>{rotuloPonto(c.tipo ?? 'emenda', c.swap)}{c.saidas.length ? ` · ${c.saidas.length} saída(s)` : ' · sem saída'}</Text>
               </View>
               {c.distancia != null ? <Text style={{ color: cores.suave, fontWeight: '700' }}>{fmtKm(c.distancia)}</Text> : null}
             </Pressable>

@@ -6,7 +6,7 @@ import Cabecalho from '../componentes/Cabecalho';
 import { Caixa, caixasDaRede, PREFIXO_TAG, proximaTag, salvarCaixa } from '../lib/caixas';
 import { cores } from '../lib/estilo';
 import {
-  calcularPlano, CAPACIDADES, CaixaRede, descreverFibra, faixasDaBandeja, FUSOES_POR_BANDEJA, herdarDaAnterior, Manobra, PADROES_CORES, rotuloPonto,
+  calcularPlano, CAPACIDADES, CaixaRede, descreverFibra, Destino, origemNaoCadastrada, TIPOS_DESTINO, faixasDaBandeja, FUSOES_POR_BANDEJA, herdarDaAnterior, Manobra, PADROES_CORES, rotuloPonto,
   descreverOlt, ehPonta, instalacoesDoTipo, MODELOS_OLT, TIPOS_SFP, TIPOS_CORDAO, separarBandejas, SituacaoFibra, TIPOS_PONTO,
 } from '../lib/fusao';
 import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
@@ -208,7 +208,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   async function salvar() {
     const identificacao = tagAuto ?? c.identificacao.trim();
     if (!identificacao) return Alert.alert('Informe a identificação', 'Ex.: CE-BKB-0006');
-    if (origemTipo === 'dgo' && !c.origem_dgo?.trim()) return Alert.alert('Informe o DGO de origem');
+    if (origemTipo === 'dgo' && !c.origem_dgo?.trim()) return Alert.alert('Informe o nome ou TAG de onde vem a fibra');
     if (!c.capacidade_fibras) return Alert.alert('Informe o tamanho do cabo de entrada');
     if (c.saidas.some((q) => !q)) return Alert.alert('Informe o tamanho do cabo de cada saída');
     if (calcularPlano(c).ligacoes.length && !c.fusoes_por_bandeja && !dgo) return Alert.alert('Informe quantas fusões cabem por bandeja');
@@ -226,7 +226,8 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
       origem_caixa_id: origemTipo === 'caixa' ? c.origem_caixa_id : null,
       origem_saida: origemTipo === 'caixa' ? c.origem_saida : null,
       origem_dgo: origemTipo === 'dgo' ? c.origem_dgo?.trim() || null : null,
-      origem: origemTipo === 'caixa' ? anterior?.identificacao ?? c.origem : origemTipo === 'dgo' ? `DGO ${c.origem_dgo}` : null,
+      origem_tipo: origemTipo === 'dgo' ? c.origem_tipo || 'dgo' : null,
+      origem: origemTipo === 'caixa' ? anterior?.identificacao ?? c.origem : origemTipo === 'dgo' ? origemNaoCadastrada({ origem_dgo: c.origem_dgo?.trim(), origem_tipo: c.origem_tipo }) : null,
       fibras: ponta ? c.fibras : c.fibras.map((f) => ({ ...f, potencia_dbm: null, reflexao_db: null, perda_db_km: null })),
     };
     await salvarCaixa(final, nova);
@@ -249,6 +250,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const textoChip = (ativo: boolean) => [s.chipTexto, ativo && { color: '#fff' }];
   // Padrão de cores de cada cabo (brasileiro, americano ou coroa); pode mudar de uma caixa para outra.
   const padroesSaidas = c.saidas.map((_, i) => c.padrao_cores_saidas?.[i] ?? null);
+  // Para onde vai cada saída (tipo + nome), mesmo sem o ponto seguinte cadastrado.
+  const destinos: (Destino | null)[] = c.saidas.map((_, i) => c.destinos?.[i] ?? null);
+  const mudarDestino = (i: number, d: Destino | null) => mudar({ destinos: destinos.map((x, k) => (k === i ? d : x)) });
   const padroes = (atual: string | null, escolher: (v: string) => void) => (
     <View style={s.chips}>
       {PADROES_CORES.map((p) => (
@@ -261,7 +265,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
 
   return (
     <View style={{ flex: 1, backgroundColor: cores.fundo }}>
-      <Cabecalho titulo={nova ? `Nova caixa · ${tagAuto}` : c.identificacao} subtitulo={rotuloPonto(c.tipo)} voltar={voltar} />
+      <Cabecalho titulo={nova ? `Nova caixa · ${tagAuto}` : c.identificacao} subtitulo={rotuloPonto(c.tipo, c.swap)} voltar={voltar} />
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 32 }} pointerEvents={podeEditar ? 'auto' : 'none'}>
         <View style={s.bloco}>
           <Text style={s.rotulo}>TIPO</Text>
@@ -272,6 +276,15 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
               </Pressable>
             ))}
           </View>
+          {c.tipo === 'emenda' ? (
+            <View style={[s.chips, { marginTop: 8 }]}>
+              {([[false, 'Emenda normal'], [true, 'Emenda swap']] as const).map(([v, r]) => (
+                <Pressable key={r} style={chip(!!c.swap === v)} onPress={() => mudar({ swap: v })}>
+                  <Text style={textoChip(!!c.swap === v)}>{r}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
           <Text style={s.rotulo}>{tagAuto ? 'TAG (AUTOMÁTICA)' : 'IDENTIFICAÇÃO *'}</Text>
           {tagAuto ? (
             <>
@@ -319,14 +332,24 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
         <View style={s.bloco}>
           <Text style={s.rotulo}>VEM DE</Text>
           <View style={s.chips}>
-            {([['caixa', 'Caixa ou DGO cadastrado'], ['dgo', 'DGO pelo nome'], ['nenhuma', 'Não informar']] as const).map(([v, r]) => (
+            {([['caixa', 'Cadastrado'], ['dgo', 'Não cadastrado'], ['nenhuma', 'Não informar']] as const).map(([v, r]) => (
               <Pressable key={v} style={chip(origemTipo === v)} onPress={() => setOrigemTipo(v)}>
                 <Text style={textoChip(origemTipo === v)}>{r}</Text>
               </Pressable>
             ))}
           </View>
           {origemTipo === 'dgo' ? (
-            <TextInput style={s.campo} value={c.origem_dgo ?? ''} onChangeText={(t) => mudar({ origem_dgo: t })} placeholder="Nome do DGO / POP" />
+            <>
+              <View style={[s.chips, { marginTop: 8 }]}>
+                {TIPOS_DESTINO.map((t) => (
+                  <Pressable key={t.valor} style={chip((c.origem_tipo || 'dgo') === t.valor)} onPress={() => mudar({ origem_tipo: t.valor })}>
+                    <Text style={textoChip((c.origem_tipo || 'dgo') === t.valor)}>{t.rotulo}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <TextInput style={s.campo} value={c.origem_dgo ?? ''} onChangeText={(t) => mudar({ origem_dgo: t })}
+                autoCapitalize="characters" placeholder={(c.origem_tipo || 'dgo') === 'dgo' ? 'Nome do DGO / POP' : 'Nome ou TAG, ex.: CE-BKB-0010'} />
+            </>
           ) : null}
           {origemTipo === 'caixa' && todasCaixas.some((x) => x.id !== c.id) ? (
             <Pressable style={s.botaoMapa} onPress={() => setMapa({ tipo: 'anterior' })}>
@@ -402,7 +425,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Text style={{ flex: 1, fontWeight: '600', color: cores.texto }}>{dgo ? 'Cabo' : 'Saída'} {i + 1}</Text>
                 <Pressable onPress={() => mudar({ saidas: c.saidas.filter((_, k) => k !== i), manobras: c.manobras.filter((m) => m.saida !== i + 1),
-                  padrao_cores_saidas: padroesSaidas.filter((_, k) => k !== i) })}>
+                  padrao_cores_saidas: padroesSaidas.filter((_, k) => k !== i), destinos: destinos.filter((_, k) => k !== i) })}>
                   <Text style={{ color: cores.perigo }}>remover</Text>
                 </Pressable>
               </View>
@@ -416,23 +439,41 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
               {padroes(padroesSaidas[i], (v) => mudar({ padrao_cores_saidas: padroesSaidas.map((x, k) => (k === i ? v : x)) }))}
               {(() => {
                 const seg = seguinteDa(i + 1);
+                const d = destinos[i];
                 return (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                    <Pressable style={[s.botaoMapa, { flex: 1, marginTop: 0 }]} onPress={() => setMapa({ tipo: 'seguinte', saida: i + 1 })}>
-                      <Icone nome="map-marker-right-outline" tamanho={18} cor={cores.primaria} />
-                      <Text style={s.botaoMapaTexto} numberOfLines={1}>{seg ? `Vai para ${seg.identificacao} · trocar` : 'Seguinte: escolher no mapa'}</Text>
-                    </Pressable>
-                    {seg ? (
-                      <Pressable hitSlop={8} onPress={() => setSeguintesNovas((x) => ({ ...x, [i + 1]: null }))}>
-                        <Icone nome="link-variant-off" tamanho={20} cor={cores.suave} />
-                      </Pressable>
+                  <View style={s.destino}>
+                    <Text style={s.destinoRotulo}>{dgo ? `CABO ${i + 1} VAI PARA` : `SAÍDA ${i + 1} VAI PARA`}</Text>
+                    <View style={s.chips}>
+                      {TIPOS_DESTINO.map((t) => (
+                        <Pressable key={t.valor} style={chip(d?.tipo === t.valor)}
+                          onPress={() => mudarDestino(i, d?.tipo === t.valor ? null : { tipo: t.valor, nome: d?.nome ?? null })}>
+                          <Text style={textoChip(d?.tipo === t.valor)}>{t.rotulo}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                    {d && !seg ? (
+                      <TextInput style={s.campo} value={d.nome ?? ''} onChangeText={(t) => mudarDestino(i, { ...d, nome: t })}
+                        autoCapitalize="characters" placeholder="Nome ou TAG (opcional), ex.: ENT-BKB-0002" />
                     ) : null}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                      <Pressable style={[s.botaoMapa, { flex: 1, marginTop: 0 }]} onPress={() => setMapa({ tipo: 'seguinte', saida: i + 1 })}>
+                        <Icone nome="map-marker-right-outline" tamanho={18} cor={cores.primaria} />
+                        <Text style={s.botaoMapaTexto} numberOfLines={1}>
+                          {seg ? `Ligada a ${seg.identificacao} · trocar` : 'Já cadastrado? Escolher no mapa'}
+                        </Text>
+                      </Pressable>
+                      {seg ? (
+                        <Pressable hitSlop={8} onPress={() => setSeguintesNovas((x) => ({ ...x, [i + 1]: null }))}>
+                          <Icone nome="link-variant-off" tamanho={20} cor={cores.suave} />
+                        </Pressable>
+                      ) : null}
+                    </View>
                   </View>
                 );
               })()}
             </View>
           ))}
-          <Pressable style={[s.botaoPequeno, { alignSelf: 'flex-start', marginTop: 6 }]} onPress={() => mudar({ saidas: [...c.saidas, 0], padrao_cores_saidas: [...padroesSaidas, null] })}>
+          <Pressable style={[s.botaoPequeno, { alignSelf: 'flex-start', marginTop: 6 }]} onPress={() => mudar({ saidas: [...c.saidas, 0], padrao_cores_saidas: [...padroesSaidas, null], destinos: [...destinos, null] })}>
             <Text style={s.botaoPequenoTexto}>+ Adicionar saída</Text>
           </Pressable>
 
@@ -666,7 +707,10 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
         aqui={c.latitude != null && c.longitude != null ? { lat: c.latitude, lng: c.longitude } : null}
         atual={mapa?.tipo === 'seguinte' ? seguinteDa(mapa.saida)?.id ?? null : c.origem_caixa_id}
         escolher={(x) => {
-          if (mapa?.tipo === 'seguinte') setSeguintesNovas((v) => ({ ...v, [mapa.saida]: x.id }));
+          if (mapa?.tipo === 'seguinte') {
+            setSeguintesNovas((v) => ({ ...v, [mapa.saida]: x.id }));
+            mudarDestino(mapa.saida - 1, { tipo: x.tipo === 'emenda' && x.swap ? 'swap' : x.tipo ?? 'emenda', nome: x.identificacao });
+          }
           else escolherOrigem(x, x.saidas.length === 1 ? 1 : c.origem_caixa_id === x.id ? c.origem_saida ?? 1 : 1);
         }}
         fechar={() => setMapa(null)} />
@@ -692,6 +736,8 @@ const s = StyleSheet.create({
   chipAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
   chipTexto: { color: cores.texto, fontSize: 14 },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: cores.borda },
+  destino: { marginTop: 8, padding: 10, borderRadius: 10, backgroundColor: cores.fundo },
+  destinoRotulo: { fontSize: 11.5, fontWeight: '700', color: cores.apagado, letterSpacing: 0.4 },
   botaoMapa: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10,
     borderWidth: 1, borderColor: cores.primaria, backgroundColor: cores.selecionado },
   botaoMapaTexto: { color: cores.primaria, fontWeight: '700', fontSize: 13.5, flexShrink: 1 },

@@ -7,7 +7,7 @@ import * as Sharing from 'expo-sharing';
 import { Caixa } from './caixas';
 import { itensPendentes } from './fila';
 import { referenciasLocais } from './referencia';
-import { calcularPlano, descreverFibra, descreverOlt, padroesPorExtenso, ehPonta, faixasDaBandeja, localDgo, rotuloInstalacao, rotuloPonto, posicoesDgo, separarBandejas, svgMapaFusao } from './fusao';
+import { calcularPlano, descreverFibra, descreverOlt, padroesPorExtenso, ehPonta, faixasDaBandeja, localDgo, rotuloInstalacao, rotuloPonto, posicoesDgo, separarBandejas, svgMapaFusao, descreverSaidas } from './fusao';
 import { descreverVeiculo, meuVeiculo } from './veiculo';
 import { supabase } from './supabase';
 import { OrdemServico, rotuloStatus } from './tipos';
@@ -149,7 +149,7 @@ export async function compartilharRelatorio(os: OrdemServico) {
       (ponta ? `<td>${f.reflexao_db ?? '—'}</td><td>${f.perda_db_km ?? '—'}</td>` : '') +
       `<td>${f.sem_potencia ? '<b style="color:#dc2626">SEM POTÊNCIA</b>' : 'OK'}</td></tr>`).join('');
     return `<div style="break-inside:avoid-page">
-      <h2>${esc(rotuloPonto(c.tipo))} ${esc(c.identificacao)}${rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ''}${c.parceiro ? ` · ${esc(c.parceiro)}` : ''}</h2>
+      <h2>${esc(rotuloPonto(c.tipo, c.swap))} ${esc(c.identificacao)}${rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ''}${c.parceiro ? ` · ${esc(c.parceiro)}` : ''}</h2>
       <div class="g">
         <div><div class="l">Vem de</div>${esc(c.origem ?? '—')}</div>
         <div><div class="l">Localização</div>${c.latitude != null ? `${c.latitude.toFixed(6)}, ${c.longitude!.toFixed(6)}` : '—'}</div>
@@ -157,7 +157,7 @@ export async function compartilharRelatorio(os: OrdemServico) {
         ${localDgo(c) ? `<div><div class="l">Local do DGO</div>${esc(localDgo(c))}</div>` : ''}
         ${c.parceiro ? `<div><div class="l">Parceiro</div>${esc(c.parceiro)}</div>` : ''}
         <div style="grid-column: span 2"><div class="l">Endereço</div>${esc(c.endereco ?? '—')}</div>
-        <div><div class="l">Plano de fusão</div>${c.capacidade_fibras} FO → ${c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO`).join(', ') || '—'}</div>
+        <div><div class="l">Plano de fusão</div>${c.capacidade_fibras} FO → ${esc(descreverSaidas(c)) || '—'}</div>
         <div><div class="l">Grupos</div>${c.grupos_fusionados} fusionados · ${c.grupos_vagos} vagos · ${plano.param} fibras param aqui</div>
       </div>
       ${c.observacao ? `<p><span class="l">Observação:</span> ${esc(c.observacao)}</p>` : ''}

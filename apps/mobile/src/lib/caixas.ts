@@ -40,7 +40,7 @@ async function ler<T>(chave: string, padrao: T): Promise<T> {
 }
 
 const CAMPOS = 'id, os_id, tipo, identificacao, capacidade_fibras, saidas, grupos_fusionados, grupos_vagos, observacao, endereco, ' +
-  'latitude, longitude, precisao_m, localizada_em, origem_caixa_id, origem_saida, origem_dgo, origem_identificacao, manobras, fibras, fusoes_por_bandeja, parceiro, instalacao, bastidor, padrao_cores_entrada, padrao_cores_saidas, fila, rack';
+  'latitude, longitude, precisao_m, localizada_em, origem_caixa_id, origem_saida, origem_dgo, origem_identificacao, manobras, fibras, fusoes_por_bandeja, parceiro, instalacao, bastidor, padrao_cores_entrada, padrao_cores_saidas, fila, rack, swap, destinos, origem_tipo';
 
 // Caixas da O.S.: na hora vem do celular; com internet atualiza do servidor (sem perder o que ainda está na fila).
 export async function caixasDaOs(osId: string, aoAtualizar: (c: Caixa[]) => void) {
@@ -110,6 +110,9 @@ export async function salvarCaixa(caixa: Caixa, nova: boolean) {
     bastidor: caixa.tipo === 'dgo' ? caixa.bastidor?.trim() || null : null,
     fila: caixa.tipo === 'dgo' ? caixa.fila?.trim() || null : null,
     rack: caixa.tipo === 'dgo' ? caixa.rack?.trim() || null : null,
+    swap: caixa.tipo === 'emenda' && !!caixa.swap,
+    destinos: caixa.saidas.some((_, i) => caixa.destinos?.[i])
+      ? caixa.saidas.map((_, i) => (caixa.destinos?.[i] ? { tipo: caixa.destinos[i]!.tipo, nome: caixa.destinos[i]!.nome?.trim() || null } : null)) : null,
     instalacao: instalacoesDoTipo(caixa.tipo).some((x) => x.valor === caixa.instalacao) ? caixa.instalacao ?? null : null,
     observacao: caixa.observacao,
     endereco: caixa.endereco,
@@ -119,6 +122,7 @@ export async function salvarCaixa(caixa: Caixa, nova: boolean) {
     origem_caixa_id: caixa.origem_caixa_id,
     origem_saida: caixa.origem_saida,
     origem_dgo: caixa.origem_dgo,
+    origem_tipo: caixa.origem_dgo ? caixa.origem_tipo || 'dgo' : null,
   };
   if (nova) {
     await enfileirar({ tipo: 'inserir', tabela: 'caixas_emenda', linha: { id: caixa.id, os_id: caixa.os_id, ...campos } });

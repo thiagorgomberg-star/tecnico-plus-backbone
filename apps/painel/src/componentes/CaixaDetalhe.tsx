@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { CaixaRede, calcularPlano, descreverOlt, localDgo, padroesPorExtenso, ehPonta, descreverFibra, faixasDaBandeja, rotuloInstalacao, rotuloPonto, separarBandejas, svgMapaFusao } from "@/lib/fusao";
+import { CaixaRede, calcularPlano, descreverOlt, localDgo, padroesPorExtenso, ehPonta, descreverFibra, faixasDaBandeja, rotuloInstalacao, rotuloPonto, separarBandejas, svgMapaFusao, descreverSaidas, origemNaoCadastrada } from "@/lib/fusao";
 import { supabase } from "@/lib/supabase";
 
 export type CaixaPainel = CaixaRede & {
@@ -29,7 +29,7 @@ export type CaixaPainel = CaixaRede & {
 type Foto = { id: string; tipo: string; fibra: number | null; bandeja: number | null; url?: string };
 
 export { ehPonta };
-export const origemDe = (c: CaixaPainel) => c.origem_identificacao ?? (c.origem_dgo ? `DGO ${c.origem_dgo}` : null);
+export const origemDe = (c: CaixaPainel) => c.origem_identificacao ?? (origemNaoCadastrada(c) || null);
 
 // Dados completos de uma caixa: plano, manobras, fibras (cliente / OTDR nas pontas), mapa de fusão e fotos.
 export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
@@ -51,7 +51,7 @@ export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
   return (
     <div className="text-sm">
       <dl className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-        <div><dt className="text-gray-500">Tipo</dt><dd>{rotuloPonto(c.tipo)}{rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ""}{c.parceiro ? ` · ${c.parceiro}` : ""}</dd></div>
+        <div><dt className="text-gray-500">Tipo</dt><dd>{rotuloPonto(c.tipo, c.swap)}{rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ""}{c.parceiro ? ` · ${c.parceiro}` : ""}</dd></div>
         <div><dt className="text-gray-500">Vem de</dt><dd>{origemDe(c) ?? "—"}{c.origem_saida ? ` (saída ${c.origem_saida})` : ""}</dd></div>
         <div>
           <dt className="text-gray-500">Localização</dt>
@@ -67,7 +67,7 @@ export default function CaixaDetalhe({ caixa: c }: { caixa: CaixaPainel }) {
         <div className="sm:col-span-2"><dt className="text-gray-500">Endereço</dt><dd>{c.endereco ?? "—"}</dd></div>
         <div>
           <dt className="text-gray-500">Plano de fusão</dt>
-          <dd>{c.capacidade_fibras} FO → {c.saidas.length ? c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO`).join(", ") : "sem saída"}</dd>
+          <dd>{c.capacidade_fibras} FO → {descreverSaidas(c) || "sem saída"}</dd>
         </div>
         <div><dt className="text-gray-500">Grupos</dt><dd>{c.grupos_fusionados} fusionados · {c.grupos_vagos} vagos · {plano.param} fibras param aqui</dd></div>
         {c.observacao && <div className="sm:col-span-2"><dt className="text-gray-500">Observação</dt><dd>{c.observacao}</dd></div>}

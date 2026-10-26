@@ -27,7 +27,7 @@ export default function CaixasOS({ osId, podeEditar, versao, abrir }: {
           <Pressable key={c.id} style={s.bloco} onPress={() => abrir(c, caixas)}>
             <Text style={s.titulo}>{c.identificacao}</Text>
             <Text style={s.suave}>
-              {rotuloPonto(c.tipo)}{c.origem ? ` · vem de ${c.origem}` : ''}
+              {rotuloPonto(c.tipo, c.swap)}{c.origem ? ` · vem de ${c.origem}` : ''}
             </Text>
             <Text style={s.suave}>
               {c.capacidade_fibras} FO → {c.saidas.length ? c.saidas.map((q, i) => `S${i + 1} ${q} FO`).join(', ') : 'sem saída'} ·{' '}

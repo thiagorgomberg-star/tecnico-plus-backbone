@@ -5,7 +5,7 @@ import { Alert } from 'react-native';
 
 import { Caixa } from './caixas';
 import { itensPendentes } from './fila';
-import { descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, localDgo, midiasKmz, posicoesDgo, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from './fusao';
+import { descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, localDgo, midiasKmz, posicoesDgo, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ, descreverSaidas } from './fusao';
 import { supabase } from './supabase';
 import { OrdemServico } from './tipos';
 
@@ -20,11 +20,11 @@ export function kmlDasCaixas(os: Pick<OrdemServico, 'numero' | 'titulo' | 'tipo'
     .sort((a, b) => (a.localizada_em ?? '').localeCompare(b.localizada_em ?? ''));
   const pins = comLocal.map((c) => {
     const linhas = [
-      `${rotuloPonto(c.tipo)}${rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ''} · O.S. ${os.numero}`,
+      `${rotuloPonto(c.tipo, c.swap)}${rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ''} · O.S. ${os.numero}`,
       c.parceiro ? `Parceiro: ${c.parceiro}` : null,
       localDgo(c) || null,
       c.origem ? `Vem de: ${c.origem}${c.origem_saida ? ` (saída ${c.origem_saida})` : ''}` : null,
-      `Entrada ${c.capacidade_fibras} FO → ${c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO`).join(', ') || 'sem saída'}`,
+      `Entrada ${c.capacidade_fibras} FO → ${descreverSaidas(c) || 'sem saída'}`,
       ...(c.tipo === 'dgo' ? [] : separarBandejas(c)).map((b) => `Bandeja ${b.numero}: ${b.ligacoes.length} fusões (${faixasDaBandeja(b)})`),
       ...c.manobras.map((m) => `Manobra: ${descreverFibra(m.fibra_entrada, c.capacidade_fibras, c.padrao_cores_entrada ?? undefined)} → Saída ${m.saida} FO ${m.fibra_saida}${m.motivo ? ` (${m.motivo})` : ''}`),
       c.endereco ? `Endereço: ${c.endereco}` : null,

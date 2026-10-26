@@ -8,7 +8,26 @@ export const TIPOS_PONTO = [
   { valor: 'site', rotulo: 'Site de parceiro' },
 ] as const;
 export type TipoPonto = (typeof TIPOS_PONTO)[number]['valor'];
-export const rotuloPonto = (t: string) => TIPOS_PONTO.find((x) => x.valor === t)?.rotulo ?? 'Caixa';
+// Caixa de emenda pode ser do tipo swap (troca de cabo): continua 'emenda', com a marca `swap`.
+export const rotuloPonto = (t: string, swap?: boolean | null) =>
+  (TIPOS_PONTO.find((x) => x.valor === t)?.rotulo ?? 'Caixa') + (swap && t === 'emenda' ? ' swap' : '');
+// Para onde vai cada saída, mesmo quando o ponto seguinte ainda não está cadastrado.
+export const TIPOS_DESTINO = [
+  { valor: 'emenda', rotulo: 'Caixa de emenda' },
+  { valor: 'swap', rotulo: 'Emenda swap' },
+  { valor: 'entroncamento', rotulo: 'Entroncamento' },
+  { valor: 'dgo', rotulo: 'DGO' },
+  { valor: 'site', rotulo: 'Site de parceiro' },
+] as const;
+export type Destino = { tipo: string; nome: string | null };
+export const rotuloDestino = (d: Destino | null | undefined) =>
+  d ? [TIPOS_DESTINO.find((x) => x.valor === d.tipo)?.rotulo ?? d.tipo, d.nome].filter(Boolean).join(' ') : '';
+// Origem que não está cadastrada no sistema: tipo + nome (registros antigos sem tipo eram DGO).
+export const origemNaoCadastrada = (c: { origem_dgo?: string | null; origem_tipo?: string | null }) =>
+  c.origem_dgo ? rotuloDestino({ tipo: c.origem_tipo || 'dgo', nome: c.origem_dgo }) : '';
+// "Saída 1: 12 FO → Entroncamento ENT-BKB-0001, Saída 2: 12 FO"
+export const descreverSaidas = (c: { saidas: number[]; destinos?: (Destino | null)[] | null }) =>
+  c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO${c.destinos?.[i] ? ` → ${rotuloDestino(c.destinos[i])}` : ''}`).join(', ');
 // Pontas da rede (DGO, entroncamento e site de parceiro): ali se mede sinal e OTDR por fibra.
 export const ehPonta = (t: string) => t === 'dgo' || t === 'entroncamento' || t === 'site';
 // Instalação: caixa aérea/subterrânea; DGO em container, rooftop ou em site de outro parceiro (nome em `parceiro`).
@@ -116,6 +135,7 @@ export type PlanoCaixa = {
   identificacao: string; capacidade_fibras: number; saidas: number[]; manobras: Manobra[];
   fibras?: SituacaoFibra[]; origem?: string | null; fusoes_por_bandeja?: number | null;
   tipo?: string; bastidor?: string | null; fila?: string | null; rack?: string | null;
+  swap?: boolean | null; destinos?: (Destino | null)[] | null;
   padrao_cores_entrada?: string | null; padrao_cores_saidas?: (string | null)[] | null;
   // Posição no DGO de cada fibra de entrada, achada seguindo o cabo de volta até o DGO (ver posicoesDgo).
   posicoes_dgo?: Record<number, string>;
@@ -410,6 +430,7 @@ export type CaixaRede = PlanoCaixa & {
   origem_caixa_id: string | null;
   origem_saida: number | null;
   origem_dgo: string | null;
+  origem_tipo?: string | null;
 };
 
 export type PassoRastreio = {
@@ -452,7 +473,7 @@ export function rastrearFibra(caixas: CaixaRede[], caixaId: string, fibraEntrada
     atual = anterior;
     fibraAtual = l.entrada;
   }
-  const pontaA = atual.origem_dgo ? `DGO ${atual.origem_dgo}` : null;
+  const pontaA = origemNaoCadastrada(atual) || null;
 
   // Para frente até a ponta B.
   const depois: PassoRastreio[] = [passo(inicio, fibraEntrada)];

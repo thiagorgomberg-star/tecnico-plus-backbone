@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import CaixaDetalhe, { CaixaPainel, ehPonta, origemDe } from "@/componentes/CaixaDetalhe";
-import { clienteDoCaminho, descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, localDgo, midiasKmz, posicoesDgo, rastrearFibra, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ } from "@/lib/fusao";
+import { clienteDoCaminho, descreverFibra, faixasDaBandeja, FotoKmz, htmlPreviaPlano, localDgo, midiasKmz, posicoesDgo, rastrearFibra, rotuloInstalacao, rotuloPonto, separarBandejas, VALIDADE_LINK_FOTO_KMZ, descreverSaidas } from "@/lib/fusao";
 import { excluirComConfirmacao } from "@/lib/excluir";
 import { supabase } from "@/lib/supabase";
 
@@ -36,11 +36,11 @@ export async function baixarKmz(caixas: CaixaPainel[], arquivo = `caixas-emenda-
   const estilos = { emenda: "ff00a5ff", entroncamento: "ff0000ff", dgo: "ffff0000", site: "ff00b000" } as Record<string, string>;
   const pins = caixas.filter((c) => c.latitude != null).map((c) => {
     const linhas = [
-      `${rotuloPonto(c.tipo)}${rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ""} · O.S. ${c.os_numero}${c.trecho ? ` · ${c.trecho}` : ""}`,
+      `${rotuloPonto(c.tipo, c.swap)}${rotuloInstalacao(c.instalacao) ? ` · ${rotuloInstalacao(c.instalacao)}` : ""} · O.S. ${c.os_numero}${c.trecho ? ` · ${c.trecho}` : ""}`,
       c.parceiro ? `Parceiro: ${c.parceiro}` : null,
       localDgo(c) || null,
       origemDe(c) ? `Vem de: ${origemDe(c)}${c.origem_saida ? ` (saída ${c.origem_saida})` : ""}` : null,
-      `Entrada ${c.capacidade_fibras} FO → ${c.saidas.map((q, i) => `Saída ${i + 1}: ${q} FO`).join(", ") || "sem saída"}`,
+      `Entrada ${c.capacidade_fibras} FO → ${descreverSaidas(c) || "sem saída"}`,
       `Grupos: ${c.grupos_fusionados} fusionados, ${c.grupos_vagos} vagos`,
       ...(c.tipo === "dgo" ? [] : separarBandejas(c)).map((b) => `Bandeja ${b.numero}: ${b.ligacoes.length} fusões (${faixasDaBandeja(b)})`),
       ...c.manobras.map((m) => `Manobra: ${descreverFibra(m.fibra_entrada, c.capacidade_fibras, c.padrao_cores_entrada ?? undefined)} → Saída ${m.saida} FO ${m.fibra_saida}${m.motivo ? ` (${m.motivo})` : ""}`),
@@ -141,7 +141,7 @@ export default function CaixasRede() {
                 const medida = ehPonta(c.tipo) ? c.fibras?.find((f) => f.fibra === p.fibraEntrada) : null;
                 return (
                   <li key={i} className="mb-2">
-                    <b>{c.identificacao}</b> <span className="text-gray-500">({rotuloPonto(c.tipo)})</span> · {c.tipo === "dgo"
+                    <b>{c.identificacao}</b> <span className="text-gray-500">({rotuloPonto(c.tipo, c.swap)})</span> · {c.tipo === "dgo"
                       ? <>posição <b>{c.fibras?.find((f) => f.fibra === p.fibraEntrada)?.posicao_dgo ?? `FO ${p.fibraEntrada}`}</b>{localDgo(c) ? ` (${localDgo(c)})` : ""}</>
                       : <>entra na {descreverFibra(p.fibraEntrada, c.capacidade_fibras, c.padrao_cores_entrada ?? undefined)}</>}
                     {p.saida ? <> → sai {c.tipo === "dgo" ? "no cabo" : "na Saída"} {p.saida}, {descreverFibra(p.fibraSaida!, c.saidas[p.saida - 1] ?? c.capacidade_fibras, c.padrao_cores_saidas?.[p.saida - 1] ?? undefined)}</> : <span className="text-gray-500"> · a fibra termina aqui</span>}
@@ -176,7 +176,7 @@ export default function CaixasRede() {
             <li key={c.id} className="border-b border-gray-100 last:border-0">
               <button className="flex w-full flex-wrap items-center gap-2 p-4 text-left text-sm hover:bg-gray-50" onClick={() => setAberta(aberta === c.id ? null : c.id)}>
                 <b>{c.identificacao}</b>
-                <span className="text-gray-500">{rotuloPonto(c.tipo)}{c.trecho ? ` · ${c.trecho}` : ""}{origemDe(c) ? ` · vem de ${origemDe(c)}` : ""}</span>
+                <span className="text-gray-500">{rotuloPonto(c.tipo, c.swap)}{c.trecho ? ` · ${c.trecho}` : ""}{origemDe(c) ? ` · vem de ${origemDe(c)}` : ""}</span>
                 <span className="ml-auto text-gray-500">
                   {c.capacidade_fibras} FO · {c.manobras.length} manobra(s)
                   {(c.fibras ?? []).some((f) => f.sem_potencia) ? <b className="ml-1 text-red-700">· sem potência</b> : null}
