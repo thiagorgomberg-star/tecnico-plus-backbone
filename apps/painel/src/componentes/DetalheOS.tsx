@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import CaixaDetalhe, { CaixaPainel } from "@/componentes/CaixaDetalhe";
 import { baixarKmz } from "@/componentes/CaixasRede";
 import EditarOS from "@/componentes/EditarOS";
+import MapaOS from "@/componentes/MapaOS";
 import MaterialApoio from "@/componentes/MaterialApoio";
 import ProgramarOS from "@/componentes/ProgramarOS";
 import ExecucaoOS from "@/componentes/ExecucaoOS";
@@ -34,6 +35,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
   const [anexos, setAnexos] = useState<Anexo[]>([]);
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [local, setLocal] = useState<Local | null>(null);
+  const [ponto, setPonto] = useState<{ latitude: number; longitude: number; do_evento: boolean } | null | undefined>(undefined);
   const [foto, setFoto] = useState<Anexo | null>(null);
   const [caixas, setCaixas] = useState<CaixaPainel[]>([]);
   const [reabrir, setReabrir] = useState(false);
@@ -49,6 +51,8 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
       .then(({ data }) => setEventos((data as unknown as Evento[]) ?? []));
     supabase.from("eventos_mapa").select("latitude, longitude, evento_localizado_em, evento_precisao_m").eq("id", inicial.id).maybeSingle()
       .then(({ data }) => setLocal(data));
+    supabase.from("os_local_mapa").select("latitude, longitude, do_evento").eq("id", inicial.id).maybeSingle()
+      .then(({ data }) => setPonto(data ?? null));
     supabase.from("caixas_mapa").select("*").eq("os_id", inicial.id).order("localizada_em")
       .then(({ data }) => setCaixas((data as unknown as CaixaPainel[]) ?? []));
     supabase.from("os_anexos").select("id, tipo, caminho_arquivo, nome_arquivo, descricao, tirada_em, criado_em, oculta_relatorio")
@@ -233,6 +237,10 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
               </dd>
             </div>
           )}
+          <div className="sm:col-span-2">
+            <dt className="text-gray-500">Mapa</dt>
+            <dd>{ponto !== undefined && <MapaOS latitude={ponto?.latitude} longitude={ponto?.longitude} doEvento={ponto?.do_evento} endereco={os.endereco} />}</dd>
+          </div>
         </dl>
 
         <ExecucaoOS osId={os.id} responsavelId={os.tecnico_id} bloqueado={encerrada} />
