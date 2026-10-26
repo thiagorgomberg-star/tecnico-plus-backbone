@@ -7,6 +7,7 @@ import { idadeOs, textoSla } from '../lib/formato';
 import { navegarAte } from '../lib/navegacao';
 import FotosReferencia from './FotosReferencia';
 import Icone, { iconeDoTipo } from './Icone';
+import MargemInferior from './MargemInferior';
 
 const PRIORIDADE = { emergencia: 'Emergência', alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 const quando = (v: string | null | undefined) =>
@@ -128,6 +129,7 @@ export default function DetalheBacklog({ b, fechar, assumir, ocupado }: Props) {
           </Pressable>
         </View>
       </View>
+      <MargemInferior />
     </Modal>
   );
 }

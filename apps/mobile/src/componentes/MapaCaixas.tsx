@@ -8,6 +8,7 @@ import { FotoCaixa, fotosDaCaixa, rotuloFotoCaixa } from '../lib/fotosCaixa';
 import { distanciaKm } from '../lib/navegacao';
 import Icone, { NomeIcone } from './Icone';
 import MapaVetorial from './MapaVetorial';
+import MargemInferior from './MargemInferior';
 
 type ComLocal = CaixaRede & {
   latitude?: number | null; longitude?: number | null; endereco?: string | null;
@@ -232,6 +233,7 @@ export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher
           {foto ? <Text style={s.fotoLegenda}>{sel?.identificacao} · {rotuloFotoCaixa(foto)}{foto.tiradaEm ? ` · ${new Date(foto.tiradaEm).toLocaleDateString('pt-BR')}` : ''}</Text> : null}
         </Pressable>
       </Modal>
+      <MargemInferior />
     </Modal>
   );
 }

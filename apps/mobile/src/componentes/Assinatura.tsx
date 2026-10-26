@@ -5,6 +5,7 @@ import { captureRef } from 'react-native-view-shot';
 
 import { cores } from '../lib/estilo';
 import { salvarMinhaAssinatura } from '../lib/assinatura';
+import MargemInferior from './MargemInferior';
 
 // Cadastro da assinatura do técnico: desenhada uma vez no dedo e reaproveitada em todas as O.S. (botão "Assinar O.S.").
 export default function Assinatura({ aberta, fechar, aoSalvar }: { aberta: boolean; fechar: () => void; aoSalvar: () => void }) {
@@ -64,6 +65,7 @@ export default function Assinatura({ aberta, fechar, aoSalvar }: { aberta: boole
           <Pressable style={[s.botao, { backgroundColor: cores.sucesso }]} onPress={salvar}><Text style={s.botaoTexto}>Salvar</Text></Pressable>
         </View>
       </View>
+      <MargemInferior />
     </Modal>
   );
 }

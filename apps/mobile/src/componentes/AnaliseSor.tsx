@@ -10,6 +10,7 @@ import { analisarSor, km, lerSor, Nivel, Sor, tracoJanela } from '../lib/sor';
 import { compartilharAnaliseCurva } from '../lib/relatorioCurva';
 import { supabase } from '../lib/supabase';
 import Icone from './Icone';
+import MargemInferior from './MargemInferior';
 
 const COR: Record<Nivel, string> = { ok: '#1E9E4A', atencao: '#D99A00', critico: '#D0453B' };
 const ROTULO: Record<Nivel, string> = { ok: 'OK', atencao: 'ATENÇÃO', critico: 'CRÍTICO' };
@@ -148,6 +149,7 @@ export default function AnaliseSor({ curva, extensaoKm, trecho, fechar }: {
           </ScrollView>
         )}
       </View>
+      <MargemInferior />
     </Modal>
   );
 }

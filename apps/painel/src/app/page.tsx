@@ -23,6 +23,7 @@ import Frota from "@/componentes/Frota";
 import Icone, { NomeIcone } from "@/componentes/Icone";
 import Login from "@/componentes/Login";
 import OrdensServico from "@/componentes/OrdensServico";
+import Clientes from "@/componentes/Clientes";
 import RotasEventos from "@/componentes/RotasEventos";
 import TecnicosAoVivo from "@/componentes/TecnicosAoVivo";
 import VistoriaMG from "@/componentes/VistoriaMG";
@@ -31,7 +32,7 @@ import { Tecnico } from "@/lib/tipos";
 
 type Perfil = { nome: string; papel: string };
 
-type AbaPainel = "curva" | "rompimento" | "os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas" | "indicadores" | "despesas" | "horas" | "analise" | "console" | "ferramental" | "config" | "frota" | "vistoria" | "vistoria_sp";
+type AbaPainel = "clientes" | "curva" | "rompimento" | "os" | "campo" | "escala" | "rotas" | "equipe" | "catalogo" | "almoxarifado" | "caixas" | "indicadores" | "despesas" | "horas" | "analise" | "console" | "ferramental" | "config" | "frota" | "vistoria" | "vistoria_sp";
 
 // Abas na ordem do menu (padrão Oracle Field Service: console de despacho primeiro).
 // Cor do painel escolhida pelo supervisor (fica salva no navegador).
@@ -59,6 +60,7 @@ const GRUPOS: [string, [AbaPainel, string, NomeIcone][]][] = [
     ["campo", "Equipe em campo", "map-marker-radius-outline"],
     ["escala", "Escala", "calendar-month-outline"],
     ["equipe", "Equipe", "account-group-outline"],
+    ["clientes", "Clientes e SLA", "domain"],
   ]],
   ["Rede", [
     ["caixas", "Caixas e fibras", "package-variant"],
@@ -198,7 +200,7 @@ export default function Painel() {
           </div>
         </header>
       <main className={`mx-auto w-full min-w-0 flex-1 px-4 pb-6 pt-3 sm:px-6 ${["console", "analise", "campo"].includes(aba) ? "max-w-none" : "max-w-6xl"}`}>
-        {aba === "console" ? <ConsoleDespacho tecnicos={tecnicos} /> : aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "rompimento" ? <LocalizarRompimento /> : aba === "curva" ? <AnalisarCurva /> : aba === "vistoria" ? <VistoriaMG key="MG" regiao="MG" /> : aba === "vistoria_sp" ? <VistoriaMG key="SP" regiao="SP" /> : aba === "indicadores" ? <Indicadores /> : aba === "despesas" ? <Despesas tecnicos={tecnicos} /> : aba === "horas" ? <Horas /> : aba === "analise" ? <Analise /> : aba === "ferramental" ? <Ferramental tecnicos={tecnicos} /> : aba === "frota" ? <Frota tecnicos={tecnicos} /> : aba === "config" ? (
+        {aba === "console" ? <ConsoleDespacho tecnicos={tecnicos} /> : aba === "os" ? <OrdensServico tecnicos={tecnicos} /> : aba === "campo" ? <TecnicosAoVivo /> : aba === "escala" ? <Escala tecnicos={tecnicos} /> : aba === "equipe" ? <Equipe aoMudar={equipeMudou} /> : aba === "clientes" ? <Clientes /> : aba === "catalogo" ? <><Catalogo /><AtividadesPreventiva /></> : aba === "almoxarifado" ? <Almoxarifado tecnicos={tecnicos} /> : aba === "caixas" ? <CaixasRede /> : aba === "rompimento" ? <LocalizarRompimento /> : aba === "curva" ? <AnalisarCurva /> : aba === "vistoria" ? <VistoriaMG key="MG" regiao="MG" /> : aba === "vistoria_sp" ? <VistoriaMG key="SP" regiao="SP" /> : aba === "indicadores" ? <Indicadores /> : aba === "despesas" ? <Despesas tecnicos={tecnicos} /> : aba === "horas" ? <Horas /> : aba === "analise" ? <Analise /> : aba === "ferramental" ? <Ferramental tecnicos={tecnicos} /> : aba === "frota" ? <Frota tecnicos={tecnicos} /> : aba === "config" ? (
           <div className="grid gap-6"><ConfigEmpresa /><section className="max-w-md rounded-xl border border-gray-200 bg-white p-5">
             <h2 className="mb-1 text-lg font-semibold">Configurações</h2>
             <p className="mb-4 text-sm text-gray-500">Cor do painel (fica salva neste navegador).</p>

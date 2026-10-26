@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleShe
 import { cores } from '../lib/estilo';
 import { excluirFotoCaixa, FotoCaixa, fotosDaCaixa, rotuloFotoCaixa } from '../lib/fotosCaixa';
 import Icone from './Icone';
+import MargemInferior from './MargemInferior';
 
 export type FiltroFotos = { tipo: string; bandeja?: number; fibra?: number; titulo: string };
 
@@ -84,6 +85,7 @@ export default function GaleriaFotosCaixa({ caixaId, filtro, fechar, tirar }: {
           ) : null}
         </Pressable>
       </Modal>
+      <MargemInferior />
     </Modal>
   );
 }

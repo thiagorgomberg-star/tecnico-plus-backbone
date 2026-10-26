@@ -5,11 +5,13 @@ import { useCallback, useEffect, useState } from "react";
 import CaixaDetalhe, { CaixaPainel } from "@/componentes/CaixaDetalhe";
 import { baixarKmz } from "@/componentes/CaixasRede";
 import EditarOS from "@/componentes/EditarOS";
+import EditorClientesOS from "@/componentes/EditorClientesOS";
 import MapaOS from "@/componentes/MapaOS";
 import MaterialApoio from "@/componentes/MaterialApoio";
 import ProgramarOS from "@/componentes/ProgramarOS";
 import ExecucaoOS from "@/componentes/ExecucaoOS";
 import ReabrirOS from "@/componentes/ReabrirOS";
+import { Cliente, ClienteOS, clientesDaOS, fmtSla, listarClientes, salvarClientesOS } from "@/lib/clientes";
 import { supabase } from "@/lib/supabase";
 import { corStatus, ENCERRADAS, OrdemServico, rotuloDaOs, rotuloStatus, StatusOS } from "@/lib/tipos";
 
@@ -41,6 +43,9 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
   const [reabrir, setReabrir] = useState(false);
   const [editar, setEditar] = useState(false);
   const [versao, setVersao] = useState(0);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [linhasClientes, setLinhasClientes] = useState<ClienteOS[]>([]);
+  const [editandoClientes, setEditandoClientes] = useState<ClienteOS[] | null>(null);
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
 
   useEffect(() => {
@@ -49,6 +54,8 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
     supabase.from("os_eventos").select("id, status_anterior, status_novo, criado_em, observacao, usuario:usuarios(nome)")
       .eq("os_id", inicial.id).order("criado_em")
       .then(({ data }) => setEventos((data as unknown as Evento[]) ?? []));
+    listarClientes().then(setClientes);
+    clientesDaOS(inicial.id).then(setLinhasClientes);
     supabase.from("eventos_mapa").select("latitude, longitude, evento_localizado_em, evento_precisao_m").eq("id", inicial.id).maybeSingle()
       .then(({ data }) => setLocal(data));
     supabase.from("os_local_mapa").select("latitude, longitude, do_evento").eq("id", inicial.id).maybeSingle()
@@ -80,6 +87,18 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
   }, [inicial.id, recarregar]);
 
   const encerrada = ENCERRADAS.includes(os.status);
+
+  async function gravarClientes() {
+    if (!editandoClientes) return;
+    try {
+      await salvarClientesOS(os.id, editandoClientes);
+      setEditandoClientes(null);
+      recarregar();
+    } catch (e) {
+      alert(`Não foi possível gravar os clientes: ${(e as Error).message}`);
+    }
+  }
+  const nomeCliente = (id: string) => clientes.find((c) => c.id === id);
 
   // Supervisor tira a O.S. do técnico (e do apoio) e devolve ao backlog geral, com motivo.
   async function voltarBacklog() {
@@ -217,10 +236,45 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
         )}
 
         <dl className="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <dt className="flex items-center gap-3 text-gray-500">
+              Clientes do evento
+              {!encerrada && !editandoClientes && (
+                <button className="text-xs text-blue-700 hover:underline" onClick={() => setEditandoClientes(linhasClientes.length ? linhasClientes : [{ cliente_id: "", ticket: "", texto_acionamento: "" }])}>
+                  {linhasClientes.length ? "Editar clientes" : "+ Adicionar cliente"}
+                </button>
+              )}
+            </dt>
+            <dd>
+              {editandoClientes ? (
+                <div className="mt-1">
+                  <EditorClientesOS clientes={clientes} linhas={editandoClientes} mudar={setEditandoClientes} />
+                  <div className="mt-2 flex gap-2">
+                    <button className="rounded-lg bg-[#163A6B] px-3 py-1.5 text-white hover:opacity-90" onClick={gravarClientes}>Salvar clientes</button>
+                    <button className="rounded-lg border border-gray-300 px-3 py-1.5 hover:bg-gray-50" onClick={() => setEditandoClientes(null)}>Cancelar</button>
+                  </div>
+                </div>
+              ) : linhasClientes.length === 0 ? "—" : (
+                <ul className="mt-1 grid gap-2">
+                  {linhasClientes.map((l) => {
+                    const c = nomeCliente(l.cliente_id);
+                    return (
+                      <li key={l.id} className="rounded-lg border border-gray-200 p-2">
+                        <b>{c?.nome ?? "Cliente"}</b>
+                        {c ? <span className="text-gray-500"> · SLA {fmtSla(c.sla_horas)}</span> : null}
+                        {l.ticket ? <span> · Ticket <b>{l.ticket}</b></span> : null}
+                        {l.texto_acionamento ? <p className="mt-1 whitespace-pre-wrap text-gray-700">{l.texto_acionamento}</p> : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </dd>
+          </div>
           <div><dt className="text-gray-500">Técnico</dt><dd>{os.tecnico?.nome ?? "—"}</dd></div>
           <div><dt className="text-gray-500">Cadastro</dt><dd>{quando(os.criado_em)}</dd></div>
           <div><dt className="text-gray-500">Endereço / referência</dt><dd>{os.endereco ?? "—"}</dd></div>
-          <div><dt className="text-gray-500">SLA (4h)</dt><dd>{quando(os.sla_limite)}</dd></div>
+          <div><dt className="text-gray-500">SLA{linhasClientes.length ? " (menor entre os clientes)" : " (4h)"}</dt><dd>{quando(os.sla_limite)}</dd></div>
           {os.descricao && <div className="sm:col-span-2"><dt className="text-gray-500">Descrição</dt><dd className="whitespace-pre-wrap">{os.descricao}</dd></div>}
           {os.observacao_tecnico && <div className="sm:col-span-2"><dt className="text-gray-500">Observação do técnico</dt><dd className="whitespace-pre-wrap">{os.observacao_tecnico}</dd></div>}
           {os.observacao_supervisor && <div className="sm:col-span-2"><dt className="text-gray-500">Observação do supervisor</dt><dd className="whitespace-pre-wrap">{os.observacao_supervisor}</dd></div>}

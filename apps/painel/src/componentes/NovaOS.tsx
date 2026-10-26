@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+import EditorClientesOS from "@/componentes/EditorClientesOS";
 
 import { enviarMaterialApoio } from "@/componentes/MaterialApoio";
+import { Cliente, ClienteOS, listarClientes, salvarClientesOS } from "@/lib/clientes";
 import { supabase } from "@/lib/supabase";
 import { Prioridade, Tecnico, TIPOS_OS } from "@/lib/tipos";
 
@@ -19,6 +22,9 @@ export default function NovaOS({ tecnicos, fechar, criada }: Props) {
   const [arquivos, setArquivos] = useState<File[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [linhasClientes, setLinhasClientes] = useState<ClienteOS[]>([]);
+  useEffect(() => { listarClientes().then(setClientes); }, []);
 
   async function salvar(enviar: boolean) {
     setErro("");
@@ -41,6 +47,13 @@ export default function NovaOS({ tecnicos, fechar, criada }: Props) {
       setSalvando(false);
       return setErro(error.message);
     }
+    if (linhasClientes.some((l) => l.cliente_id)) {
+      try {
+        await salvarClientesOS(id, linhasClientes);
+      } catch (e) {
+        alert(`A O.S. foi criada, mas os clientes não foram gravados: ${(e as Error).message}`);
+      }
+    }
     try {
       await enviarMaterialApoio(id, arquivos);
     } catch (e) {
@@ -61,6 +74,10 @@ export default function NovaOS({ tecnicos, fechar, criada }: Props) {
           <label className="text-sm">Ticket de acionamento (opcional)
             <input className={campo} value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="Em branco: o sistema gera um token de 16 dígitos" />
           </label>
+          <div className="text-sm">
+            <span>Clientes do evento (opcional: cada um com seu ticket, texto e SLA)</span>
+            <div className="mt-1"><EditorClientesOS clientes={clientes} linhas={linhasClientes} mudar={setLinhasClientes} /></div>
+          </div>
           <label className="text-sm">Título
             <input className={campo} value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ex.: Rompimento de fibra no km 12" />
           </label>

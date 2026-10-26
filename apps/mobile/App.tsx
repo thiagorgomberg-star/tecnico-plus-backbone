@@ -4,7 +4,8 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { useEffect, useState } from 'react';
-import { Alert, AppState, BackHandler, Platform, SafeAreaView, StatusBar as BarraStatus, View } from 'react-native';
+import { Alert, AppState, BackHandler, Platform, StatusBar as BarraStatus, View } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Android desenha o app por baixo da barra de status (câmera/relógio): desce o conteúdo a altura dela.
 const TOPO = Platform.OS === 'android' ? (BarraStatus.currentHeight ?? 28) + 6 : 0;
@@ -43,7 +44,26 @@ type Camera = { osId: string; fotosJaFeitas: number };
 // Erros não tratados do app vão para o servidor (tabela app_erros).
 vigiarErros();
 
+// Respeita a barra de status e a barra de navegação do Android (botões de baixo não ficam escondidos atrás dela).
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppConteudo />
+    </SafeAreaProvider>
+  );
+}
+
+function Tela({ fundo, children }: { fundo: string; children: React.ReactNode }) {
+  const margens = useSafeAreaInsets();
+  return (
+    <View style={{ flex: 1, backgroundColor: fundo, paddingTop: Math.max(margens.top, TOPO - 6) + 6, paddingLeft: margens.left, paddingRight: margens.right }}>
+      {children}
+      <View style={{ height: margens.bottom, backgroundColor: cores.cartao }} />
+    </View>
+  );
+}
+
+function AppConteudo() {
   const [fontesProntas] = useFonts({ RobotoCondensed_400Regular, RobotoCondensed_700Bold, ...fonteIcones });
   const [sessao, setSessao] = useState<Session | null>(null);
   const [perfil, setPerfil] = useState<Perfil>({ nome: '', cargo: null });
@@ -149,10 +169,10 @@ export default function App() {
 
   if (!sessao) {
     return (
-      <SafeAreaView style={[estilo.tela, { paddingTop: TOPO }]}>
+      <Tela fundo={estilo.tela.backgroundColor as string}>
         <StatusBar style="dark" />
         <Login />
-      </SafeAreaView>
+      </Tela>
     );
   }
 
@@ -201,9 +221,9 @@ export default function App() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: cores.cabecalho2, paddingTop: TOPO }}>
+    <Tela fundo={cores.cabecalho2}>
       <StatusBar style="light" />
       <View style={{ flex: 1, backgroundColor: cores.fundo }}>{conteudo}</View>
-    </SafeAreaView>
+    </Tela>
   );
 }

@@ -10,6 +10,7 @@ import {
 } from '../lib/fusao';
 import { kmlRompimentoTracado, pertoDoLance, rompimentoNoTracado, TracadoSalvo, trechoEntre } from '../lib/tracado';
 import Icone from './Icone';
+import MargemInferior from './MargemInferior';
 
 const numero = (t: string) => {
   const v = Number(t.replace(',', '.'));
@@ -140,6 +141,7 @@ export default function SimularRompimento({ aberto, fechar, caixas, medicao, tra
           </Text>
         </RolarComTeclado>
       </View>
+      <MargemInferior />
     </Modal>
   );
 }
