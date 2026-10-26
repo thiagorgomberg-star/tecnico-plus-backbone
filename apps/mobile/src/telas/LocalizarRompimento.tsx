@@ -53,7 +53,6 @@ export default function LocalizarRompimento({ voltar }: { voltar: () => void }) 
       if (!k) return;
       setKmzs((v) => [k, ...(v ?? [])]);
       await usarKmz(k);
-      if (k.local) Alert.alert('KMZ guardado neste celular', 'Sem sinal agora: ele ficou só neste celular.');
     } catch (e) {
       Alert.alert('Não foi possível ler o KMZ', (e as Error).message);
     } finally { setLendo(false); }
@@ -114,7 +113,7 @@ export default function LocalizarRompimento({ voltar }: { voltar: () => void }) 
                 <Icone nome="google-earth" tamanho={22} cor={cores.primaria} />
                 <View style={{ flex: 1 }}>
                   <Text style={s.itemTitulo} numberOfLines={1}>{k.nome_arquivo}</Text>
-                  <Text style={s.ajuda}>{new Date(k.criado_em).toLocaleDateString('pt-BR')}{k.extensao_m ? ` · ${fmtMetros(k.extensao_m)}` : ''}{k.local ? ' · só neste celular' : ''}</Text>
+                  <Text style={s.ajuda}>{new Date(k.criado_em).toLocaleDateString('pt-BR')}{k.extensao_m ? ` · ${fmtMetros(k.extensao_m)}` : ''}{k.local ? ' · aguardando envio' : ''}</Text>
                 </View>
                 <Icone nome="chevron-right" tamanho={22} cor={cores.apagado} />
               </Pressable>

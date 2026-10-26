@@ -46,7 +46,9 @@ export type ItemFila =
   | { tipo: 'excluir'; id: string; tabela: string; filtros: Record<string, string> }
   | { tipo: 'inserirVarios'; id: string; tabela: string; linhas: Record<string, unknown>[] }
   | { tipo: 'atualizar'; id: string; tabela: string; linhaId: string; campos: Record<string, unknown> }
-  | { tipo: 'rpc'; id: string; nome: string; args: Record<string, unknown> };
+  | { tipo: 'rpc'; id: string; nome: string; args: Record<string, unknown> }
+  // KMZ de rota inserido para localizar rompimento: arquivo + traçado já lido.
+  | { tipo: 'kmz'; id: string; kmzId: string; rotaId: string; nome: string; arquivo: string; tracado: unknown; extensao_m: number | null };
 
 type NovoItem = ItemFila extends infer T ? (T extends ItemFila ? Omit<T, 'id'> : never) : never;
 
@@ -74,6 +76,51 @@ export async function enfileirar(item: NovoItem) {
 }
 
 export const itensPendentes = ler;
+
+// Recusados pelo banco (regra não permitiu): ficam guardados para o técnico ver, reenviar ou descartar.
+export type Recusado = { item: ItemFila; erro: string; em: string };
+export async function itensRecusados(): Promise<Recusado[]> {
+  try { return JSON.parse((await AsyncStorage.getItem(CHAVE_RECUSADOS)) ?? '[]'); } catch { return []; }
+}
+async function gravarRecusados(r: Recusado[]) {
+  await AsyncStorage.setItem(CHAVE_RECUSADOS, JSON.stringify(r));
+  ouvintes.forEach((f) => f());
+}
+export async function reenviarRecusado(indice: number) {
+  const r = await itensRecusados();
+  const [x] = r.splice(indice, 1);
+  if (!x) return;
+  await gravarRecusados(r);
+  await gravar([...(await ler()), x.item]);
+  sincronizar();
+}
+export async function descartarRecusado(indice: number) {
+  const r = await itensRecusados();
+  r.splice(indice, 1);
+  await gravarRecusados(r);
+}
+
+const ROTULO_FOTO: Record<string, string> = {
+  foto_antes: 'Foto antes', foto_depois: 'Foto depois', foto_caixa: 'Foto da caixa', foto_otdr: 'Foto do OTDR', foto_bandeja: 'Foto da bandeja',
+  foto_olt: 'Foto da OLT', foto_ponto: 'Foto da vistoria', assinatura: 'Assinatura',
+};
+const ROTULO_TABELA: Record<string, string> = {
+  caixas_emenda: 'Caixa / elemento', caixa_fibras: 'Fibras da caixa', caixa_manobras: 'Manobras', vistoria_pontos: 'Ponto da vistoria',
+  os_servicos_executados: 'Serviço executado', os_tecnicos_apoio: 'Técnico de apoio', rastreio_pontos: 'Trajeto (GPS)', eventos_os: 'Evento da O.S.',
+};
+// Texto curto do que é cada item da fila, para o técnico entender o que ainda não subiu.
+export function descreverItem(i: ItemFila) {
+  switch (i.tipo) {
+    case 'foto': return `${ROTULO_FOTO[i.tipoAnexo] ?? 'Foto'}${i.bandeja ? ` · bandeja ${i.bandeja}` : ''}${i.fibra ? ` · fibra ${i.fibra}` : ''}`;
+    case 'despesa': return i.correcao ? 'Correção de despesa' : 'Despesa';
+    case 'inventario': return 'Inventário (foto de ferramenta)';
+    case 'os': return 'Atualização da O.S.';
+    case 'kmz': return `KMZ da rota · ${i.nome}`;
+    case 'rpc': return i.nome === 'excluir_foto_caixa' ? 'Exclusão de foto' : 'Ação no servidor';
+    case 'excluir': return `Exclusão · ${ROTULO_TABELA[i.tabela] ?? i.tabela}`;
+    default: return ROTULO_TABELA[i.tabela] ?? i.tabela;
+  }
+}
 
 // Tira da fila um item que ainda não subiu (ex.: foto tirada errado).
 export async function removerDaFila(id: string) {
@@ -163,6 +210,18 @@ async function enviar(item: ItemFila) {
   } else if (item.tipo === 'atualizar') {
     const { error } = await supabase.from(item.tabela).update(item.campos).eq('id', item.linhaId);
     if (error) throw error;
+  } else if (item.tipo === 'kmz') {
+    const caminho = `${item.rotaId}/${item.kmzId}.${/\.kml$/i.test(item.nome) ? 'kml' : 'kmz'}`;
+    const arq = new File(item.arquivo);
+    if (arq.exists) {
+      const envio = await supabase.storage.from('kmz').upload(caminho, await arq.arrayBuffer(), { contentType: 'application/vnd.google-earth.kmz' });
+      if (envio.error && !/exist|duplicate/i.test(envio.error.message)) throw envio.error;
+    }
+    const { error } = await supabase.from('rota_kmz').upsert({
+      id: item.kmzId, rota_id: item.rotaId, nome_arquivo: item.nome, caminho_arquivo: arq.exists ? caminho : null, tracado: item.tracado, extensao_m: item.extensao_m,
+    }, { onConflict: 'id', ignoreDuplicates: true });
+    if (error) throw error;
+    if (arq.exists) arq.delete();
   } else {
     const { error } = await supabase.rpc(item.nome, item.args);
     if (error) throw error;

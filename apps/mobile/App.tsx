@@ -28,6 +28,7 @@ import Mais from './src/telas/Mais';
 import Despesas from './src/telas/Despesas';
 import Inventario from './src/telas/Inventario';
 import InformarEvento from './src/telas/InformarEvento';
+import FilaEnvio from './src/telas/FilaEnvio';
 import LocalizarRompimento from './src/telas/LocalizarRompimento';
 import MeuPerfil from './src/telas/MeuPerfil';
 import MinhaEscala from './src/telas/MinhaEscala';
@@ -44,7 +45,7 @@ export default function App() {
   const [perfil, setPerfil] = useState<Perfil>({ nome: '', cargo: null });
   const [osAberta, setOsAberta] = useState<OrdemServico | null>(null);
   const [camera, setCamera] = useState<Camera | null>(null);
-  const [tela, setTela] = useState<'inicio' | 'rotas' | 'escala' | 'preventiva' | 'despesas' | 'frota' | 'inventario' | 'perfil' | 'evento' | 'curva' | 'rompimento'>('inicio');
+  const [tela, setTela] = useState<'inicio' | 'rotas' | 'escala' | 'preventiva' | 'despesas' | 'frota' | 'inventario' | 'perfil' | 'evento' | 'curva' | 'rompimento' | 'fila'>('inicio');
   const [aba, setAba] = useState<Aba>('atividades');
   const [backlogPedido, setBacklogPedido] = useState<string | null>(null);
   const [pendentes, setPendentes] = useState(0);
@@ -123,7 +124,7 @@ export default function App() {
   async function sair() {
     const pendentes = await itensPendentes();
     if (pendentes.length > 0) {
-      return Alert.alert('Registros não enviados', `Há ${pendentes.length} registro(s) aguardando internet. Conecte-se antes de sair.`);
+      return Alert.alert('Registros não enviados', `Há ${pendentes.length} registro(s) aguardando internet. Conecte-se antes de sair (veja em Menu → Envios pendentes).`);
     }
     await limparJornadaLocal();
     await esquecerDispositivo();
@@ -161,6 +162,8 @@ export default function App() {
     );
   } else if (tela === 'rotas') {
     conteudo = <Rotas voltar={() => setTela('inicio')} />;
+  } else if (tela === 'fila') {
+    conteudo = <FilaEnvio voltar={() => setTela('inicio')} />;
   } else if (tela === 'rompimento') {
     conteudo = <LocalizarRompimento voltar={() => setTela('inicio')} />;
   } else if (tela === 'curva') {

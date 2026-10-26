@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { randomUUID } from 'expo-crypto';
-import { File } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 import { requireOptionalNativeModule } from 'expo-modules-core';
 
+import { enfileirar } from './fila';
 import { supabase } from './supabase';
 import { comprimento, lerKmz, prepararTracado, TracadoSalvo } from './tracado';
 
@@ -60,14 +61,11 @@ export async function inserirKmz(rotaId: string): Promise<KmzRota | null> {
   const item: KmzRota = { id, rota_id: rotaId, nome_arquivo: a.name || 'rota.kmz', extensao_m: Math.round(comprimento(tracado.caminho)), criado_em: new Date().toISOString(), local: true };
   await AsyncStorage.setItem(chTracado(id), JSON.stringify(tracado));
   await AsyncStorage.setItem(chKmz(rotaId), JSON.stringify([item, ...(await ler<KmzRota[]>(chKmz(rotaId), []))]));
-  // Com sinal já guarda na rota para o painel e os outros técnicos; sem sinal fica só neste celular.
-  try {
-    const caminho = `${rotaId}/${id}.${/\.kml$/i.test(item.nome_arquivo) ? 'kml' : 'kmz'}`;
-    const envio = await supabase.storage.from('kmz').upload(caminho, bytes, { contentType: 'application/vnd.google-earth.kmz' });
-    const { error } = await supabase.from('rota_kmz').insert({
-      id, rota_id: rotaId, nome_arquivo: item.nome_arquivo, caminho_arquivo: envio.error ? null : caminho, tracado, extensao_m: item.extensao_m,
-    });
-    if (!error) item.local = false;
-  } catch { /* sem sinal */ }
+  // Vai pela fila de envio: sobe arquivo + traçado assim que houver sinal (painel e outros técnicos passam a ver).
+  const pasta = new Directory(Paths.document, 'kmz-fila');
+  if (!pasta.exists) pasta.create({ intermediates: true });
+  const copia = new File(pasta, `${id}.${/\.kml$/i.test(item.nome_arquivo) ? 'kml' : 'kmz'}`);
+  copia.write(bytes);
+  await enfileirar({ tipo: 'kmz', kmzId: id, rotaId, nome: item.nome_arquivo, arquivo: copia.uri, tracado, extensao_m: item.extensao_m });
   return item;
 }
