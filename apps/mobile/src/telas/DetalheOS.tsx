@@ -144,6 +144,8 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
     const hora = campoHora[acao.status];
     // Ao retomar no dia seguinte, a hora de início continua a do primeiro dia.
     if (hora && !continuando) campos[hora] = agora;
+    // O.S. nova: passa por "visualizada" antes (o supervisor continua recebendo o aviso).
+    if (os.status === 'enviada') await enfileirar({ tipo: 'os', osId: os.id, campos: { status: 'aceita', aceita_em: agora } });
     await enfileirar({ tipo: 'os', osId: os.id, campos });
     setOs({ ...os, status: acao.status, observacao_tecnico: observacao || null, continua_em: null });
     setEventos((e) => [...e, { id: -e.length - 1, status_novo: acao.status, criado_em: agora }]);

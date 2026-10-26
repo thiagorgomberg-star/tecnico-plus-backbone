@@ -64,7 +64,7 @@ export const rotuloStatus: Record<StatusOS, string> = {
 
 // Próxima ação do técnico para cada status.
 export const proximaAcao: Partial<Record<StatusOS, { status: StatusOS; rotulo: string }>> = {
-  enviada: { status: 'aceita', rotulo: 'Visualizei a O.S.' },
+  enviada: { status: 'em_execucao', rotulo: 'Iniciar O.S.' }, // marca visualizada e inicia num toque só
   aceita: { status: 'em_execucao', rotulo: 'Iniciar atendimento' },
   devolvida: { status: 'em_execucao', rotulo: 'Retomar atendimento' },
   em_execucao: { status: 'concluida', rotulo: 'Concluir O.S.' },
