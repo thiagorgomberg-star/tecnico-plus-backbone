@@ -11,6 +11,8 @@ import ReabrirOS from "@/componentes/ReabrirOS";
 import { supabase } from "@/lib/supabase";
 import { corStatus, ENCERRADAS, OrdemServico, rotuloDaOs, rotuloStatus, StatusOS } from "@/lib/tipos";
 
+const EM_ANDAMENTO: StatusOS[] = ["enviada", "aceita", "em_execucao", "pausada", "devolvida"];
+
 type Anexo = {
   id: string; tipo: string; caminho_arquivo: string; nome_arquivo: string | null; descricao: string | null;
   tirada_em: string | null; criado_em: string; url?: string;
@@ -72,6 +74,16 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
   }, [inicial.id, recarregar]);
 
   const encerrada = ENCERRADAS.includes(os.status);
+
+  // Supervisor tira a O.S. do técnico (e do apoio) e devolve ao backlog geral, com motivo.
+  async function voltarBacklog() {
+    const motivo = prompt(`Voltar a O.S. #${os.numero} ao backlog?\nEla sai do técnico e qualquer técnico poderá assumir.\n\nMotivo (obrigatório):`)?.trim();
+    if (!motivo) return;
+    const { error } = await supabase.rpc("voltar_para_backlog", { p_os: os.id, p_motivo: motivo });
+    if (error) return alert(error.message);
+    await supabase.from("os_tecnicos_apoio").delete().eq("os_id", os.id);
+    fechar();
+  }
   const fotos = anexos.filter((a) => a.tipo === "foto_antes" || a.tipo === "foto_depois");
   const apoio = anexos.filter((a) => a.tipo === "documento");
   const assinatura = [...anexos].reverse().find((a) => a.tipo === "assinatura");
@@ -119,6 +131,11 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
           ) : null}
           {!encerrada && (
             <button className="rounded-lg border border-gray-300 px-3 py-1.5 hover:bg-gray-50" onClick={() => setEditar(true)}>Editar dados</button>
+          )}
+          {EM_ANDAMENTO.includes(os.status) && (
+            <button className="rounded-lg border border-red-400 px-3 py-1.5 font-medium text-red-800 hover:bg-red-50" onClick={voltarBacklog}>
+              Voltar ao backlog
+            </button>
           )}
           <button className="rounded-lg border border-gray-300 px-3 py-1.5 hover:bg-gray-50" onClick={() => setMaterial(true)}>📎 Material de apoio</button>
         </div>

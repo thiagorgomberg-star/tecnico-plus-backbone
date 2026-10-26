@@ -15,6 +15,7 @@ const titulos: Record<string, string> = {
   backlog_proximo: "Ocorrência perto de você",
   os_reaberta: "O.S. reaberta",
   apoio_os: "Você é apoio numa O.S.",
+  os_retirada: "O.S. retirada de você",
 };
 
 type Conta = { client_email: string; private_key: string; project_id: string };
