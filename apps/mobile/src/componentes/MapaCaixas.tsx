@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, G, Line, Rect, Text as SvgText } from 'react-native-svg';
 
 import { cores, sombra } from '../lib/estilo';
-import { CaixaRede, rotuloPonto } from '../lib/fusao';
+import { CaixaRede, descreverFibra, descreverSaidas, origemNaoCadastrada, rotuloPonto } from '../lib/fusao';
+import { FotoCaixa, fotosDaCaixa, rotuloFotoCaixa } from '../lib/fotosCaixa';
 import { distanciaKm } from '../lib/navegacao';
-import Icone from './Icone';
+import Icone, { NomeIcone } from './Icone';
 
-type ComLocal = CaixaRede & { latitude?: number | null; longitude?: number | null; endereco?: string | null };
+type ComLocal = CaixaRede & {
+  latitude?: number | null; longitude?: number | null; endereco?: string | null;
+  grupos_fusionados?: number; grupos_vagos?: number; origem_identificacao?: string | null; origem?: string | null; os_numero?: number | null;
+};
 type Item = ComLocal & { lat: number; lng: number; distancia: number | null };
 const COR_TIPO: Record<string, string> = { emenda: '#1F6FD1', entroncamento: '#7A5AA6', dgo: '#163A6B', site: '#227E9E' };
 const ALTURA = 380;
@@ -41,6 +45,15 @@ export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher
     .sort((a, b) => (a.distancia ?? 0) - (b.distancia ?? 0)), [caixas, aqui]);
   const semLocal = caixas.length - itens.length;
   const sel = itens.find((c) => c.id === selecionado) ?? null;
+  const [fotos, setFotos] = useState<FotoCaixa[] | null>(null);
+  const [foto, setFoto] = useState<FotoCaixa | null>(null);
+  useEffect(() => {
+    setFotos(null);
+    if (!aberto || !selecionado) return;
+    let vivo = true;
+    fotosDaCaixa(selecionado, (f) => vivo && setFotos(f)).catch(() => undefined);
+    return () => { vivo = false; };
+  }, [aberto, selecionado]);
 
   const projecao = useMemo(() => {
     // Enquadra a posição atual e as caixas mais próximas (até 15), para não virar um ponto só quando a rede é grande.
@@ -143,7 +156,30 @@ export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher
                   {rotuloPonto(sel.tipo ?? 'emenda', sel.swap)}{sel.distancia != null ? (sel.distancia < 0.02 ? ' · no mesmo local' : ` · ${fmtKm(sel.distancia)} daqui`) : ''}
                   {sel.saidas.length ? ` · ${sel.saidas.length} saída(s): ${sel.saidas.map((q) => `${q} FO`).join(', ')}` : ''}
                 </Text>
-                {sel.endereco ? <Text style={s.selSub}>{sel.endereco}</Text> : null}
+                {sel.endereco ? <Linha icone="map-marker-outline" texto={sel.endereco} /> : null}
+                <Linha icone="arrow-collapse-right" texto={`Vem de: ${sel.origem_identificacao ?? sel.origem ?? itens.find((x) => x.id === sel.origem_caixa_id)?.identificacao ?? (origemNaoCadastrada(sel) || '—')}`} />
+                <Linha icone="call-split" texto={`Entrada ${sel.capacidade_fibras} FO → ${descreverSaidas(sel) || 'sem saída'}`} />
+                {sel.grupos_fusionados != null ? <Linha icone="vector-link" texto={`Grupos: ${sel.grupos_fusionados} fusionado(s) · ${sel.grupos_vagos ?? 0} vago(s)`} /> : null}
+                {sel.manobras?.length ? <Linha icone="swap-horizontal" texto={`${sel.manobras.length} manobra(s): ${sel.manobras.slice(0, 3).map((m) => `FO ${m.fibra_entrada} → S${m.saida} FO ${m.fibra_saida}`).join(', ')}${sel.manobras.length > 3 ? '…' : ''}`} /> : null}
+                {(() => {
+                  // Fibras trabalhadas: com cliente, sem potência ou medidas.
+                  const fibras = (sel.fibras ?? []).filter((f) => f.cliente || f.sem_potencia || f.potencia_dbm != null || f.posicao_dgo);
+                  return fibras.length ? (
+                    <Linha icone="lan-connect" texto={`Fibras trabalhadas (${fibras.length}): ${fibras.slice(0, 4).map((f) =>
+                      `${descreverFibra(f.fibra, sel.capacidade_fibras, sel.padrao_cores_entrada ?? undefined).split(' · ')[0]}${f.cliente ? ` ${f.cliente}` : ''}${f.sem_potencia ? ' sem potência' : ''}`).join(', ')}${fibras.length > 4 ? '…' : ''}`} />
+                  ) : <Linha icone="lan-connect" texto="Nenhuma fibra com cliente ou medida registrada" />;
+                })()}
+                {sel.os_numero ? <Linha icone="file-document-outline" texto={`Cadastrada na O.S. #${sel.os_numero}`} /> : null}
+                {fotos === null ? <Text style={s.fotosAviso}>Carregando fotos…</Text> : fotos.length ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 10 }}>
+                    {fotos.map((f) => (
+                      <Pressable key={f.uri} onPress={() => setFoto(f)}>
+                        <Image source={{ uri: f.uri }} style={s.miniatura} />
+                        <Text style={s.miniaturaTexto} numberOfLines={1}>{rotuloFotoCaixa(f)}{f.pendente ? ' · na fila' : ''}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                ) : <Text style={s.fotosAviso}>Sem fotos guardadas neste celular. Com sinal, as fotos da caixa são baixadas e ficam para usar offline.</Text>}
                 {sel.origem_caixa_id && seguinte ? <Text style={[s.aviso, { paddingHorizontal: 0 }]}>
                   Hoje ela vem de {itens.find((x) => x.id === sel.origem_caixa_id)?.identificacao ?? 'outra caixa'}; ao confirmar, passa a vir desta.</Text> : null}
                 {serve(sel) ? (
@@ -169,11 +205,33 @@ export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher
           ))}
         </ScrollView>
       </View>
+      <Modal visible={!!foto} transparent animationType="fade" onRequestClose={() => setFoto(null)} supportedOrientations={['portrait', 'landscape']}>
+        <Pressable style={s.fotoFundo} onPress={() => setFoto(null)}>
+          {foto ? <Image source={{ uri: foto.uri }} style={{ width: '100%', height: '80%' }} resizeMode="contain" /> : null}
+          {foto ? <Text style={s.fotoLegenda}>{sel?.identificacao} · {rotuloFotoCaixa(foto)}{foto.tiradaEm ? ` · ${new Date(foto.tiradaEm).toLocaleDateString('pt-BR')}` : ''}</Text> : null}
+        </Pressable>
+      </Modal>
     </Modal>
   );
 }
 
+function Linha({ icone, texto }: { icone: NomeIcone; texto: string }) {
+  return (
+    <View style={s.linhaInfo}>
+      <Icone nome={icone} tamanho={15} cor={cores.suave} />
+      <Text style={s.linhaInfoTexto}>{texto}</Text>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
+  miniatura: { width: 112, height: 84, borderRadius: 10, backgroundColor: '#DCE4EE' },
+  miniaturaTexto: { width: 112, fontSize: 11, color: cores.suave, marginTop: 3 },
+  fotosAviso: { fontSize: 12, color: cores.suave, marginTop: 8 },
+  fotoFundo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center', padding: 12 },
+  fotoLegenda: { color: '#fff', marginTop: 10, fontSize: 13 },
+  linhaInfo: { flexDirection: 'row', gap: 6, marginTop: 5, alignItems: 'flex-start' },
+  linhaInfoTexto: { flex: 1, fontSize: 12.5, color: cores.texto2, lineHeight: 17 },
   tela: { flex: 1, backgroundColor: cores.fundo },
   topo: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: cores.cabecalho, paddingHorizontal: 16, paddingTop: 44, paddingBottom: 16 },
   topoTitulo: { color: '#fff', fontSize: 18, fontWeight: '800' },

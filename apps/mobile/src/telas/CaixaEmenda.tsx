@@ -6,11 +6,12 @@ import Cabecalho from '../componentes/Cabecalho';
 import { Caixa, caixasDaRede, PREFIXO_TAG, proximaTag, salvarCaixa } from '../lib/caixas';
 import { cores } from '../lib/estilo';
 import {
-  calcularPlano, CAPACIDADES, CaixaRede, descreverFibra, Destino, origemNaoCadastrada, TIPOS_DESTINO, faixasDaBandeja, FUSOES_POR_BANDEJA, herdarDaAnterior, Manobra, PADROES_CORES, rotuloPonto,
+  calcularPlano, CAPACIDADES, CaixaRede, descreverFibra, Destino, origemNaoCadastrada, rotuloDestino, TIPOS_DESTINO, faixasDaBandeja, FUSOES_POR_BANDEJA, herdarDaAnterior, Manobra, PADROES_CORES, rotuloPonto,
   descreverOlt, ehPonta, instalacoesDoTipo, MODELOS_OLT, TIPOS_SFP, TIPOS_CORDAO, separarBandejas, SituacaoFibra, TIPOS_PONTO,
 } from '../lib/fusao';
 import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
 import { enderecoDe, posicaoAtual } from '../lib/localizacao';
+import { distanciaKm } from '../lib/navegacao';
 import { supabase } from '../lib/supabase';
 import Icone from '../componentes/Icone';
 import MapaCaixas from '../componentes/MapaCaixas';
@@ -158,6 +159,35 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   // TAG automática na caixa nova, ou quando a caixa muda de tipo (ex.: emenda → DGO) e ainda tem a TAG do tipo antigo.
   const prefixoDaTag = Object.values(PREFIXO_TAG).find((p) => c.identificacao.startsWith(p));
   const tagDeOutroTipo = !!prefixoDaTag && prefixoDaTag !== (PREFIXO_TAG[c.tipo] ?? PREFIXO_TAG.emenda);
+  // Saídas de outras caixas que já dizem para onde vão mas ainda não têm o ponto seguinte ligado:
+  // sugestões de "vem de" por proximidade (e pelo tipo/nome combinando com esta caixa).
+  const esperando = useMemo(() => {
+    const meuTipo = c.tipo === 'emenda' && c.swap ? 'swap' : c.tipo;
+    const aqui = c.latitude != null && c.longitude != null ? { lat: c.latitude, lng: c.longitude } : null;
+    return todasCaixas.filter((x) => x.id !== c.id).flatMap((x) => {
+      const loc = x as CaixaRede & { latitude?: number | null; longitude?: number | null };
+      return x.saidas.flatMap((_, i) => {
+        const d = x.destinos?.[i];
+        if (!d) return [];
+        const ligada = todasCaixas.some((y) => y.id !== c.id && y.origem_caixa_id === x.id && (y.origem_saida ?? 1) === i + 1);
+        if (ligada) return [];
+        const distancia = aqui && loc.latitude != null && loc.longitude != null ? distanciaKm(aqui, { lat: loc.latitude, lng: loc.longitude }) : null;
+        const nome = !!d.nome && d.nome.trim().toUpperCase() === (c.identificacao || '').trim().toUpperCase();
+        return [{ caixa: x, saida: i + 1, destino: d, distancia, combina: d.tipo === meuTipo || nome, nome }];
+      });
+    }).sort((a, b) => Number(b.nome) - Number(a.nome) || Number(b.combina) - Number(a.combina) || (a.distancia ?? 1e9) - (b.distancia ?? 1e9)).slice(0, 4);
+  }, [todasCaixas, c.id, c.tipo, c.swap, c.latitude, c.longitude, c.identificacao]);
+
+  function usarEsperando(e: (typeof esperando)[number]) {
+    setOrigemTipo('caixa');
+    escolherOrigem(e.caixa, e.saida);
+    // Caixa nova assume o tipo que a saída anterior esperava.
+    if (nova && e.destino.tipo && !e.nome) {
+      const tipo = e.destino.tipo === 'swap' ? 'emenda' : e.destino.tipo;
+      if (TIPOS_PONTO.some((t) => t.valor === tipo)) mudar({ tipo, swap: e.destino.tipo === 'swap' });
+    }
+  }
+
   const tagAuto = nova || tagDeOutroTipo ? proximaTag(c.tipo, [...rede, ...daOs].filter((x) => x.id !== c.id)) : null;
   const plano = calcularPlano(c);
   const bandejas = separarBandejas(c);
@@ -350,6 +380,21 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
               <TextInput style={s.campo} value={c.origem_dgo ?? ''} onChangeText={(t) => mudar({ origem_dgo: t })}
                 autoCapitalize="characters" placeholder={(c.origem_tipo || 'dgo') === 'dgo' ? 'Nome do DGO / POP' : 'Nome ou TAG, ex.: CE-BKB-0010'} />
             </>
+          ) : null}
+          {esperando.length && !(origemTipo === 'caixa' && esperando.some((e) => e.caixa.id === c.origem_caixa_id && e.saida === c.origem_saida)) ? (
+            <View style={s.sugestoes}>
+              <Text style={s.destinoRotulo}>SAÍDAS ESPERANDO UM PONTO {c.latitude != null ? 'AQUI PERTO' : ''}</Text>
+              {esperando.map((e) => (
+                <Pressable key={`${e.caixa.id}-${e.saida}`} style={s.sugestao} onPress={() => usarEsperando(e)}>
+                  <Icone nome={e.combina ? 'map-marker-check-outline' : 'map-marker-question-outline'} tamanho={20} cor={e.combina ? cores.sucesso : cores.suave} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: '700', color: cores.texto }}>{e.caixa.identificacao} · saída {e.saida}</Text>
+                    <Text style={s.suave}>vai para {rotuloDestino(e.destino)}{e.distancia != null ? ` · ${e.distancia < 1 ? `${Math.round(e.distancia * 1000)} m` : `${e.distancia.toFixed(1).replace('.', ',')} km`}` : ''}</Text>
+                  </View>
+                  <Text style={{ color: cores.primaria, fontWeight: '800' }}>Usar</Text>
+                </Pressable>
+              ))}
+            </View>
           ) : null}
           {origemTipo === 'caixa' && todasCaixas.some((x) => x.id !== c.id) ? (
             <Pressable style={s.botaoMapa} onPress={() => setMapa({ tipo: 'anterior' })}>
@@ -736,6 +781,8 @@ const s = StyleSheet.create({
   chipAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
   chipTexto: { color: cores.texto, fontSize: 14 },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: cores.borda },
+  sugestoes: { marginTop: 10, padding: 10, borderRadius: 10, backgroundColor: '#EAF6EE', gap: 6 },
+  sugestao: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderRadius: 10, padding: 10 },
   destino: { marginTop: 8, padding: 10, borderRadius: 10, backgroundColor: cores.fundo },
   destinoRotulo: { fontSize: 11.5, fontWeight: '700', color: cores.apagado, letterSpacing: 0.4 },
   botaoMapa: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10,
