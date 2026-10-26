@@ -342,11 +342,11 @@ function FormDespesa({ despesa, fechar, modo, veiculo }: { despesa: Despesa | nu
           <View style={s.dupla}>
             <View style={{ flex: 1 }}>
               <Text style={s.rotulo}>Valor total (R$) *</Text>
-              <TextInput style={estilo.campo} value={valor} onChangeText={setValor} keyboardType="decimal-pad" placeholder="0,00" />
+              <TextInput placeholderTextColor={cores.apagado} style={estilo.campo} value={valor} onChangeText={setValor} keyboardType="decimal-pad" placeholder="0,00" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.rotulo}>Data *</Text>
-              <TextInput style={estilo.campo} value={data} onChangeText={setData} keyboardType="numbers-and-punctuation" placeholder="DD/MM/AAAA" />
+              <TextInput placeholderTextColor={cores.apagado} style={estilo.campo} value={data} onChangeText={setData} keyboardType="numbers-and-punctuation" placeholder="DD/MM/AAAA" />
             </View>
           </View>
 
@@ -357,7 +357,7 @@ function FormDespesa({ despesa, fechar, modo, veiculo }: { despesa: Despesa | nu
               <View style={s.dupla}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.rotulo}>Litros *</Text>
-                  <TextInput style={estilo.campo} value={litros} onChangeText={setLitros} keyboardType="decimal-pad" placeholder="0,00" />
+                  <TextInput placeholderTextColor={cores.apagado} style={estilo.campo} value={litros} onChangeText={setLitros} keyboardType="decimal-pad" placeholder="0,00" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.rotulo}>Odômetro (km) *</Text>
@@ -375,7 +375,7 @@ function FormDespesa({ despesa, fechar, modo, veiculo }: { despesa: Despesa | nu
           {modo === 'frota' && (
             <>
               <Text style={s.rotulo}>Placa *</Text>
-              <TextInput style={estilo.campo} value={placa} onChangeText={setPlaca} autoCapitalize="characters" placeholder="ABC1D23" />
+              <TextInput placeholderTextColor={cores.apagado} style={estilo.campo} value={placa} onChangeText={setPlaca} autoCapitalize="characters" placeholder="ABC1D23" />
             </>
           )}
 
@@ -413,7 +413,7 @@ function FormDespesa({ despesa, fechar, modo, veiculo }: { despesa: Despesa | nu
           )}
 
           <Text style={s.rotulo}>Observação {categoria === 'outros' ? '*' : ''}</Text>
-          <TextInput style={[estilo.campo, { minHeight: 60, textAlignVertical: 'top' }]} value={descricao} onChangeText={setDescricao} multiline
+          <TextInput placeholderTextColor={cores.apagado} style={[estilo.campo, { minHeight: 60, textAlignVertical: 'top' }]} value={descricao} onChangeText={setDescricao} multiline
             placeholder={categoria === 'ferramenta' || categoria === 'material' ? 'O que foi comprado e por quê' : ''} />
 
           <Pressable style={[estilo.botao, { backgroundColor: cores.sucesso }]} onPress={salvar} disabled={salvando}>

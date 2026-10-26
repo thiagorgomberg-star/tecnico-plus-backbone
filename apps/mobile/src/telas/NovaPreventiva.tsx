@@ -201,7 +201,7 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
         )}
 
         <Text style={s.rotulo}>{vistoriaMg ? 'Trecho (pode ajustar)' : tipo === 'Preventiva site' ? 'Site / POP *' : 'Local / ponto atendido *'}</Text>
-        <TextInput style={estilo.campo} value={local} onChangeText={setLocal}
+        <TextInput placeholderTextColor={cores.apagado} style={estilo.campo} value={local} onChangeText={setLocal}
           placeholder={tipo === 'Preventiva site' ? 'Ex.: POP Taubaté' : 'Ex.: Caixa de emenda km 112'} />
 
         <Text style={s.rotulo}>Localização</Text>
@@ -218,7 +218,7 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
         </View>
 
         <Text style={s.rotulo}>Endereço ou referência *</Text>
-        <TextInput style={estilo.campo} value={endereco} onChangeText={setEndereco} placeholder="Preenchido pelo GPS; pode ajustar" multiline />
+        <TextInput placeholderTextColor={cores.apagado} style={estilo.campo} value={endereco} onChangeText={setEndereco} placeholder="Preenchido pelo GPS; pode ajustar" multiline />
 
         <Text style={s.rotulo}>Atividades a executar *</Text>
         {doTipo.map((a) => {
@@ -232,11 +232,11 @@ export default function NovaPreventiva({ voltar, abrirOS }: { voltar: () => void
             </Pressable>
           );
         })}
-        <TextInput style={[estilo.campo, { minHeight: 60, textAlignVertical: 'top' }]} value={atividades} onChangeText={setAtividades}
+        <TextInput placeholderTextColor={cores.apagado} style={[estilo.campo, { minHeight: 60, textAlignVertical: 'top' }]} value={atividades} onChangeText={setAtividades}
           multiline placeholder={doTipo.length ? 'Outras atividades (opcional)' : 'O que será verificado, limpo, medido ou trocado'} />
 
         <Text style={s.rotulo}>Ticket (opcional)</Text>
-        <TextInput style={estilo.campo} value={ticket} onChangeText={setTicket} autoCapitalize="characters"
+        <TextInput placeholderTextColor={cores.apagado} style={estilo.campo} value={ticket} onChangeText={setTicket} autoCapitalize="characters"
           placeholder="Em branco: o sistema gera um token" />
 
         <Text style={s.rotulo}>Observações</Text>

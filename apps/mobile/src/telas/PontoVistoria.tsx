@@ -209,7 +209,7 @@ export default function PontoVistoria({ osId, tipoOs, ponto: inicial, categoria,
               </Pressable>
             </View>
           ) : null}
-          <TextInput style={s.campo} value={p.endereco ?? ''} editable={podeEditar} multiline placeholder="Endereço / referência"
+          <TextInput placeholderTextColor={cores.apagado} style={s.campo} value={p.endereco ?? ''} editable={podeEditar} multiline placeholder="Endereço / referência"
             onChangeText={(t) => mudar({ endereco: t })} />
         </View>
 
@@ -233,7 +233,7 @@ export default function PontoVistoria({ osId, tipoOs, ponto: inicial, categoria,
           {chips(TIPOS_VIA, p.tipo_via, (v) => mudar({ tipo_via: v }))}
           <Text style={s.rotulo}>LICENCIAMENTO DO TRECHO *</Text>
           {chips(LICENCIAMENTOS, p.licenciamento, (v) => mudar({ licenciamento: v }))}
-          <TextInput style={s.campo} value={p.via_nome ?? ''} editable={podeEditar} placeholder="Via / km (ex.: BR-381 km 812, SP-123, Dutra km 140)"
+          <TextInput placeholderTextColor={cores.apagado} style={s.campo} value={p.via_nome ?? ''} editable={podeEditar} placeholder="Via / km (ex.: BR-381 km 812, SP-123, Dutra km 140)"
             onChangeText={(t) => mudar({ via_nome: t })} />
           <View style={[s.linha, { borderBottomWidth: 0, marginTop: 8 }]}>
             <View style={{ flex: 1 }}>
@@ -287,7 +287,7 @@ const s = StyleSheet.create({
   rotulo: { fontSize: 12, fontWeight: '700', color: cores.suave, letterSpacing: 0.5, marginTop: 10, marginBottom: 2 },
   texto: { fontSize: 15, color: cores.texto },
   suave: { fontSize: 13, color: cores.suave, marginTop: 6 },
-  campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 6, padding: 10, fontSize: 15, backgroundColor: '#fff', marginTop: 6 },
+  campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 6, padding: 10, fontSize: 15, color: cores.texto, backgroundColor: '#fff', marginTop: 6 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   chip: { borderWidth: 1, borderColor: cores.borda, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 7, backgroundColor: '#fff' },
   chipAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },

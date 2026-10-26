@@ -157,7 +157,7 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
             ))}
           </View>
           {catalogo.filter((c) => c.categoria === categoria).length > 8 ? (
-            <TextInput style={s.campo} placeholder="Buscar..." value={busca} onChangeText={setBusca} />
+            <TextInput placeholderTextColor={cores.apagado} style={s.campo} placeholder="Buscar..." value={busca} onChangeText={setBusca} />
           ) : null}
           <View style={s.chips}>
             {opcoes.map((c) => (
@@ -177,7 +177,7 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
           {novo ? (
             <View style={s.novo}>
               <Text style={s.blocoTitulo}>{categoria === 'servico' ? 'NOVO SERVIÇO' : 'NOVO MATERIAL'} · VAI PARA APROVAÇÃO DO SUPERVISOR</Text>
-              <TextInput style={s.campo} value={novo.nome} autoCapitalize="characters" autoFocus
+              <TextInput placeholderTextColor={cores.apagado} style={s.campo} value={novo.nome} autoCapitalize="characters" autoFocus
                 onChangeText={(v) => setNovo({ ...novo, nome: v.toUpperCase() })}
                 placeholder={categoria === 'servico' ? 'EX.: REPUXE DE CABO' : 'EX.: ALÇA PREFORMADA 12MM'} />
               <View style={[s.chips, { marginTop: 8 }]}>
@@ -188,7 +188,7 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
                 ))}
               </View>
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                <TextInput style={[s.campo, { flex: 1, marginTop: 0 }]} keyboardType="decimal-pad" value={quantidade} onChangeText={setQuantidade}
+                <TextInput placeholderTextColor={cores.apagado} style={[s.campo, { flex: 1, marginTop: 0 }]} keyboardType="decimal-pad" value={quantidade} onChangeText={setQuantidade}
                   placeholder={`Quantidade (${novo.unidade})`} />
                 <Pressable style={s.botao} onPress={lancar}><Text style={s.botaoTexto}>Lançar</Text></Pressable>
               </View>
@@ -196,7 +196,7 @@ export default function ExecucaoOS({ osId, podeEditar, euId }: { osId: string; p
           ) : null}
           {escolhido && !novo ? (
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-              <TextInput style={[s.campo, { flex: 1, marginTop: 0 }]} keyboardType="decimal-pad" value={quantidade} onChangeText={setQuantidade}
+              <TextInput placeholderTextColor={cores.apagado} style={[s.campo, { flex: 1, marginTop: 0 }]} keyboardType="decimal-pad" value={quantidade} onChangeText={setQuantidade}
                 placeholder={`Quantidade (${escolhido.unidade})`} autoFocus />
               <Pressable style={s.botao} onPress={lancar}><Text style={s.botaoTexto}>Lançar</Text></Pressable>
             </View>
@@ -244,7 +244,7 @@ const s = StyleSheet.create({
   chip: { borderWidth: 1, borderColor: cores.borda, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: '#fff' },
   chipAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
   chipTexto: { color: cores.texto, fontSize: 14 },
-  campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 6, padding: 10, fontSize: 16, backgroundColor: '#fff', marginTop: 6 },
+  campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 6, padding: 10, fontSize: 16, color: cores.texto, backgroundColor: '#fff', marginTop: 6 },
   botao: { backgroundColor: cores.primaria, borderRadius: 6, paddingHorizontal: 18, justifyContent: 'center' },
   botaoTexto: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });

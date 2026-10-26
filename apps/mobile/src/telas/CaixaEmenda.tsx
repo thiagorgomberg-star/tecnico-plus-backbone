@@ -1,6 +1,6 @@
 import { randomUUID } from 'expo-crypto';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
 import { Caixa, caixasDaRede, PREFIXO_TAG, proximaTag, salvarCaixa } from '../lib/caixas';
@@ -322,7 +322,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
               <Text style={s.suave}>Gerada pelo app; é o nome do pin no KMZ. Se outra caixa ganhar a mesma TAG sem internet, o servidor ajusta para a próxima livre.</Text>
             </>
           ) : (
-            <TextInput style={s.campo} value={c.identificacao} onChangeText={(t) => mudar({ identificacao: t })}
+            <TextInput placeholderTextColor={cores.apagado} style={s.campo} value={c.identificacao} onChangeText={(t) => mudar({ identificacao: t })}
               autoCapitalize="characters" placeholder="Ex.: CE-BKB-0006" />
           )}
           {instalacoesDoTipo(c.tipo).length ? (
@@ -344,7 +344,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
                 {([['fila', 'Fila', 'Ex.: 3'], ['rack', 'Rack', 'Ex.: 12'], ['bastidor', 'Bastidor', 'Ex.: B03']] as const).map(([campo, rotulo, ex]) => (
                   <View key={campo} style={{ flex: 1 }}>
                     <Text style={s.suave}>{rotulo}</Text>
-                    <TextInput style={s.campo} value={c[campo] ?? ''} onChangeText={(t) => mudar({ [campo]: t })} placeholder={ex} />
+                    <TextInput placeholderTextColor={cores.apagado} style={s.campo} value={c[campo] ?? ''} onChangeText={(t) => mudar({ [campo]: t })} placeholder={ex} />
                   </View>
                 ))}
               </View>
@@ -353,7 +353,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           {c.tipo === 'site' || (dgo && c.instalacao === 'site_parceiro') ? (
             <>
               <Text style={s.rotulo}>{dgo ? 'SITE DE QUAL PARCEIRO? *' : 'PARCEIRO *'}</Text>
-              <TextInput style={s.campo} value={c.parceiro ?? ''} onChangeText={(t) => mudar({ parceiro: t })}
+              <TextInput placeholderTextColor={cores.apagado} style={s.campo} value={c.parceiro ?? ''} onChangeText={(t) => mudar({ parceiro: t })}
                 placeholder="Ex.: Claro, Vivo, TIM" />
             </>
           ) : null}
@@ -377,7 +377,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
                   </Pressable>
                 ))}
               </View>
-              <TextInput style={s.campo} value={c.origem_dgo ?? ''} onChangeText={(t) => mudar({ origem_dgo: t })}
+              <TextInput placeholderTextColor={cores.apagado} style={s.campo} value={c.origem_dgo ?? ''} onChangeText={(t) => mudar({ origem_dgo: t })}
                 autoCapitalize="characters" placeholder={(c.origem_tipo || 'dgo') === 'dgo' ? 'Nome do DGO / POP' : 'Nome ou TAG, ex.: CE-BKB-0010'} />
             </>
           ) : null}
@@ -443,7 +443,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
                 : <Text style={s.botaoPequenoTexto}>{c.latitude != null ? 'Capturar de novo' : 'Capturar localização'}</Text>}
             </Pressable>
           </View>
-          <TextInput style={s.campo} value={c.endereco ?? ''} onChangeText={(t) => mudar({ endereco: t })} placeholder="Endereço (preenchido pelo GPS)" multiline />
+          <TextInput placeholderTextColor={cores.apagado} style={s.campo} value={c.endereco ?? ''} onChangeText={(t) => mudar({ endereco: t })} placeholder="Endereço (preenchido pelo GPS)" multiline />
         </View>
 
         <View style={s.bloco}>
@@ -497,7 +497,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
                       ))}
                     </View>
                     {d && !seg ? (
-                      <TextInput style={s.campo} value={d.nome ?? ''} onChangeText={(t) => mudarDestino(i, { ...d, nome: t })}
+                      <TextInput placeholderTextColor={cores.apagado} style={s.campo} value={d.nome ?? ''} onChangeText={(t) => mudarDestino(i, { ...d, nome: t })}
                         autoCapitalize="characters" placeholder="Nome ou TAG (opcional), ex.: ENT-BKB-0002" />
                     ) : null}
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
@@ -581,9 +581,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           {c.saidas.length === 0 ? <Text style={s.suave}>Cadastre as saídas para lançar manobras.</Text> : (
             <>
               <View style={{ flexDirection: 'row', gap: 8 }}>
-                <TextInput style={[s.campo, { flex: 1 }]} keyboardType="number-pad" placeholder="Fibra entrada" value={manobra.entrada}
+                <Campo caixa={{ flex: 1 }} keyboardType="number-pad" placeholder="Fibra entrada" value={manobra.entrada}
                   onChangeText={(t) => setManobra({ ...manobra, entrada: t })} />
-                <TextInput style={[s.campo, { flex: 1 }]} keyboardType="number-pad" placeholder="Fibra saída" value={manobra.fibra}
+                <Campo caixa={{ flex: 1 }} keyboardType="number-pad" placeholder="Fibra saída" value={manobra.fibra}
                   onChangeText={(t) => setManobra({ ...manobra, fibra: t })} />
               </View>
               {c.saidas.length > 1 ? (
@@ -595,7 +595,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
                   ))}
                 </View>
               ) : null}
-              <TextInput style={s.campo} placeholder="Motivo (ex.: fibra quebrada no pé)" value={manobra.motivo}
+              <Campo placeholder="Motivo (ex.: fibra quebrada no pé)" value={manobra.motivo}
                 onChangeText={(t) => setManobra({ ...manobra, motivo: t })} />
               <Pressable style={[s.botaoPequeno, { alignSelf: 'flex-start', marginTop: 8 }]} onPress={adicionarManobra}>
                 <Text style={s.botaoPequenoTexto}>+ Lançar manobra</Text>
@@ -635,9 +635,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
             </View>
           ))}
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TextInput style={[s.campo, { width: 90 }]} keyboardType="number-pad" placeholder="Fibra" value={fibra.numero}
+            <Campo caixa={{ width: 90 }} keyboardType="number-pad" placeholder="Fibra" value={fibra.numero}
               onChangeText={(t) => setFibra({ ...fibra, numero: t })} />
-            <TextInput style={[s.campo, { flex: 1 }]} placeholder="Cliente" value={fibra.cliente} onChangeText={(t) => setFibra({ ...fibra, cliente: t })} />
+            <Campo caixa={{ flex: 1 }} placeholder="Cliente" value={fibra.cliente} onChangeText={(t) => setFibra({ ...fibra, cliente: t })} />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
             <View style={{ flex: 1 }} />
@@ -653,7 +653,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           ) : null}
           {dgo && fibra.olt ? (
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TextInput style={[s.campo, { flex: 1 }]} placeholder="Posição na OLT * (slot · PON)" value={fibra.oltPosicao}
+              <Campo caixa={{ flex: 1 }} placeholder="Posição na OLT * (slot · PON)" value={fibra.oltPosicao}
                 onChangeText={(t) => setFibra({ ...fibra, oltPosicao: t })} />
             </View>
           ) : null}
@@ -667,7 +667,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
                   </Pressable>
                 ))}
               </View>
-              <TextInput style={s.campo} placeholder="Ou digite o modelo da OLT" value={fibra.oltModelo}
+              <Campo placeholder="Ou digite o modelo da OLT" value={fibra.oltModelo}
                 onChangeText={(t) => setFibra({ ...fibra, oltModelo: t })} />
               <Text style={s.rotulo}>SFP</Text>
               <View style={s.chips}>
@@ -678,9 +678,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
                 ))}
               </View>
               <View style={{ flexDirection: 'row', gap: 8 }}>
-                <TextInput style={[s.campo, { flex: 1 }]} placeholder="Tipo (outro)" autoCapitalize="characters" value={fibra.sfp}
+                <Campo caixa={{ flex: 1 }} placeholder="Tipo (outro)" autoCapitalize="characters" value={fibra.sfp}
                   onChangeText={(t) => setFibra({ ...fibra, sfp: t })} />
-                <TextInput style={[s.campo, { flex: 1.6 }]} placeholder="Modelo / part number do SFP" value={fibra.sfpModelo}
+                <Campo caixa={{ flex: 1.6 }} placeholder="Modelo / part number do SFP" value={fibra.sfpModelo}
                   onChangeText={(t) => setFibra({ ...fibra, sfpModelo: t })} />
               </View>
               <Text style={s.rotulo}>CORDÃO OLT ↔ DGO</Text>
@@ -695,23 +695,23 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           ) : null}
           {dgo ? (
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TextInput style={[s.campo, { flex: 1.4 }]} placeholder="Posição no DGO *" value={fibra.posicao}
+              <Campo caixa={{ flex: 1.4 }} placeholder="Posição no DGO *" value={fibra.posicao}
                 onChangeText={(t) => setFibra({ ...fibra, posicao: t })} />
-              <TextInput style={[s.campo, { flex: 1 }]} keyboardType="numbers-and-punctuation" placeholder={fibra.olt ? 'Saída OLT dBm' : 'TX dBm'}
+              <Campo caixa={{ flex: 1 }} keyboardType="numbers-and-punctuation" placeholder={fibra.olt ? 'Saída OLT dBm' : 'TX dBm'}
                 value={fibra.tx} onChangeText={(t) => setFibra({ ...fibra, tx: t })} />
-              <TextInput style={[s.campo, { flex: 1 }]} keyboardType="numbers-and-punctuation" placeholder="RX dBm"
+              <Campo caixa={{ flex: 1 }} keyboardType="numbers-and-punctuation" placeholder="RX dBm"
                 value={fibra.rx} onChangeText={(t) => setFibra({ ...fibra, rx: t })} />
             </View>
           ) : null}
           {ponta ? (
             <View style={{ flexDirection: 'row', gap: 8 }}>
               {dgo ? null : (
-                <TextInput style={[s.campo, { flex: 1 }]} keyboardType="numbers-and-punctuation" placeholder="Sinal dBm"
+                <Campo caixa={{ flex: 1 }} keyboardType="numbers-and-punctuation" placeholder="Sinal dBm"
                   value={fibra.potencia} onChangeText={(t) => setFibra({ ...fibra, potencia: t })} />
               )}
-              <TextInput style={[s.campo, { flex: 1 }]} keyboardType="numbers-and-punctuation" placeholder="Reflexão dB"
+              <Campo caixa={{ flex: 1 }} keyboardType="numbers-and-punctuation" placeholder="Reflexão dB"
                 value={fibra.reflexao} onChangeText={(t) => setFibra({ ...fibra, reflexao: t })} />
-              <TextInput style={[s.campo, { flex: 1 }]} keyboardType="numbers-and-punctuation" placeholder="Perda dB/km"
+              <Campo caixa={{ flex: 1 }} keyboardType="numbers-and-punctuation" placeholder="Perda dB/km"
                 value={fibra.perda} onChangeText={(t) => setFibra({ ...fibra, perda: t })} />
             </View>
           ) : null}
@@ -775,7 +775,8 @@ const s = StyleSheet.create({
   rotulo: { fontSize: 12, fontWeight: '700', color: cores.suave, letterSpacing: 0.5, marginTop: 10, marginBottom: 2 },
   texto: { fontSize: 15, color: cores.texto },
   suave: { fontSize: 13, color: cores.suave, marginTop: 4 },
-  campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 6, padding: 10, fontSize: 15, backgroundColor: '#fff', marginTop: 6 },
+  campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 6, padding: 10, fontSize: 15, color: cores.texto, backgroundColor: '#fff', marginTop: 6 },
+  rotuloCampo: { fontSize: 12, fontWeight: '700', color: cores.texto2 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   chip: { borderWidth: 1, borderColor: cores.borda, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 6, backgroundColor: '#fff' },
   chipAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
@@ -794,3 +795,13 @@ const s = StyleSheet.create({
   botaoTexto: { color: '#fff', fontSize: 16, fontWeight: '700' },
   rodape: { backgroundColor: cores.cartao, borderTopWidth: 1, borderTopColor: cores.borda, padding: 12 },
 });
+
+// Campo com o nome sempre visível em cima (o texto de exemplo some ao digitar e em alguns celulares nem aparece).
+function Campo({ caixa, placeholder, ...props }: TextInputProps & { caixa?: ViewStyle }) {
+  return (
+    <View style={[{ marginTop: 8 }, caixa]}>
+      <Text style={s.rotuloCampo} numberOfLines={1}>{placeholder}</Text>
+      <TextInput {...props} style={[s.campo, { marginTop: 3 }]} placeholder={placeholder} placeholderTextColor={cores.apagado} />
+    </View>
+  );
+}

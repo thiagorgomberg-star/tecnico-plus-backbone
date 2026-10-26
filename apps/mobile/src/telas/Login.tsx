@@ -20,7 +20,7 @@ export default function Login() {
     <View style={[estilo.tela, { justifyContent: 'center', padding: 24 }]}>
       <Text style={[estilo.titulo, { fontSize: 26 }]}>Técnico Plus</Text>
       <Text style={[estilo.suave, { marginBottom: 24 }]}>Backbone Multivale</Text>
-      <TextInput
+      <TextInput placeholderTextColor={cores.apagado}
         style={estilo.campo}
         placeholder="E-mail"
         autoCapitalize="none"
@@ -28,7 +28,7 @@ export default function Login() {
         value={email}
         onChangeText={setEmail}
       />
-      <TextInput
+      <TextInput placeholderTextColor={cores.apagado}
         style={estilo.campo}
         placeholder="Senha"
         secureTextEntry

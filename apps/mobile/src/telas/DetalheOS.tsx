@@ -357,7 +357,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
             {acao ? (
               <View style={s.bloco}>
                 <Text style={s.rotulo}>OBSERVAÇÕES DO ATENDIMENTO</Text>
-                <TextInput style={s.campo} placeholder="O que foi encontrado, feito, pendências..." multiline
+                <TextInput placeholderTextColor={cores.apagado} style={s.campo} placeholder="O que foi encontrado, feito, pendências..." multiline
                   value={observacao} onChangeText={setObservacao} />
               </View>
             ) : null}
@@ -409,7 +409,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
 
       {pedindoPausa ? (
         <View style={s.rodape}>
-          <TextInput style={[s.campo, { minHeight: 44 }]} placeholder="Motivo da pausa (ex.: chuva, falta de material)" value={motivoPausa}
+          <TextInput placeholderTextColor={cores.apagado} style={[s.campo, { minHeight: 44 }]} placeholder="Motivo da pausa (ex.: chuva, falta de material)" value={motivoPausa}
             onChangeText={setMotivoPausa} autoFocus />
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
             <Pressable style={[s.botaoRodape, s.botaoSecundario]} onPress={() => setPedindoPausa(false)}>

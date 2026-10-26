@@ -184,7 +184,7 @@ function Inspecao({ item, usuario, fechar, feito, restantes }: {
           </View>
 
           <Text style={s.rotulo}>Observação {condicao !== 'ok' ? '*' : ''}</Text>
-          <TextInput style={[estilo.campo, { minHeight: 60, textAlignVertical: 'top' }]} value={observacao} onChangeText={setObservacao} multiline
+          <TextInput placeholderTextColor={cores.apagado} style={[estilo.campo, { minHeight: 60, textAlignVertical: 'top' }]} value={observacao} onChangeText={setObservacao} multiline
             placeholder={condicao === 'ok' ? 'Opcional' : 'O que aconteceu com o item'} />
 
           <Pressable style={[estilo.botao, { backgroundColor: cores.sucesso }]} onPress={salvar} disabled={salvando}>
