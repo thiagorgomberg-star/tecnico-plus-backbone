@@ -266,7 +266,7 @@ function Conteudo() {
                 {daCaixa.map((f, i) => (
                   <figure key={i} className="break-inside-avoid">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    {f.url ? <img src={f.url} alt="" className="aspect-[4/3] w-full rounded border border-gray-200 object-cover" /> : null}
+                    {f.url ? <img src={f.url} alt="" className="h-auto w-full rounded border border-gray-200 bg-gray-50 object-contain" /> : null}
                     <figcaption className="mt-0.5 text-xs text-gray-500">
                       {f.tipo === "foto_otdr" ? `OTDR · fibra ${f.fibra}` : f.tipo === "foto_olt" ? "OLT e cordões" : f.tipo === "foto_bandeja" ? `Bandeja ${f.bandeja} · fibras acomodadas` : dgo ? "DGO" : "Acomodação da caixa"} · {quando(f.tirada_em)}
                     </figcaption>
@@ -295,7 +295,7 @@ function Conteudo() {
               {[antes[i], depois[i]].map((f, lado) => (
                 <figure key={lado}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {f?.url ? <img src={f.url} alt={`${lado ? "Depois" : "Antes"} ${i + 1}`} className="aspect-[4/3] w-full rounded border border-gray-200 object-cover" />
+                  {f?.url ? <img src={f.url} alt={`${lado ? "Depois" : "Antes"} ${i + 1}`} className="h-auto w-full rounded border border-gray-200 bg-gray-50 object-contain" />
                     : <div className="flex aspect-[4/3] items-center justify-center rounded border border-dashed border-gray-300 text-gray-400">—</div>}
                   <figcaption className="mt-1 text-xs text-gray-500">{lado ? "Depois" : "Antes"} {i + 1}{f?.tirada_em ? ` · ${quando(f.tirada_em)}` : ""}</figcaption>
                 </figure>
@@ -314,7 +314,7 @@ function Conteudo() {
             {fotosOs.map((f, i) => (
               <figure key={i} className="break-inside-avoid">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                {f.url ? <img src={f.url} alt={`Foto ${i + 1}`} className="aspect-[4/3] w-full rounded border border-gray-200 object-cover" /> : null}
+                {f.url ? <img src={f.url} alt={`Foto ${i + 1}`} className="h-auto w-full rounded border border-gray-200 bg-gray-50 object-contain" /> : null}
                 <figcaption className="mt-0.5 text-xs text-gray-500">Foto {i + 1} · {quando(f.tirada_em)}</figcaption>
               </figure>
             ))}
