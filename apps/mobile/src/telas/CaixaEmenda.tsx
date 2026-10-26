@@ -7,7 +7,7 @@ import { Caixa, caixasDaRede, PREFIXO_TAG, proximaTag, salvarCaixa } from '../li
 import { cores } from '../lib/estilo';
 import {
   calcularPlano, CAPACIDADES, CaixaRede, descreverFibra, Destino, origemNaoCadastrada, rotuloDestino, TIPOS_DESTINO, faixasDaBandeja, FUSOES_POR_BANDEJA, herdarDaAnterior, Manobra, PADROES_CORES, rotuloPonto,
-  descreverOlt, ehPonta, instalacoesDoTipo, MODELOS_OLT, TIPOS_SFP, TIPOS_CORDAO, separarBandejas, SituacaoFibra, TIPOS_PONTO,
+  descreverOlt, ehPonta, fibra as infoFibra, nomeDoTubo, rastrearFibra, clienteDoCaminho, instalacoesDoTipo, MODELOS_OLT, TIPOS_SFP, TIPOS_CORDAO, separarBandejas, SituacaoFibra, TIPOS_PONTO,
 } from '../lib/fusao';
 import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
 import { enderecoDe, posicaoAtual } from '../lib/localizacao';
@@ -55,6 +55,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const [manobra, setManobra] = useState({ entrada: '', saida: 1, fibra: '', motivo: '' });
   const FIBRA_VAZIA = { numero: '', cliente: '', semPotencia: false, potencia: '', reflexao: '', perda: '', posicao: '', tx: '', rx: '', olt: false, oltPosicao: '', sfp: '', sfpModelo: '', cordao: '', oltModelo: '' };
   const [fibra, setFibra] = useState(FIBRA_VAZIA);
+  const [todosTubos, setTodosTubos] = useState(false);
   const [camera, setCamera] = useState<Camera | null>(null);
   // Fotos já tiradas: da caixa, da tela do OTDR por fibra e de cada bandeja (enviadas + na fila).
   const [fotos, setFotos] = useState<{ caixa: number; olt: number; otdr: Record<number, number>; bandeja: Record<number, number> }>({ caixa: 0, olt: 0, otdr: {}, bandeja: {} });
@@ -191,6 +192,18 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const tagAuto = nova || tagDeOutroTipo ? proximaTag(c.tipo, [...rede, ...daOs].filter((x) => x.id !== c.id)) : null;
   const plano = calcularPlano(c);
   const bandejas = separarBandejas(c);
+  // Cliente (ou fibra apagada) lançado em outra caixa do caminho da fibra: aparece no mapa das fibras desta caixa.
+  const naRede = useMemo(() => {
+    const r = new Map<number, { cliente: string | null; apagada: boolean; caixa: string }>();
+    if (nova || !todasCaixas.length) return r;
+    const lista = [c as unknown as CaixaRede, ...todasCaixas.filter((x) => x.id !== c.id)];
+    for (let n = 1; n <= c.capacidade_fibras; n++) {
+      const passos = rastrearFibra(lista, c.id, n).passos.filter((p) => p.caixa.id !== c.id);
+      const s = clienteDoCaminho(passos);
+      if (s) r.set(n, { cliente: s.cliente, apagada: s.sem_potencia, caixa: passos.find((p) => p.caixa.fibras?.some((f) => f.fibra === p.fibraEntrada && (f.cliente || f.sem_potencia)))?.caixa.identificacao ?? '' });
+    }
+    return r;
+  }, [todasCaixas, nova, c.id, c.capacidade_fibras, c.saidas, c.manobras, c.origem_caixa_id, c.origem_saida]);
   const grupos = gruposEditados ? { f: c.grupos_fusionados, v: c.grupos_vagos } : { f: plano.gruposFusionados, v: plano.gruposVagos };
 
   function adicionarManobra() {
@@ -203,6 +216,17 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
     const m: Manobra = { fibra_entrada: entrada, saida: manobra.saida, fibra_saida: fs, motivo: manobra.motivo.trim() || null };
     mudar({ manobras: [...c.manobras.filter((x) => x.fibra_entrada !== entrada), m].sort((a, b) => a.fibra_entrada - b.fibra_entrada) });
     setManobra({ ...manobra, entrada: '', fibra: '', motivo: '' });
+  }
+
+  // Toque na fibra do mapa: abre os campos dela já com o número (e o que já foi lançado, para corrigir).
+  function escolherFibra(n: number) {
+    const f = c.fibras.find((x) => x.fibra === n);
+    const txt = (v: number | null | undefined) => (v == null ? '' : String(v).replace('.', ','));
+    setFibra(f ? {
+      numero: String(n), cliente: f.cliente ?? '', semPotencia: f.sem_potencia, potencia: txt(f.potencia_dbm), reflexao: txt(f.reflexao_db),
+      perda: txt(f.perda_db_km), posicao: f.posicao_dgo ?? '', tx: txt(f.potencia_tx_dbm), rx: txt(f.potencia_rx_dbm), olt: !!f.cordao_olt,
+      oltPosicao: f.olt_posicao ?? '', sfp: f.sfp_tipo ?? '', sfpModelo: f.sfp_modelo ?? '', cordao: f.cordao_tipo ?? '', oltModelo: f.olt_modelo ?? '',
+    } : { ...FIBRA_VAZIA, numero: String(n), olt: fibra.olt, oltModelo: fibra.oltModelo, sfp: fibra.sfp, sfpModelo: fibra.sfpModelo, cordao: fibra.cordao });
   }
 
   function adicionarFibra() {
@@ -634,6 +658,102 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
               <Pressable onPress={() => mudar({ fibras: c.fibras.filter((x) => x !== f) })}><Text style={{ color: cores.perigo }}>×</Text></Pressable>
             </View>
           ))}
+          {c.capacidade_fibras > 0 ? (() => {
+            const padrao = c.padrao_cores_entrada ?? undefined;
+            const porTubo = c.capacidade_fibras < 12 ? c.capacidade_fibras : 12;
+            const tubos = Math.ceil(c.capacidade_fibras / porTubo);
+            const destino = new Map(plano.ligacoes.map((l) => [l.entrada, l]));
+            const situacao = new Map(c.fibras.map((f) => [f.fibra, f]));
+            // Com as fusões por bandeja definidas, o mapa sai por bandeja (como fica na caixa); senão, por tubo.
+            const porBandeja = !dgo && !!c.fusoes_por_bandeja && plano.ligacoes.length > 0;
+            const grupos: { titulo: string; fibras: number[]; bandeja?: number }[] = porBandeja
+              ? [
+                ...bandejas.map((b) => ({ titulo: `Bandeja ${b.numero} · ${b.ligacoes.length} fusões`, fibras: b.ligacoes.map((l) => l.entrada), bandeja: b.numero })),
+                ...(() => {
+                  const param = Array.from({ length: c.capacidade_fibras }, (_, k) => k + 1).filter((n) => !destino.has(n));
+                  return param.length ? [{ titulo: `Param nesta caixa (sem fusão) · ${param.length}`, fibras: param }] : [];
+                })(),
+              ]
+              : Array.from({ length: tubos }, (_, k) => ({
+                titulo: nomeDoTubo(k + 1, padrao),
+                fibras: Array.from({ length: porTubo }, (_, j) => k * porTubo + j + 1).filter((n) => n <= c.capacidade_fibras),
+              }));
+            const mostrar = todosTubos ? grupos.length : Math.min(grupos.length, 4);
+            const sel = numero(fibra.numero);
+            return (
+              <View style={s.mapaFibras}>
+                <Text style={s.mapaTitulo}>MAPA DAS FIBRAS · toque na fibra para lançar cliente ou fibra apagada</Text>
+                <View style={s.chips}>
+                  {[['#1E9E4A', 'Ativa (com cliente; ↳ = lançado em outra caixa)'], [cores.perigo, 'Apagada / sem potência'], ['#98A2B3', c.saidas.length ? 'Para nesta caixa' : 'Sem saída lançada']].map(([cor, txt]) => (
+                    <View key={txt} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: cor }} /><Text style={s.suave}>{txt}</Text>
+                    </View>
+                  ))}
+                </View>
+                {grupos.slice(0, mostrar).map((g) => (
+                  <View key={g.titulo} style={{ marginTop: 10 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={[s.rotuloCampo, { flex: 1 }]}>{g.titulo}</Text>
+                      {g.bandeja ? (
+                        <Pressable disabled={nova} hitSlop={8}
+                          onPress={() => setCamera({ tipo: 'foto_bandeja', bandeja: g.bandeja, titulo: `${c.identificacao} · Bandeja ${g.bandeja}`, feitas: fotos.bandeja[g.bandeja!] ?? 0 })}>
+                          <Text style={{ fontSize: 12, fontWeight: '800', color: nova ? cores.suave : fotos.bandeja[g.bandeja] ? '#1E9E4A' : cores.primaria }}>
+                            {nova ? 'Foto: salve a caixa antes' : fotos.bandeja[g.bandeja] ? `✓ Foto (${fotos.bandeja[g.bandeja]}) · outra` : '📷 Foto da bandeja'}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                    <View style={[s.chips, { gap: 6 }]}>
+                      {g.fibras.map((n) => {
+                        const inf = infoFibra(n, c.capacidade_fibras, padrao);
+                        const st = situacao.get(n);
+                        const herdada = st ? null : naRede.get(n);
+                        const lig = destino.get(n);
+                        const borda = st?.sem_potencia || herdada?.apagada ? cores.perigo : st?.cliente || herdada?.cliente ? '#1E9E4A' : sel === n ? cores.primaria : cores.borda;
+                        return (
+                          <Pressable key={n} onPress={() => escolherFibra(n)}
+                            style={[s.fibraChip, { borderColor: borda, borderWidth: st || sel === n ? 2 : 1 }, sel === n && { backgroundColor: '#E8F0FB' }, !lig && c.saidas.length > 0 && !st && !herdada && { opacity: 0.55 }]}>
+                            <View style={[s.fibraCor, { backgroundColor: inf.corFibra.hex }]} />
+                            <Text style={s.fibraNum}>{n}</Text>
+                            <Text style={s.fibraDestino} numberOfLines={1}>
+                              {st?.sem_potencia ? 'apagada' : st?.cliente ? st.cliente : herdada ? (herdada.apagada ? 'apagada' : `↳${herdada.cliente}`) : lig ? `S${lig.saida}·F${lig.fibraSaida}${lig.manobra ? '*' : ''}` : c.saidas.length ? 'para' : ''}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))}
+                {grupos.length > 4 ? (
+                  <Pressable onPress={() => setTodosTubos((v) => !v)} style={{ paddingTop: 10 }}>
+                    <Text style={{ color: cores.primaria, fontWeight: '700' }}>{todosTubos ? `Mostrar só ${porBandeja ? 'as 4 primeiras bandejas' : 'os 4 primeiros tubos'}` : `Mostrar ${porBandeja ? 'todas as' : 'todos os'} ${grupos.length} ${porBandeja ? 'bandejas' : 'tubos'}`}</Text>
+                  </Pressable>
+                ) : null}
+                {sel && sel <= c.capacidade_fibras ? (
+                  <View style={s.fibraSelecionada}>
+                    <Text style={{ fontWeight: '800', color: cores.texto }}>{descreverFibra(sel, c.capacidade_fibras, padrao)}</Text>
+                    <Text style={s.suave}>
+                      {destino.get(sel) ? `Vai para a saída ${destino.get(sel)!.saida}, fibra ${destino.get(sel)!.fibraSaida}${destino.get(sel)!.manobra ? ' (manobra)' : ''}` : c.saidas.length ? 'Não segue: para nesta caixa' : 'Lance as saídas para ver para onde ela vai'}
+                      {situacao.get(sel) ? ' · já lançada, altere e toque em Salvar fibra' : ''}
+                    </Text>
+                    {!situacao.get(sel) && naRede.get(sel) ? (
+                      <Text style={[s.suave, { color: '#1E9E4A', fontWeight: '700' }]}>
+                        {naRede.get(sel)!.apagada ? 'Apagada' : `Cliente ${naRede.get(sel)!.cliente}`}, lançado na {naRede.get(sel)!.caixa || 'outra caixa'}
+                      </Text>
+                    ) : null}
+                    <View style={[s.chips, { marginTop: 6 }]}>
+                      <Pressable style={chip(!fibra.semPotencia && !!fibra.cliente.trim())} onPress={() => setFibra({ ...fibra, semPotencia: false })}>
+                        <Text style={textoChip(!fibra.semPotencia && !!fibra.cliente.trim())}>Ativa: informe o cliente abaixo</Text>
+                      </Pressable>
+                      <Pressable style={chip(fibra.semPotencia)} onPress={() => setFibra({ ...fibra, semPotencia: !fibra.semPotencia })}>
+                        <Text style={textoChip(fibra.semPotencia)}>Apagada / sem potência</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })() : null}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Campo caixa={{ width: 90 }} keyboardType="number-pad" placeholder="Fibra" value={fibra.numero}
               onChangeText={(t) => setFibra({ ...fibra, numero: t })} />
@@ -716,7 +836,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
             </View>
           ) : null}
           <Pressable style={[s.botaoPequeno, { alignSelf: 'flex-start', marginTop: 8 }]} onPress={adicionarFibra}>
-            <Text style={s.botaoPequenoTexto}>+ Lançar fibra</Text>
+            <Text style={s.botaoPequenoTexto}>{c.fibras.some((x) => x.fibra === numero(fibra.numero)) ? 'Salvar fibra' : '+ Lançar fibra'}</Text>
           </Pressable>
         </View>
 
@@ -777,6 +897,13 @@ const s = StyleSheet.create({
   suave: { fontSize: 13, color: cores.suave, marginTop: 4 },
   campo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 6, padding: 10, fontSize: 15, color: cores.texto, backgroundColor: '#fff', marginTop: 6 },
   rotuloCampo: { fontSize: 12, fontWeight: '700', color: cores.texto2 },
+  mapaFibras: { marginTop: 4, marginBottom: 6, padding: 10, borderRadius: 10, backgroundColor: '#F6F8FB', borderWidth: 1, borderColor: cores.borda },
+  mapaTitulo: { fontSize: 12, fontWeight: '800', color: cores.primaria, marginBottom: 6 },
+  fibraChip: { width: 58, alignItems: 'center', paddingVertical: 5, borderRadius: 8, backgroundColor: '#fff' },
+  fibraCor: { width: 16, height: 16, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(0,0,0,0.25)' },
+  fibraNum: { fontSize: 13, fontWeight: '800', color: cores.texto, marginTop: 2 },
+  fibraDestino: { fontSize: 9.5, color: cores.texto2, maxWidth: 54 },
+  fibraSelecionada: { marginTop: 10, padding: 8, borderRadius: 8, backgroundColor: '#fff', borderLeftWidth: 3, borderLeftColor: cores.primaria },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   chip: { borderWidth: 1, borderColor: cores.borda, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 6, backgroundColor: '#fff' },
   chipAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
