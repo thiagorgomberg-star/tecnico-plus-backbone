@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import Cabecalho from '../componentes/Cabecalho';
 import Icone from '../componentes/Icone';
 import { cores } from '../lib/estilo';
 import {
-  aoMudarFila, descartarRecusado, descreverItem, erroSincronizacao, ItemFila, itensPendentes, itensRecusados, Recusado, reenviarRecusado, sincronizar,
+  aoMudarFila, definirFotosSoWifi, descartarRecusado, descreverItem, ehFoto, erroSincronizacao, fotosSoWifi, ItemFila, itensPendentes, itensRecusados, Recusado,
+  reenviarRecusado, segurandoFotos, sincronizar,
 } from '../lib/fila';
 
 const quando = (iso?: string) => (iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '');
@@ -16,9 +17,14 @@ export default function FilaEnvio({ voltar }: { voltar: () => void }) {
   const [pendentes, setPendentes] = useState<ItemFila[] | null>(null);
   const [recusados, setRecusados] = useState<Recusado[]>([]);
   const [enviando, setEnviando] = useState(false);
+  const [soWifi, setSoWifi] = useState(false);
+  const [segurando, setSegurando] = useState(false);
 
   useEffect(() => {
-    const ler = async () => { setPendentes(await itensPendentes()); setRecusados(await itensRecusados()); };
+    const ler = async () => {
+      setPendentes(await itensPendentes()); setRecusados(await itensRecusados());
+      setSoWifi(await fotosSoWifi()); setSegurando(await segurandoFotos());
+    };
     ler();
     return aoMudarFila(ler);
   }, []);
@@ -58,6 +64,20 @@ export default function FilaEnvio({ voltar }: { voltar: () => void }) {
           {enviando ? <ActivityIndicator color="#fff" /> : <Icone nome="cloud-upload-outline" tamanho={20} cor="#fff" />}
           <Text style={s.botaoTexto}>Enviar agora</Text>
         </Pressable>
+
+        <View style={[s.item, { marginTop: 12 }]}>
+          <Icone nome="wifi" tamanho={20} cor={cores.primaria} />
+          <View style={{ flex: 1 }}>
+            <Text style={s.texto}>Enviar fotos só no Wi-Fi</Text>
+            <Text style={s.suave}>Economiza o plano de dados. GPS e O.S. continuam indo pelo 4G.</Text>
+          </View>
+          <Switch value={soWifi} onValueChange={(v) => { setSoWifi(v); definirFotosSoWifi(v); }} accessibilityLabel="Enviar fotos só no Wi-Fi" />
+        </View>
+        {segurando && (pendentes ?? []).some(ehFoto) ? (
+          <Text style={[s.suave, { marginTop: 6, color: cores.alerta }]}>
+            {(pendentes ?? []).filter(ehFoto).length} foto(s) esperando Wi-Fi.
+          </Text>
+        ) : null}
 
         <Text style={s.secao}>AGUARDANDO ENVIO ({pendentes?.length ?? 0})</Text>
         {pendentes == null ? <ActivityIndicator color={cores.primaria} /> : grupos.length === 0 ? (

@@ -100,6 +100,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
   // Só vai para 0 depois que a câmera abre, quando o aparelho já informou as lentes.
   const [ampla, setAmpla] = useState(true);
   const [pronta, setPronta] = useState(false);
+  const [lanterna, setLanterna] = useState(false);
   const posicao = useRef<{ latitude: number; longitude: number } | null>(null);
   const endereco = useRef<{ latitude: number; longitude: number; texto: string } | null>(null);
   const consultando = useRef(false);
@@ -279,7 +280,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
   return (
     <View style={estilos.tela}>
       <CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back" pictureSize={tamanho} onCameraReady={cameraPronta}
-        zoom={ampla && pronta ? 0 : 0.000001} />
+        zoom={ampla && pronta ? 0 : 0.000001} enableTorch={lanterna} />
       {referencia && sobrepor ? (
         <Image source={{ uri: referencia }} style={[StyleSheet.absoluteFill, { opacity: 0.35 }]} resizeMode="cover" pointerEvents="none" />
       ) : null}
@@ -308,6 +309,10 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, usuario, fechar,
         <Text style={[estilos.texto, { color: !minimo ? '#fff' : total >= minimo ? '#8BE28F' : '#FFD54F' }]}>
           {minimo ? `${total}/${minimo}` : total} {total === 1 && !minimo ? 'foto' : 'fotos'}{fila.length ? ` · gravando ${fila.length}` : ''}
         </Text>
+        <Pressable onPress={() => setLanterna((v) => !v)} style={[estilos.chip, lanterna && { backgroundColor: '#F5B700' }]}
+          accessibilityLabel={lanterna ? 'Desligar lanterna' : 'Ligar lanterna'}>
+          <Text style={estilos.texto}>{lanterna ? '🔦 Ligada' : '🔦 Lanterna'}</Text>
+        </Pressable>
         <Pressable onPress={() => setAmpla((v) => !v)} style={[estilos.chip, ampla && { backgroundColor: cores.primaria }]}
           accessibilityLabel={ampla ? 'Lente aberta (0,5x). Tocar para 1x' : 'Lente normal (1x). Tocar para abrir'}>
           <Text style={estilos.texto}>{ampla ? '0,5x' : '1x'}</Text>

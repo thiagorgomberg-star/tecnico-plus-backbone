@@ -91,6 +91,12 @@ export async function garantirRastreio(): Promise<SituacaoRastreio | null> {
   return { permissao, ativo, ultimoPonto: ultimo };
 }
 
+// O Android ainda está economizando bateria no app? (sem leitura no aparelho: considera que não)
+export async function economiaBateriaLigada() {
+  if (Platform.OS !== 'android') return false;
+  try { return await Battery.isBatteryOptimizationEnabledAsync(); } catch { return false; }
+}
+
 // Abre a tela do Android para tirar o app da economia de bateria (o que mais derruba o trajeto).
 export async function abrirAjusteBateria() {
   if (Platform.OS === 'android') {

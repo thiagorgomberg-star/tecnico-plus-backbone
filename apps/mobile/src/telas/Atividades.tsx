@@ -24,7 +24,7 @@ import {
   lerJornada,
   ultimoKm,
 } from '../lib/jornada';
-import { abrirAjusteBateria, garantirRastreio, SituacaoRastreio } from '../lib/rastreio';
+import { abrirAjusteBateria, economiaBateriaLigada, garantirRastreio, SituacaoRastreio } from '../lib/rastreio';
 import { assumirBacklog, backlogGuardado, buscarBacklog, compartilharBacklogKmz, ItemBacklog } from '../lib/backlog';
 import { posicaoRapida } from '../lib/localizacao';
 import { distanciaKm, navegarAte } from '../lib/navegacao';
@@ -235,8 +235,9 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
       if (!rastreando) {
         Alert.alert('Localização em segundo plano', 'Para registrar o trajeto completo do dia, permita a localização "o tempo todo" nas configurações do app.',
           [{ text: 'Depois', style: 'cancel' }, { text: 'Abrir configurações', onPress: () => Linking.openSettings() }]);
-      } else if (!(await AsyncStorage.getItem('aviso-bateria-visto'))) {
-        AsyncStorage.setItem('aviso-bateria-visto', '1');
+      } else if (await economiaBateriaLigada() && (await AsyncStorage.getItem('aviso-bateria-dia')) !== new Date().toDateString()) {
+        // Pergunta todo dia (uma vez) enquanto o app continuar na economia de bateria.
+        AsyncStorage.setItem('aviso-bateria-dia', new Date().toDateString());
         Alert.alert('Não perder o trajeto', 'Para o celular não parar o GPS com o app em segundo plano, deixe o Técnico Plus sem restrição de bateria: '
           + 'na próxima tela, escolha "Todos os apps", toque em Técnico Plus e marque "Não otimizar" (ou Bateria > "Sem restrições").',
           [{ text: 'Depois', style: 'cancel' }, { text: 'Ajustar agora', onPress: abrirAjusteBateria }]);

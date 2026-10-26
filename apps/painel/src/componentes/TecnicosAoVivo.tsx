@@ -43,6 +43,7 @@ export default function TecnicosAoVivo() {
   const [trajetoCarros, setTrajetoCarros] = useState<PontoCarro[]>([]);
   const [agora, setAgora] = useState(0);
   const [selecionado, setSelecionado] = useState<string | null>(null);
+  const [filas, setFilas] = useState<Map<string, FilaStatus>>(new Map());
   const [intervalo, setIntervalo] = useState(30);
   const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null);
   const [atualizando, setAtualizando] = useState(false);
@@ -62,6 +63,8 @@ export default function TecnicosAoVivo() {
         setTrajeto(data ?? []);
         setAtualizadoEm(new Date());
       });
+    supabase.from("fila_status").select("*")
+      .then(({ data }) => setFilas(new Map(((data as FilaStatus[]) ?? []).map((f) => [f.usuario_id, f]))));
     supabase.from("geocar_viaturas")
       .select("viat_id, matricula, datahora, latitude, longitude, velocidade_kmh, ignicao, rua, veiculos(tecnico_id, usuarios(nome))")
       .order("matricula")
@@ -331,6 +334,7 @@ export default function TecnicosAoVivo() {
                     <span className="mt-1 block text-xs text-gray-500">
                       <b className="text-sm text-gray-900">{fmtKm(res?.km ?? 0)}</b> percorridos hoje · {res?.paradas.length ?? 0} paradas
                     </span>
+                    <AvisoFila fila={filas.get(p.tecnico_id)} agora={agora} />
                     {carro && (
                       <span className="mt-1 block text-xs text-gray-500">
                         Carro {carro.matricula} (GEOCAR): {situacaoCarro(carro, agora)} · <b className="text-gray-900">{fmtKm(resCarro?.km ?? 0)}</b> hoje
@@ -416,4 +420,25 @@ function situacaoCarro(c: Carro, agora: number) {
   const min = c.datahora ? Math.round((agora - new Date(c.datahora).getTime()) / 60000) : null;
   const estado = c.ignicao ? (c.velocidade_kmh ? `andando a ${c.velocidade_kmh} km/h` : "ligado parado") : "desligado";
   return `${estado}${min != null ? ` · sinal há ${min < 60 ? `${min} min` : duracao(min)}` : ""}`;
+}
+
+type FilaStatus = {
+  usuario_id: string; pendentes: number; fotos: number; recusados: number; mais_antigo: string | null;
+  ultimo_erro: string | null; segurando_wifi: boolean; atualizado_em: string;
+};
+
+// Envios parados no celular do técnico: itens esperando há mais de 15 min, recusados pelo servidor ou fotos aguardando Wi-Fi.
+function AvisoFila({ fila, agora }: { fila?: FilaStatus; agora: number }) {
+  if (!fila) return null;
+  const parado = fila.mais_antigo ? Math.round((agora - new Date(fila.mais_antigo).getTime()) / 60000) : 0;
+  const travada = fila.pendentes > 0 && parado > 15 && !fila.segurando_wifi;
+  if (!travada && !fila.recusados && !(fila.segurando_wifi && fila.fotos)) return null;
+  return (
+    <span className={`mt-1 block rounded px-2 py-1 text-xs ${travada || fila.recusados ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-800"}`}>
+      {travada && <>⚠ {fila.pendentes} envio(s) parado(s) há {duracao(parado)}{fila.ultimo_erro ? ` · erro: ${fila.ultimo_erro}` : ""}. </>}
+      {fila.recusados ? <>⚠ {fila.recusados} recusado(s) pelo servidor. </> : null}
+      {fila.segurando_wifi && fila.fotos ? <>📶 {fila.fotos} foto(s) esperando Wi-Fi. </> : null}
+      <span className="text-gray-500">(informado há {Math.round((agora - new Date(fila.atualizado_em).getTime()) / 60000)} min)</span>
+    </span>
+  );
 }

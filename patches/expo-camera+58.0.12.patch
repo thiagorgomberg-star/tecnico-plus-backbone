@@ -1,8 +1,28 @@
 diff --git a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
-index a676d64..724a0e2 100644
+index a676d64..e655a26 100644
 --- a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
 +++ b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
-@@ -680,8 +680,11 @@ class ExpoCameraView(
+@@ -136,6 +136,19 @@ class ExpoCameraView(
+ 
+   private var previewView = PreviewView(context).apply {
+     elevation = 0f
++    // Técnico Plus: tocar na imagem foca (e ajusta a luz) naquele ponto.
++    setOnTouchListener { v, event ->
++      if (event.action == android.view.MotionEvent.ACTION_UP) {
++        val ponto = (v as PreviewView).meteringPointFactory.createPoint(event.x, event.y)
++        this@ExpoCameraView.camera?.cameraControl?.startFocusAndMetering(
++          FocusMeteringAction.Builder(ponto, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
++            .setAutoCancelDuration(5, java.util.concurrent.TimeUnit.SECONDS)
++            .build()
++        )
++        v.performClick()
++      }
++      true
++    }
+   }
+   private val scope = CoroutineScope(
+     Dispatchers.Main + SupervisorJob() + CoroutineExceptionHandler { _, throwable ->
+@@ -680,8 +693,11 @@ class ExpoCameraView(
    }
  
    private fun setCameraZoom(value: Float) {

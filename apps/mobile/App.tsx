@@ -15,6 +15,7 @@ import { cores, estilo } from './src/lib/estilo';
 import { aoMudarFila, itensPendentes, sincronizar } from './src/lib/fila';
 import { limparJornadaLocal } from './src/lib/jornada';
 import { aplicarAtualizacaoOta } from './src/lib/atualizacao';
+import { vigiarErros } from './src/lib/erros';
 import { garantirRastreio } from './src/lib/rastreio';
 import { supabase } from './src/lib/supabase';
 import { esquecerDispositivo, ouvirAlertas, ouvirTrocaDeToken, prepararAvisos, registrarDispositivo, verificarAlertas } from './src/lib/avisos';
@@ -38,6 +39,9 @@ import AnalisarCurva from './src/telas/AnalisarCurva';
 
 export type Perfil = { nome: string; cargo: string | null };
 type Camera = { osId: string; fotosJaFeitas: number };
+
+// Erros não tratados do app vão para o servidor (tabela app_erros).
+vigiarErros();
 
 export default function App() {
   const [fontesProntas] = useFonts({ RobotoCondensed_400Regular, RobotoCondensed_700Bold, ...fonteIcones });

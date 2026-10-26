@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { randomUUID } from 'expo-crypto';
 import { File } from 'expo-file-system';
+import * as Network from 'expo-network';
 import { AppState } from 'react-native';
 
 import { supabase } from './supabase';
@@ -51,6 +52,8 @@ export type ItemFila =
   | { tipo: 'kmz'; id: string; kmzId: string; rotaId: string; nome: string; arquivo: string; tracado: unknown; extensao_m: number | null };
 
 type NovoItem = ItemFila extends infer T ? (T extends ItemFila ? Omit<T, 'id'> : never) : never;
+// Quando entrou na fila (itens antigos, de antes desta versão, não têm).
+const entrouEm = (i: ItemFila) => (i as { em?: string }).em;
 
 const CHAVE = 'fila-offline';
 const CHAVE_RECUSADOS = 'fila-recusados';
@@ -70,7 +73,7 @@ async function gravar(itens: ItemFila[]) {
 
 export async function enfileirar(item: NovoItem) {
   const itens = await ler();
-  itens.push({ ...item, id: randomUUID() } as ItemFila);
+  itens.push({ ...item, id: randomUUID(), em: new Date().toISOString() } as unknown as ItemFila);
   await gravar(itens);
   sincronizar();
 }
@@ -237,29 +240,78 @@ function recusadoPeloBanco(e: unknown) {
   return http >= 400 && http < 500 && ![401, 408, 429].includes(http); // 401 = sessão vencida: espera renovar
 }
 
+// Opção do técnico: fotos só sobem no Wi-Fi (economiza o plano de dados). O resto da fila (GPS, O.S.) segue no 4G.
+const CHAVE_SO_WIFI = 'fotos-so-wifi';
+export async function fotosSoWifi() {
+  return (await AsyncStorage.getItem(CHAVE_SO_WIFI)) === '1';
+}
+export async function definirFotosSoWifi(ligado: boolean) {
+  await AsyncStorage.setItem(CHAVE_SO_WIFI, ligado ? '1' : '0');
+  ouvintes.forEach((f) => f());
+  sincronizar();
+}
+export const ehFoto = (i: ItemFila) => i.tipo === 'foto' || i.tipo === 'inventario';
+// Segurando as fotos agora? (opção ligada e celular fora do Wi-Fi)
+export async function segurandoFotos() {
+  if (!(await fotosSoWifi())) return false;
+  try {
+    return (await Network.getNetworkStateAsync()).type !== Network.NetworkStateType.WIFI;
+  } catch {
+    return false;
+  }
+}
+
+// Conta ao servidor como está a fila deste celular (no máximo a cada 2 min), para o supervisor ver fila travada no painel.
+let ultimoInforme = 0;
+async function informarSituacao(segurando: boolean) {
+  if (Date.now() - ultimoInforme < 120_000) return;
+  ultimoInforme = Date.now();
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) return;
+    const itens = await ler();
+    const datas = itens.map(entrouEm).filter((d): d is string => !!d).sort();
+    await supabase.from('fila_status').upsert({
+      usuario_id: data.session.user.id, pendentes: itens.length, fotos: itens.filter(ehFoto).length,
+      recusados: (await itensRecusados()).length, mais_antigo: datas[0] ?? null, ultimo_erro: ultimoErro,
+      segurando_wifi: segurando, atualizado_em: new Date().toISOString(),
+    });
+  } catch {
+    // sem sinal: informa na próxima
+  }
+}
+
 export async function sincronizar() {
   if (enviando) return;
   enviando = true;
   try {
-    let itens = await ler();
-    while (itens.length > 0) {
+    const segurar = await segurandoFotos();
+    const pulados = new Set<string>();
+    for (;;) {
+      const item = (await ler()).find((i) => !pulados.has(i.id));
+      if (!item) break;
+      if (segurar && ehFoto(item)) {
+        pulados.add(item.id);
+        continue;
+      }
       try {
-        await enviar(itens[0]);
+        await enviar(item);
         ultimoErro = null;
       } catch (e) {
         ultimoErro = e instanceof Error ? e.message : (e as { message?: string }).message ?? String(e);
         if (!recusadoPeloBanco(e)) {
           ouvintes.forEach((f) => f());
+          informarSituacao(segurar);
           return; // sem internet: tenta de novo no próximo ciclo
         }
         // Regra do banco recusou (ex.: mudança de status não permitida): guarda para revisão e segue a fila.
         const recusados = JSON.parse((await AsyncStorage.getItem(CHAVE_RECUSADOS)) ?? '[]');
-        recusados.push({ item: itens[0], erro: ultimoErro, em: new Date().toISOString() });
+        recusados.push({ item, erro: ultimoErro, em: new Date().toISOString() });
         await AsyncStorage.setItem(CHAVE_RECUSADOS, JSON.stringify(recusados));
       }
-      itens = (await ler()).slice(1);
-      await gravar(itens);
+      await gravar((await ler()).filter((i) => i.id !== item.id));
     }
+    informarSituacao(segurar);
   } finally {
     enviando = false;
   }
