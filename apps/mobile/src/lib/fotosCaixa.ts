@@ -1,12 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Directory, File, Paths } from 'expo-file-system';
 
-import { itensPendentes } from './fila';
+import { enfileirar, itensPendentes, removerDaFila } from './fila';
 import { supabase } from './supabase';
 
 // Fotos de uma caixa da rede (acomodação, bandejas, OLT, OTDR) para conferir em campo.
 // Com sinal baixa e guarda no celular; sem sinal mostra o que já foi guardado e as fotos ainda na fila deste celular.
-export type FotoCaixa = { uri: string; tipo: string; bandeja: number | null; fibra: number | null; tiradaEm: string | null; pendente?: boolean };
+export type FotoCaixa = { uri: string; tipo: string; bandeja: number | null; fibra: number | null; tiradaEm: string | null; pendente?: boolean; caminho?: string; filaId?: string };
 const chave = (id: string) => `fotos-caixa-${id}`;
 const pasta = (id: string) => new Directory(Paths.document, 'fotos-caixas', id);
 
@@ -15,7 +15,7 @@ export const rotuloFotoCaixa = (f: FotoCaixa) =>
 
 export async function fotosDaCaixa(caixaId: string, aoAtualizar: (f: FotoCaixa[]) => void) {
   const daFila = async () => (await itensPendentes()).flatMap((i) => (i.tipo === 'foto' && i.caixaId === caixaId
-    ? [{ uri: i.arquivo, tipo: i.tipoAnexo, bandeja: i.bandeja ?? null, fibra: i.fibra ?? null, tiradaEm: i.tiradaEm, pendente: true }] : []));
+    ? [{ uri: i.arquivo, tipo: i.tipoAnexo, bandeja: i.bandeja ?? null, fibra: i.fibra ?? null, tiradaEm: i.tiradaEm, pendente: true, filaId: i.id }] : []));
   let guardadas: FotoCaixa[] = [];
   try { guardadas = JSON.parse((await AsyncStorage.getItem(chave(caixaId))) ?? '[]'); } catch { /* sem cache */ }
   guardadas = guardadas.filter((f) => new File(f.uri).exists);
@@ -24,6 +24,17 @@ export async function fotosDaCaixa(caixaId: string, aoAtualizar: (f: FotoCaixa[]
 
   const novas = await baixarFotos(caixaId);
   if (novas) aoAtualizar([...novas, ...(await daFila())]);
+}
+
+// Exclui uma foto da caixa: se ainda está na fila só sai dela; se já subiu, a exclusão vai pela fila (funciona sem sinal).
+export async function excluirFotoCaixa(caixaId: string, f: FotoCaixa) {
+  if (f.pendente && f.filaId) await removerDaFila(f.filaId);
+  else if (f.caminho) await enfileirar({ tipo: 'rpc', nome: 'excluir_foto_caixa', args: { p_caminho: f.caminho } });
+  try {
+    const guardadas: FotoCaixa[] = JSON.parse((await AsyncStorage.getItem(chave(caixaId))) ?? '[]');
+    await AsyncStorage.setItem(chave(caixaId), JSON.stringify(guardadas.filter((x) => x.uri !== f.uri)));
+  } catch { /* sem cache */ }
+  try { if (!f.pendente) new File(f.uri).delete(); } catch { /* já apagada */ }
 }
 
 // Baixa (o que faltar) e guarda no celular as fotos de uma caixa; null quando não há sinal.
@@ -43,7 +54,7 @@ async function baixarFotos(caixaId: string): Promise<FotoCaixa[] | null> {
         await File.downloadFileAsync(url.signedUrl, local).catch(() => null);
         if (!local.exists) continue;
       }
-      novas.push({ uri: local.uri, tipo: a.tipo, bandeja: a.bandeja, fibra: a.fibra, tiradaEm: a.tirada_em });
+      novas.push({ uri: local.uri, tipo: a.tipo, bandeja: a.bandeja, fibra: a.fibra, tiradaEm: a.tirada_em, caminho: a.caminho });
     }
     await AsyncStorage.setItem(chave(caixaId), JSON.stringify(novas));
     return novas;

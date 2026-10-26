@@ -15,6 +15,7 @@ import { enderecoDe, posicaoAtual } from '../lib/localizacao';
 import { distanciaKm } from '../lib/navegacao';
 import { supabase } from '../lib/supabase';
 import Icone from '../componentes/Icone';
+import GaleriaFotosCaixa from '../componentes/GaleriaFotosCaixa';
 import MapaCaixas from '../componentes/MapaCaixas';
 import MapaFusaoToque from '../componentes/MapaFusaoToque';
 import SimularRompimento from '../componentes/SimularRompimento';
@@ -67,6 +68,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const [balaoEstado, setBalaoEstado] = useState<'acesa' | 'apagada' | null>(null);
   const [balaoCliente, setBalaoCliente] = useState('');
   const [camera, setCamera] = useState<Camera | null>(null);
+  // Já tem foto: abre a galeria (rever, excluir, tirar outra); sem foto vai direto para a câmera.
+  const [galeria, setGaleria] = useState<Camera | null>(null);
+  const abrirFotos = (cam: Camera) => (cam.feitas ? setGaleria(cam) : setCamera(cam));
   // Fotos já tiradas: da caixa, da tela do OTDR por fibra e de cada bandeja (enviadas + na fila).
   const [fotos, setFotos] = useState<{ caixa: number; olt: number; otdr: Record<number, number>; bandeja: Record<number, number> }>({ caixa: 0, olt: 0, otdr: {}, bandeja: {} });
   const [salvando, setSalvando] = useState(false);
@@ -90,9 +94,10 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
         if (tipo === 'foto_otdr' && fibraN) otdr[fibraN] = (otdr[fibraN] ?? 0) + 1;
         if (tipo === 'foto_bandeja' && bandejaN) bandeja[bandejaN] = (bandeja[bandejaN] ?? 0) + 1;
       };
-      const pendentes = (await itensPendentes()).filter((i) => i.tipo === 'foto' && i.caixaId === c.id);
-      // A fila muda a cada lote de GPS: só consulta o servidor de novo quando mudam as fotos desta caixa.
-      const assinatura = pendentes.map((i) => i.id).join(',');
+      const fila = await itensPendentes();
+      const pendentes = fila.filter((i) => i.tipo === 'foto' && i.caixaId === c.id);
+      // A fila muda a cada lote de GPS: só consulta o servidor de novo quando mudam as fotos desta caixa (ou uma exclusão).
+      const assinatura = [...pendentes, ...fila.filter((i) => i.tipo === 'rpc' && i.nome === 'excluir_foto_caixa')].map((i) => i.id).join(',');
       if (servidor.current && assinatura === servidor.current.assinatura) return;
       for (const i of pendentes) if (i.tipo === 'foto') somar(i.tipoAnexo, i.fibra, i.bandeja);
       const { data } = await supabase.from('os_anexos').select('tipo, fibra, bandeja').eq('caixa_id', c.id);
@@ -315,7 +320,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
     setSalvando(false);
     if (nova) {
       setNova(false);
-      Alert.alert('Caixa salva', ponta
+      Alert.alert('Elemento salvo', ponta
         ? 'Agora tire as fotos da caixa, de cada bandeja e a foto da tela do OTDR de cada fibra medida.'
         : 'Agora tire as fotos da caixa e de cada bandeja com as fibras acomodadas.');
     } else voltar();
@@ -678,9 +683,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
                   <Text style={[s.texto, { fontWeight: '700' }]}>Bandeja {b.numero} · {b.ligacoes.length} fusões</Text>
                   <Text style={s.suave}>{faixasDaBandeja(b)}{b.ligacoes.some((l) => l.manobra) ? ' · com manobra' : ''}</Text>
                 </View>
-                <Pressable disabled={nova} onPress={() => setCamera({ tipo: 'foto_bandeja', bandeja: b.numero, titulo: `${c.identificacao} · Bandeja ${b.numero}`, feitas })}>
+                <Pressable disabled={nova} onPress={() => abrirFotos({ tipo: 'foto_bandeja', bandeja: b.numero, titulo: `${c.identificacao} · Bandeja ${b.numero}`, feitas })}>
                   <Text style={{ color: feitas ? cores.sucesso : nova ? cores.suave : cores.perigo, fontWeight: '700' }}>
-                    {feitas ? `✓ Foto (${feitas})` : nova ? 'Salve p/ fotografar' : '📷 Falta foto'}
+                    {feitas ? `✓ Foto (${feitas}) · ver` : nova ? 'Salve p/ fotografar' : '📷 Falta foto'}
                   </Text>
                 </Pressable>
               </View>
@@ -745,9 +750,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
                   </Text>
                 ) : null}
                 {ponta && !f.sem_potencia ? (
-                  <Pressable disabled={nova} onPress={() => setCamera({ tipo: 'foto_otdr', fibra: f.fibra, titulo: `OTDR · fibra ${f.fibra}`, feitas: fotos.otdr[f.fibra] ?? 0 })}>
+                  <Pressable disabled={nova} onPress={() => abrirFotos({ tipo: 'foto_otdr', fibra: f.fibra, titulo: `OTDR · fibra ${f.fibra}`, feitas: fotos.otdr[f.fibra] ?? 0 })}>
                     <Text style={{ color: fotos.otdr[f.fibra] ? cores.sucesso : nova ? cores.suave : cores.perigo, fontWeight: '700', marginTop: 4 }}>
-                      {fotos.otdr[f.fibra] ? `✓ Foto do OTDR (${fotos.otdr[f.fibra]}) · tirar outra` : nova ? 'Foto do OTDR: salve a caixa primeiro' : '📷 Falta a foto do OTDR · tirar'}
+                      {fotos.otdr[f.fibra] ? `✓ Foto do OTDR (${fotos.otdr[f.fibra]}) · ver` : nova ? 'Foto do OTDR: salve a caixa primeiro' : '📷 Falta a foto do OTDR · tirar'}
                     </Text>
                   </Pressable>
                 ) : null}
@@ -777,22 +782,13 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           ) : null}
           {dgo && fibra.olt ? (
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Campo caixa={{ flex: 1 }} placeholder="Posição na OLT * (slot · PON)" value={fibra.oltPosicao}
+              <Campo caixa={{ flex: 1 }} placeholder="Posição na OLT (slot · PON, opcional)" value={fibra.oltPosicao}
                 onChangeText={(t) => setFibra({ ...fibra, oltPosicao: t })} />
             </View>
           ) : null}
           {dgo && fibra.olt ? (
             <>
-              <Text style={s.rotulo}>MODELO DA OLT</Text>
-              <View style={s.chips}>
-                {MODELOS_OLT.map((m) => (
-                  <Pressable key={m} style={chip(fibra.oltModelo === m)} onPress={() => setFibra({ ...fibra, oltModelo: m })}>
-                    <Text style={textoChip(fibra.oltModelo === m)}>{m}</Text>
-                  </Pressable>
-                ))}
-              </View>
-              <Campo placeholder="Ou digite o modelo da OLT" value={fibra.oltModelo}
-                onChangeText={(t) => setFibra({ ...fibra, oltModelo: t })} />
+              <Text style={s.suave}>OLT {fibra.oltModelo || '—'} · cordão {fibra.cordao || '—'} (vem do bloco "Vem de" do DGO)</Text>
               <Text style={s.rotulo}>SFP</Text>
               <View style={s.chips}>
                 {TIPOS_SFP.map((t) => (
@@ -806,14 +802,6 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
                   onChangeText={(t) => setFibra({ ...fibra, sfp: t })} />
                 <Campo caixa={{ flex: 1.6 }} placeholder="Modelo / part number do SFP" value={fibra.sfpModelo}
                   onChangeText={(t) => setFibra({ ...fibra, sfpModelo: t })} />
-              </View>
-              <Text style={s.rotulo}>CORDÃO OLT ↔ DGO</Text>
-              <View style={s.chips}>
-                {TIPOS_CORDAO.map((t) => (
-                  <Pressable key={t} style={chip(fibra.cordao === t)} onPress={() => setFibra({ ...fibra, cordao: t })}>
-                    <Text style={textoChip(fibra.cordao === t)}>{t}</Text>
-                  </Pressable>
-                ))}
               </View>
             </>
           ) : null}
@@ -868,13 +856,13 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
             onChangeText={(t) => mudar({ observacao: t })} />
           {!nova ? (
             <Pressable style={[s.botao, { backgroundColor: cores.primaria }]}
-              onPress={() => setCamera({ tipo: 'foto_caixa', titulo: c.identificacao, feitas: fotos.caixa })}>
+              onPress={() => abrirFotos({ tipo: 'foto_caixa', titulo: c.identificacao, feitas: fotos.caixa })}>
               <Text style={s.botaoTexto}>{dgo ? 'Fotos do DGO' : 'Fotos da acomodação da caixa'} ({fotos.caixa})</Text>
             </Pressable>
           ) : null}
           {!nova && dgo && c.fibras.some((f) => f.cordao_olt) ? (
             <Pressable style={[s.botao, { backgroundColor: cores.primaria }]}
-              onPress={() => setCamera({ tipo: 'foto_olt', titulo: `${c.identificacao} · OLT`, feitas: fotos.olt })}>
+              onPress={() => abrirFotos({ tipo: 'foto_olt', titulo: `${c.identificacao} · OLT`, feitas: fotos.olt })}>
               <Text style={s.botaoTexto}>Fotos da OLT e cordões ({fotos.olt})</Text>
             </Pressable>
           ) : null}
@@ -937,6 +925,9 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
             caixa={{ id: c.id, tipo: camera.tipo, fibra: camera.fibra, bandeja: camera.bandeja, titulo: camera.titulo }} fechar={() => setCamera(null)} />
         ) : null}
       </Modal>
+      <GaleriaFotosCaixa caixaId={c.id} fechar={() => setGaleria(null)}
+        filtro={galeria ? { tipo: galeria.tipo, bandeja: galeria.bandeja, fibra: galeria.fibra, titulo: galeria.titulo } : null}
+        tirar={() => { const g = galeria; setGaleria(null); if (g) setTimeout(() => setCamera(g), 300); }} />
       <MapaCaixas aberto={!!mapa} modo={mapa ?? { tipo: 'anterior' }}
         caixas={todasCaixas.filter((x) => x.id !== c.id)}
         aqui={c.latitude != null && c.longitude != null ? { lat: c.latitude, lng: c.longitude } : null}
@@ -952,7 +943,7 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
       {podeEditar ? (
         <View style={s.rodape}>
           <Pressable style={[s.botao, { backgroundColor: cores.sucesso, marginTop: 0 }]} onPress={salvar} disabled={salvando}>
-            {salvando ? <ActivityIndicator color="#fff" /> : <Text style={s.botaoTexto}>Salvar caixa</Text>}
+            {salvando ? <ActivityIndicator color="#fff" /> : <Text style={s.botaoTexto}>Salvar elemento</Text>}
           </Pressable>
         </View>
       ) : null}

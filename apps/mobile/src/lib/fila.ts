@@ -74,6 +74,11 @@ export async function enfileirar(item: NovoItem) {
 }
 
 export const itensPendentes = ler;
+
+// Tira da fila um item que ainda não subiu (ex.: foto tirada errado).
+export async function removerDaFila(id: string) {
+  await gravar((await ler()).filter((i) => i.id !== id));
+}
 export const erroSincronizacao = () => ultimoErro;
 
 export function aoMudarFila(f: () => void) {
