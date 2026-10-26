@@ -4,7 +4,7 @@ const GLIFOS = {
   "account-group-outline": 985944, "package-variant": 984022, "map-outline": 985474, binoculars: 983205, "chart-box-outline": 988494,
   "chart-line": 983338, "clock-outline": 983376, "car-outline": 988397, "cash-multiple": 983318, "format-list-bulleted": 983673,
   warehouse: 987009, "toolbox-outline": 985517, "cog-outline": 985275, "lan-connect": 983832, menu: 983900, logout: 983875,
-  magnify: 983881, "bell-outline": 983196, "chevron-left": 983361,
+  magnify: 983881, "map-marker-distance": 985328, "bell-outline": 983196, "chevron-left": 983361,
 } as const;
 export type NomeIcone = keyof typeof GLIFOS;
 

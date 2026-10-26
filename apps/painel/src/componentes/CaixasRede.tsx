@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import CaixaDetalhe, { CaixaPainel, ehPonta, origemDe } from "@/componentes/CaixaDetalhe";
 import { clienteDoCaminho, descreverFibra, localDgo, rastrearFibra, rotuloPonto } from "@/lib/fusao";
 import { excluirComConfirmacao } from "@/lib/excluir";
-import LocalizarRompimento from "@/componentes/LocalizarRompimento";
 import { montarKmz } from "@/lib/kmzCaixas";
 import { supabase } from "@/lib/supabase";
 
@@ -104,8 +103,6 @@ export default function CaixasRede() {
           <p className="px-4 pb-4 text-sm text-gray-500">Nada encontrado.</p>
         )}
       </section>
-
-      <LocalizarRompimento caixas={caixas} />
 
       <section className="rounded-xl border border-gray-200 bg-white">
         <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 p-4">

@@ -11,7 +11,7 @@ import { Tema, TEMAS, temaAtual, trocarTema } from '../lib/tema';
 import { supabase } from '../lib/supabase';
 import { descreverVeiculo, MeuVeiculo, meuVeiculo } from '../lib/veiculo';
 
-type Destino = 'preventiva' | 'escala' | 'rotas' | 'despesas' | 'frota' | 'inventario' | 'perfil' | 'evento' | 'curva';
+type Destino = 'preventiva' | 'escala' | 'rotas' | 'despesas' | 'frota' | 'inventario' | 'perfil' | 'evento' | 'curva' | 'rompimento';
 type Props = { nome: string; cargo: string | null; pendentes: number; abrir: (d: Destino) => void; sair: () => void };
 
 const iniciais = (nome: string) => nome.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'T';
@@ -66,6 +66,7 @@ export default function Mais({ nome, cargo, pendentes, abrir, sair }: Props) {
         {item('receipt-text-outline', 'Despesas', 'Ferramentas, material, alimentação: foto do comprovante e valores', () => abrir('despesas'), cores.alerta)}
         {item('calendar-month-outline', 'Minha escala', 'Jornada, plantão e folgas do mês', () => abrir('escala'))}
         {item('chart-bell-curve', 'Analisar curva OTDR', 'Abra um .SOR do celular e veja os eventos, mesmo sem internet', () => abrir('curva'), '#227E9E')}
+        {item('map-marker-distance', 'Localizar rompimento', 'Distância do OTDR + metragem do cabo: onde procurar o rompimento', () => abrir('rompimento'), '#227E9E')}
         {item('map-outline', 'Rotas KMZ', 'Trechos do backbone para abrir no Google Earth', () => abrir('rotas'), '#227E9E')}
         </View>
         <Text style={s.secao}>APARÊNCIA</Text>

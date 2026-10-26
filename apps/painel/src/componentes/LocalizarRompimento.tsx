@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { CaixaPainel, origemDe } from "@/componentes/CaixaDetalhe";
+import { supabase } from "@/lib/supabase";
 import { descreverRompimento, fmtMetros, kmlRompimento, lancesDoEnlace, localizarRompimento, rotuloPonto, sentidoPadrao } from "@/lib/fusao";
 
 const numero = (t: string) => {
@@ -11,8 +12,12 @@ const numero = (t: string) => {
 };
 
 // Enlace pela metragem do cabo e simulação do local de rompimento pela distância medida no OTDR
-// (medição feita num DGO, entroncamento ou caixa).
-export default function LocalizarRompimento({ caixas }: { caixas: CaixaPainel[] }) {
+// (medição feita num DGO, entroncamento ou caixa). Ferramenta à parte: usa o mapeamento e a metragem já lançados.
+export default function LocalizarRompimento() {
+  const [caixas, setCaixas] = useState<CaixaPainel[]>([]);
+  useEffect(() => {
+    supabase.from("caixas_mapa").select("*").then(({ data }) => setCaixas((data as unknown as CaixaPainel[]) ?? []));
+  }, []);
   const [medicaoId, setMedicaoId] = useState("");
   const [fibra, setFibra] = useState("1");
   const [km, setKm] = useState("");

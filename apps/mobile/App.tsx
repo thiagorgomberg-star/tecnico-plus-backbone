@@ -28,6 +28,7 @@ import Mais from './src/telas/Mais';
 import Despesas from './src/telas/Despesas';
 import Inventario from './src/telas/Inventario';
 import InformarEvento from './src/telas/InformarEvento';
+import LocalizarRompimento from './src/telas/LocalizarRompimento';
 import MeuPerfil from './src/telas/MeuPerfil';
 import MinhaEscala from './src/telas/MinhaEscala';
 import NovaPreventiva from './src/telas/NovaPreventiva';
@@ -43,7 +44,7 @@ export default function App() {
   const [perfil, setPerfil] = useState<Perfil>({ nome: '', cargo: null });
   const [osAberta, setOsAberta] = useState<OrdemServico | null>(null);
   const [camera, setCamera] = useState<Camera | null>(null);
-  const [tela, setTela] = useState<'inicio' | 'rotas' | 'escala' | 'preventiva' | 'despesas' | 'frota' | 'inventario' | 'perfil' | 'evento' | 'curva'>('inicio');
+  const [tela, setTela] = useState<'inicio' | 'rotas' | 'escala' | 'preventiva' | 'despesas' | 'frota' | 'inventario' | 'perfil' | 'evento' | 'curva' | 'rompimento'>('inicio');
   const [aba, setAba] = useState<Aba>('atividades');
   const [backlogPedido, setBacklogPedido] = useState<string | null>(null);
   const [pendentes, setPendentes] = useState(0);
@@ -160,6 +161,8 @@ export default function App() {
     );
   } else if (tela === 'rotas') {
     conteudo = <Rotas voltar={() => setTela('inicio')} />;
+  } else if (tela === 'rompimento') {
+    conteudo = <LocalizarRompimento voltar={() => setTela('inicio')} />;
   } else if (tela === 'curva') {
     conteudo = <AnalisarCurva voltar={() => setTela('inicio')} />;
   } else if (tela === 'preventiva') {

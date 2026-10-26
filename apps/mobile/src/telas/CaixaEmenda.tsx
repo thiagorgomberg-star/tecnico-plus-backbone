@@ -18,7 +18,6 @@ import Icone from '../componentes/Icone';
 import GaleriaFotosCaixa from '../componentes/GaleriaFotosCaixa';
 import MapaCaixas from '../componentes/MapaCaixas';
 import MapaFusaoToque from '../componentes/MapaFusaoToque';
-import SimularRompimento from '../componentes/SimularRompimento';
 import CameraOS from './CameraOS';
 
 type Props = {
@@ -51,7 +50,6 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
   const [origemTipo, setOrigemTipo] = useState<'caixa' | 'dgo' | 'nenhuma'>(
     inicial ? (inicial.origem_caixa_id ? 'caixa' : inicial.origem_dgo ? 'dgo' : 'nenhuma') : ultima ? 'caixa' : 'nenhuma');
   const [rede, setRede] = useState<CaixaRede[]>([]);
-  const [simular, setSimular] = useState(false);
   const [mapa, setMapa] = useState<{ tipo: 'anterior' } | { tipo: 'seguinte'; saida: number } | null>(null);
   // Caixa seguinte de cada saída escolhida nesta edição (saída → id; null desliga). Vai para o servidor ao salvar.
   const [seguintesNovas, setSeguintesNovas] = useState<Record<number, string | null>>({});
@@ -839,17 +837,6 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           </Pressable>
         </View>
 
-        {!nova ? (
-          <View style={s.bloco}>
-            <Text style={s.rotulo}>ROMPIMENTO · OTDR</Text>
-            <Text style={s.suave}>Ligou o OTDR neste ponto? Informe a fibra e a distância do evento: o app anda pelos lances e mostra onde procurar.</Text>
-            <Pressable style={[s.botaoMapa, { marginTop: 8 }]} onPress={() => setSimular(true)}>
-              <Icone nome="map-marker-distance" tamanho={18} cor={cores.primaria} />
-              <Text style={s.botaoMapaTexto}>Localizar rompimento a partir de {c.identificacao || 'este ponto'}</Text>
-            </Pressable>
-          </View>
-        ) : null}
-
         <View style={s.bloco}>
           <Text style={s.rotulo}>OBSERVAÇÃO</Text>
           <TextInput style={[s.campo, { minHeight: 60, textAlignVertical: 'top' }]} multiline value={c.observacao ?? ''}
@@ -871,8 +858,6 @@ export default function CaixaEmenda({ osId, caixa: inicial, daOs, podeEditar, us
           )}
         </View>
       </RolarComTeclado>
-      <SimularRompimento aberto={simular} fechar={() => setSimular(false)} medicao={c as unknown as CaixaRede}
-        caixas={[c as unknown as CaixaRede, ...todasCaixas.filter((x) => x.id !== c.id)]} />
       <Modal visible={balao != null} transparent animationType="fade" onRequestClose={() => setBalao(null)}>
         <Pressable style={[s.balaoFundo, { paddingBottom: 20 + teclado }]} onPress={() => setBalao(null)}>
           <Pressable style={s.balao} onPress={() => undefined}>
