@@ -373,7 +373,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
         </section>
       </div>
 
-      <section className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <section className="isolate overflow-hidden rounded-xl border border-gray-200 bg-white">
         <div className="flex border-b border-gray-200 bg-gray-50 text-xs text-gray-500">
           <div className="w-56 shrink-0 border-r border-gray-200 p-2">
             <input className="w-full rounded border border-gray-300 px-2 py-1 text-sm" placeholder="Nome do técnico" value={busca}
