@@ -66,13 +66,16 @@ export async function compartilharRelatorio(os: OrdemServico) {
   const itemDe = new Map(catalogo.map((c) => [c.id, c]));
 
   // Dados que só o servidor tem (datas, fotos já enviadas); sem internet o relatório sai sem eles.
-  const [{ data: completa }, { data: anexos }] = await Promise.all([
+  const [{ data: completa }, { data: anexos }, { data: kmGps }] = await Promise.all([
     supabase.from('ordens_servico')
       .select('criado_em, enviada_em, iniciada_em, concluida_em, tecnico:usuarios!ordens_servico_tecnico_id_fkey(nome, cargo), rota:rotas(trecho), veiculo:veiculos(placa, marca, modelo, cor)')
       .eq('id', os.id).maybeSingle(),
     supabase.from('os_anexos').select('caminho_arquivo, tirada_em, tipo, caixa_id, fibra, bandeja, descricao').eq('os_id', os.id)
       .in('tipo', ['foto_antes', 'foto_depois', 'foto_caixa', 'foto_otdr', 'foto_bandeja', 'foto_olt', 'assinatura']).order('criado_em'),
+    supabase.rpc('km_percorridos_os', { p_os: os.id }),
   ]);
+  // Km do expediente pelo GPS até a conclusão da O.S. (ou até agora, se ainda aberta).
+  const km = (kmGps as { km: number; desde: string; ate: string }[] | null)?.[0] ?? null;
   const extra = completa as unknown as {
     criado_em: string; enviada_em: string | null; iniciada_em: string | null; concluida_em: string | null;
     tecnico: { nome: string; cargo: string | null } | null; rota: { trecho: string } | null;
@@ -211,6 +214,7 @@ export async function compartilharRelatorio(os: OrdemServico) {
   ${extra ? `<h2>Tempos</h2><div class="g">
     <div><div class="l">Abertura</div>${quando(extra.criado_em)}</div><div><div class="l">Despacho</div>${quando(extra.enviada_em)}</div>
     <div><div class="l">Início em campo</div>${quando(extra.iniciada_em)}</div><div><div class="l">Conclusão</div>${quando(extra.concluida_em)}</div>
+    ${km ? `<div style="grid-column: span 2"><div class="l">Km percorridos no expediente (GPS)</div><b>${Number(km.km).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km</b> · de ${quando(km.desde)} até ${quando(km.ate)}${extra.concluida_em ? ' (conclusão)' : ' (agora)'}</div>` : ''}
   </div>` : ''}
   ${tabela('servico', 'Serviços executados')}
   ${tabela('material', 'Materiais utilizados')}
