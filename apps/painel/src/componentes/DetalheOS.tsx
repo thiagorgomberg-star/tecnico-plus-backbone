@@ -131,6 +131,17 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
     return () => window.removeEventListener("keydown", tecla);
   }, [foto, andarFoto]);
   // Supervisor esconde (ou volta a mostrar) uma foto no relatório; ela continua guardada na O.S.
+  // Legenda (balão abaixo da foto no relatório): o supervisor também pode escrever ou corrigir.
+  async function editarLegenda(f: Anexo) {
+    const texto = window.prompt("Legenda da foto (aparece abaixo dela no relatório). Deixe vazio para tirar.", f.descricao ?? "");
+    if (texto === null) return;
+    const { error } = await supabase.rpc("legendar_foto_os", { p_caminho: f.caminho_arquivo, p_legenda: texto });
+    if (error) return alert(`Não foi possível salvar a legenda: ${error.message}`);
+    const nova = texto.trim() || null;
+    setAnexos((v) => v.map((a) => (a.id === f.id ? { ...a, descricao: nova } : a)));
+    setFoto((atual) => (atual?.id === f.id ? { ...atual, descricao: nova } : atual));
+  }
+
   async function alternarOculta(f: Anexo) {
     const { error } = await supabase.from("os_anexos").update({ oculta_relatorio: !f.oculta_relatorio }).eq("id", f.id);
     if (error) return alert(error.message);
@@ -356,6 +367,10 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
                   className="absolute right-1 top-1 rounded bg-white/90 px-1.5 py-0.5 text-xs font-medium text-gray-800 shadow hover:bg-white">
                   {f.oculta_relatorio ? "👁 Mostrar" : "🙈 Ocultar"}
                 </button>
+                <button onClick={() => editarLegenda(f)} title="Escrever ou corrigir a legenda"
+                  className={`block w-full px-2 py-1 text-left text-xs ${f.descricao ? "bg-blue-50 text-gray-900" : "text-blue-700 hover:bg-gray-50"}`}>
+                  {f.descricao ? `💬 ${f.descricao}` : "+ Legenda"}
+                </button>
               </div>
             ))}
           </div>
@@ -411,6 +426,10 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
           <button onClick={(e) => { e.stopPropagation(); alternarOculta(foto); }}
             className={`absolute right-40 top-4 rounded-lg px-3 py-1.5 text-sm font-medium ${foto.oculta_relatorio ? "bg-amber-500 text-white" : "bg-white text-gray-900"}`}>
             {foto.oculta_relatorio ? "👁 Mostrar no relatório" : "🙈 Ocultar do relatório"}
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); editarLegenda(foto); }}
+            className="absolute bottom-6 left-1/2 max-w-[80%] -translate-x-1/2 rounded-xl bg-white px-4 py-2 text-sm text-gray-900 shadow">
+            {foto.descricao ? `💬 ${foto.descricao}` : "+ Legenda"}
           </button>
           {fotos.length > 1 && (
             <>

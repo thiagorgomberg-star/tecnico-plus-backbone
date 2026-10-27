@@ -297,6 +297,7 @@ function Conteudo() {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   {f?.url ? <img src={f.url} alt={`${lado ? "Depois" : "Antes"} ${i + 1}`} className="h-auto w-full rounded border border-gray-200 bg-gray-50 object-contain" />
                     : <div className="flex aspect-[4/3] items-center justify-center rounded border border-dashed border-gray-300 text-gray-400">—</div>}
+                  {lado && depois[i]?.descricao ? <Balao texto={depois[i].descricao!} /> : null}
                   <figcaption className="mt-1 text-xs text-gray-500">{lado ? "Depois" : "Antes"} {i + 1}{f?.tirada_em ? ` · ${quando(f.tirada_em)}` : ""}</figcaption>
                 </figure>
               ))}
@@ -315,6 +316,7 @@ function Conteudo() {
               <figure key={i} className="break-inside-avoid">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 {f.url ? <img src={f.url} alt={`Foto ${i + 1}`} className="h-auto w-full rounded border border-gray-200 bg-gray-50 object-contain" /> : null}
+                {f.descricao ? <Balao texto={f.descricao} /> : null}
                 <figcaption className="mt-0.5 text-xs text-gray-500">Foto {i + 1} · {quando(f.tirada_em)}</figcaption>
               </figure>
             ))}
@@ -344,6 +346,16 @@ export default function PaginaRelatorio() {
       <Suspense fallback={<p className="p-10 text-center text-gray-500">Carregando relatório...</p>}>
         <Conteudo />
       </Suspense>
+    </div>
+  );
+}
+
+// Legenda escrita pelo técnico: balão logo abaixo da foto.
+function Balao({ texto }: { texto: string }) {
+  return (
+    <div className="relative mb-1 mt-2 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-sm text-gray-900">
+      <span className="absolute -top-1.5 left-4 h-2.5 w-2.5 rotate-45 border-l border-t border-blue-200 bg-blue-50" />
+      {texto}
     </div>
   );
 }

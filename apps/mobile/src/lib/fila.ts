@@ -73,10 +73,18 @@ async function gravar(itens: ItemFila[]) {
 
 export async function enfileirar(item: NovoItem) {
   const itens = await ler();
-  itens.push({ ...item, id: randomUUID(), em: new Date().toISOString() } as unknown as ItemFila);
+  const id = randomUUID();
+  itens.push({ ...item, id, em: new Date().toISOString() } as unknown as ItemFila);
   await gravar(itens);
   sincronizar();
+  return id;
 }
+
+// Legenda de foto antes/depois (balão "+"). Vai como ação no fim da fila, então sobe depois da própria foto.
+export async function legendarFoto(caminho: string, legenda: string) {
+  await enfileirar({ tipo: 'rpc', nome: 'legendar_foto_os', args: { p_caminho: caminho, p_legenda: legenda.trim() } });
+}
+export const caminhoFotoOs = (osId: string, filaId: string) => `${osId}/${filaId}.jpg`;
 
 export const itensPendentes = ler;
 
@@ -119,7 +127,7 @@ export function descreverItem(i: ItemFila) {
     case 'inventario': return 'Inventário (foto de ferramenta)';
     case 'os': return 'Atualização da O.S.';
     case 'kmz': return `KMZ da rota · ${i.nome}`;
-    case 'rpc': return i.nome === 'excluir_foto_caixa' || i.nome === 'excluir_foto_os' ? 'Exclusão de foto' : 'Ação no servidor';
+    case 'rpc': return i.nome === 'excluir_foto_caixa' || i.nome === 'excluir_foto_os' ? 'Exclusão de foto' : i.nome === 'legendar_foto_os' ? 'Legenda de foto' : 'Ação no servidor';
     case 'excluir': return `Exclusão · ${ROTULO_TABELA[i.tabela] ?? i.tabela}`;
     default: return ROTULO_TABELA[i.tabela] ?? i.tabela;
   }

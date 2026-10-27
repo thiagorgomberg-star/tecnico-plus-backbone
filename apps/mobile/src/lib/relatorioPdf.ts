@@ -133,14 +133,16 @@ export async function compartilharRelatorio(os: OrdemServico) {
   const assinatura = [...fotos].reverse().find((f) => f.tipo === 'assinatura');
   const depois = fotos.filter((f) => f.tipo === 'foto_depois');
   const pares = Array.from({ length: Math.max(antes.length, depois.length) }, (_, i) => [antes[i], depois[i]?.src] as const);
-  const figura = (src: string | undefined, legenda: string) => (src ? `<figure><img src="${src}"><figcaption>${legenda}</figcaption></figure>` : '<div class="vazio">—</div>');
+  // Legenda escrita pelo técnico: balão logo abaixo da foto.
+  const balao = (texto?: string | null) => (texto ? `<div class="balao">${esc(texto)}</div>` : '');
+  const figura = (src: string | undefined, legenda: string, texto?: string | null) => (src ? `<figure><img src="${src}">${balao(texto)}<figcaption>${legenda}</figcaption></figure>` : '<div class="vazio">—</div>');
   const secaoAntesDepois = antes.length ? `<h2>Antes × Depois</h2>
   <div class="ad-datas"><div><div class="l">O.S. cadastrada em</div>${quando(extra?.criado_em)}</div>
     <div><div class="l">Executada em</div>${quando(extra?.concluida_em ?? extra?.iniciada_em)}</div>
     ${extra?.criado_em && (extra.concluida_em ?? extra.iniciada_em) ? `<div><div class="l">Tempo até a correção</div>${prazoCorrecao(extra.criado_em, (extra.concluida_em ?? extra.iniciada_em)!)}</div>` : ''}</div>
   <p class="s">Antes: fotos da abertura (vistoria ou ocorrência informada). Depois: correção executada no mesmo ângulo.</p>
   <table class="ad"><tr><th>ANTES</th><th>DEPOIS</th></tr>${pares.map(([a, d], i) =>
-    `<tr><td>${figura(a, `Antes ${i + 1}`)}</td><td>${figura(d, `Depois ${i + 1}${depois[i] ? ` · ${quando(depois[i].tiradaEm)}` : ''}`)}</td></tr>`).join('')}</table>` : '';
+    `<tr><td>${figura(a, `Antes ${i + 1}`)}</td><td>${figura(d, `Depois ${i + 1}${depois[i] ? ` · ${quando(depois[i].tiradaEm)}` : ''}`, depois[i]?.descricao)}</td></tr>`).join('')}</table>` : '';
   const secaoCaixas = caixas.map((c) => {
     const plano = calcularPlano(c);
     const ponta = ehPonta(c.tipo);
@@ -196,6 +198,8 @@ export async function compartilharRelatorio(os: OrdemServico) {
     .s { color: #6b7280; } .fotos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .fotos img { width: 100%; border: 1px solid #ddd; } .ad td { width: 50%; vertical-align: top; } .ad img { width: 100%; border: 1px solid #ddd; }
     .ad th { text-align: center; font-size: 9pt; } .ad-datas { display: flex; gap: 24px; margin: 6px 0; } .ad-datas .l { font-size: 8pt; color: #6b7280; } .vazio { text-align: center; color: #9ca3af; padding: 24px 0; } figure { margin: 0; break-inside: avoid; } figcaption { font-size: 8pt; color: #6b7280; }
+    .balao { position: relative; margin: 8px 0 4px; padding: 6px 10px; background: #EEF4FF; border: 1px solid #C7D7F5; border-radius: 10px; font-size: 9.5pt; color: #101828; }
+    .balao::before { content: ''; position: absolute; top: -6px; left: 18px; width: 10px; height: 10px; background: #EEF4FF; border-left: 1px solid #C7D7F5; border-top: 1px solid #C7D7F5; transform: rotate(45deg); }
     pre { white-space: pre-wrap; font-family: inherit; margin: 0; }
   </style></head><body>
   <header>${logo ? `<img src="${logo}">` : ''}<div class="t"><h1>Relatório de atendimento</h1>
@@ -225,7 +229,7 @@ export async function compartilharRelatorio(os: OrdemServico) {
   ${secaoCaixas}
   ${secaoAntesDepois}
   <h2>Registro fotográfico (${fotosOs.length})</h2>
-  <div class="fotos">${fotosOs.map((f, i) => `<figure><img src="${f.src}"><figcaption>Foto ${i + 1} · ${quando(f.tiradaEm)}</figcaption></figure>`).join('')}</div>
+  <div class="fotos">${fotosOs.map((f, i) => `<figure><img src="${f.src}">${balao(f.descricao)}<figcaption>Foto ${i + 1} · ${quando(f.tiradaEm)}</figcaption></figure>`).join('')}</div>
   ${assinatura ? `<h2>Assinatura do técnico</h2><img src="${assinatura.src}" style="max-height:110px;border-bottom:1px solid #999">
     <div>${esc(assinatura.descricao ?? '')} · ${quando(assinatura.tiradaEm)}</div>` : ''}
   <p class="s" style="font-size:8pt;margin-top:16px;border-top:1px solid #ccc;padding-top:4px">Multivale Engenharia · Backbone · gerado pelo Técnico Plus</p>

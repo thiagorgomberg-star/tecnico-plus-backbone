@@ -5,11 +5,11 @@ import { Directory, File, Paths } from 'expo-file-system';
 import * as Location from 'expo-location';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 
 import MascaraFoto, { DadosMascara, RefMascara } from '../componentes/MascaraFoto';
-import { enfileirar } from '../lib/fila';
+import { caminhoFotoOs, enfileirar, legendarFoto } from '../lib/fila';
 import { cores } from '../lib/estilo';
 import { enderecoDe } from '../lib/localizacao';
 import { referenciasLocais } from '../lib/referencia';
@@ -106,6 +106,14 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
   const endereco = useRef<{ latitude: number; longitude: number; texto: string } | null>(null);
   const consultando = useRef(false);
   const [miniaturas, setMiniaturas] = useState<string[]>([]);
+  // Balão "+ Legenda" da última foto (antes/depois). Some sozinho: sem toque, a foto segue sem legenda.
+  const [balao, setBalao] = useState<{ uri: string; osId: string } | null>(null);
+  const [escrevendo, setEscrevendo] = useState<{ uri: string; osId: string } | null>(null);
+  const [legenda, setLegenda] = useState('');
+  // Foto crua -> id na fila (para achar o caminho no servidor); legenda escrita antes da máscara terminar.
+  const filaDaFoto = useRef(new Map<string, string>());
+  const legendaPendente = useRef(new Map<string, string>());
+  const timerBalao = useRef<ReturnType<typeof setTimeout> | null>(null);
   // O.S. gerada na vistoria: as fotos do ponto servem de guia para fotografar a correção no mesmo ângulo.
   const [referencias, setReferencias] = useState<string[]>([]);
   const [refAtual, setRefAtual] = useState(0);
@@ -217,6 +225,11 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
       };
       await alterarCruas((l) => [...l, crua]);
       setFila((f) => [...f, crua]);
+      if (crua.tipoAnexo === 'foto_antes' || crua.tipoAnexo === 'foto_depois') {
+        setBalao({ uri: crua.uri, osId: crua.osId });
+        if (timerBalao.current) clearTimeout(timerBalao.current);
+        timerBalao.current = setTimeout(() => setBalao(null), 7000);
+      }
     } catch (e) {
       Alert.alert('Erro ao tirar a foto', String(e));
     } finally {
@@ -239,7 +252,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
         fechar();
         return;
       }
-      await enfileirar({
+      const filaId = await enfileirar({
         tipo: 'foto',
         osId: atual.osId,
         tipoAnexo: atual.tipoAnexo,
@@ -254,6 +267,12 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
         latitude: dados.latitude,
         longitude: dados.longitude,
       });
+      filaDaFoto.current.set(atual.uri, filaId);
+      const pendente = legendaPendente.current.get(atual.uri);
+      if (pendente) {
+        legendaPendente.current.delete(atual.uri);
+        await legendarFoto(caminhoFotoOs(atual.osId, filaId), pendente);
+      }
       await alterarCruas((l) => l.filter((f) => f.uri !== atual.uri));
       try { new File(atual.uri).delete(); } catch { /* já removida */ }
       // Só conta aqui a foto que é deste alvo; as retomadas de outra O.S./caixa vão para a fila delas.
@@ -265,6 +284,15 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
     } finally {
       setFila((f) => f.slice(1));
     }
+  }
+
+  async function gravarLegenda() {
+    const alvo = escrevendo;
+    setEscrevendo(null);
+    if (!alvo || !legenda.trim()) return;
+    const filaId = filaDaFoto.current.get(alvo.uri);
+    if (filaId) await legendarFoto(caminhoFotoOs(alvo.osId, filaId), legenda);
+    else legendaPendente.current.set(alvo.uri, legenda);
   }
 
   if (!permissao) return null;
@@ -333,6 +361,33 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
         {miniaturas.map((uri) => <Image key={uri} source={{ uri }} style={estilos.miniatura} />)}
       </ScrollView>
 
+      {balao ? (
+        <Pressable style={estilos.balao} onPress={() => { setEscrevendo(balao); setLegenda(''); setBalao(null); }}
+          accessibilityLabel="Escrever legenda da última foto">
+          <Text style={estilos.balaoMais}>+</Text>
+          <Text style={estilos.texto}>Legenda</Text>
+          <View style={estilos.balaoPonta} />
+        </Pressable>
+      ) : null}
+
+      <Modal visible={!!escrevendo} transparent animationType="fade" supportedOrientations={['landscape']} onRequestClose={() => setEscrevendo(null)}>
+        <View style={estilos.legendaFundo}>
+          <View style={estilos.legendaCaixa}>
+            <Text style={estilos.legendaRotulo}>Legenda da foto (aparece no relatório)</Text>
+            <TextInput autoFocus value={legenda} onChangeText={setLegenda} maxLength={300} multiline placeholder="Ex.: cabo rompido por queda de árvore"
+              placeholderTextColor={cores.apagado} style={estilos.legendaCampo} />
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+              <Pressable style={[estilos.legendaBotao, { backgroundColor: '#eee' }]} onPress={() => setEscrevendo(null)}>
+                <Text style={{ fontWeight: '700', color: cores.texto }}>Sem legenda</Text>
+              </Pressable>
+              <Pressable style={[estilos.legendaBotao, { backgroundColor: cores.primaria }]} onPress={gravarLegenda}>
+                <Text style={{ fontWeight: '700', color: '#fff' }}>Salvar legenda</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Pressable style={[estilos.disparo, (!horizontal || tirando) && { opacity: 0.4 }]}
         disabled={!horizontal || tirando} onPress={fotografar}>
         {tirando ? <ActivityIndicator color={cores.primaria} /> : null}
@@ -361,5 +416,14 @@ const estilos = StyleSheet.create({
   miniatura: { width: 96, height: 60, marginRight: 8, borderRadius: 4, borderWidth: 1, borderColor: '#fff' },
   disparo: { position: 'absolute', right: 24, top: '50%', marginTop: -36, width: 72, height: 72, borderRadius: 36,
     backgroundColor: '#fff', borderWidth: 4, borderColor: 'rgba(255,255,255,0.5)', alignItems: 'center', justifyContent: 'center' },
+  balao: { position: 'absolute', right: 108, top: '50%', marginTop: -24, flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: cores.primaria, paddingHorizontal: 14, height: 48, borderRadius: 24 },
+  balaoMais: { color: '#fff', fontSize: 26, fontWeight: '800', marginTop: -3 },
+  balaoPonta: { position: 'absolute', right: -6, top: 18, width: 12, height: 12, backgroundColor: cores.primaria, transform: [{ rotate: '45deg' }] },
+  legendaFundo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'flex-start', paddingTop: 24 },
+  legendaCaixa: { width: '70%', backgroundColor: '#fff', borderRadius: 14, padding: 14 },
+  legendaRotulo: { fontSize: 14, fontWeight: '700', color: cores.texto2, marginBottom: 6 },
+  legendaCampo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 8, padding: 10, fontSize: 16, minHeight: 48, color: cores.texto },
+  legendaBotao: { flex: 1, height: 46, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   botao: { marginTop: 16, backgroundColor: cores.primaria, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
 });
