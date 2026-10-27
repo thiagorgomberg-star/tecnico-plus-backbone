@@ -410,7 +410,8 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
             <Info icone="text-box-outline" rotulo="Descrição" valor={os.descricao} />
             {os.os_clientes?.length ? os.os_clientes.map((c, i) => (
               <Info key={i} icone="domain" rotulo={`Cliente: ${c.cliente?.nome ?? '—'}${c.cliente ? ` · SLA ${String(c.cliente.sla_horas).replace('.', ',')}h` : ''}`}
-                valor={[c.ticket ? `Ticket ${c.ticket}` : null, c.texto_acionamento].filter(Boolean).join('\n') || 'Sem ticket'} />
+                valor={[c.restabelecido_em ? `✓ Cliente deu OK · sinal restabelecido ${new Date(c.restabelecido_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}` : null,
+                  c.ticket ? `Ticket ${c.ticket}` : null, c.texto_acionamento].filter(Boolean).join('\n') || 'Sem ticket'} />
             )) : <Info icone="ticket-confirmation-outline" rotulo="Ticket de acionamento" valor={os.ticket_acionamento} />}
             <Info icone="flag-outline" rotulo="Prioridade" valor={{ baixa: 'Baixa', media: 'Média', alta: 'Alta', emergencia: 'Emergência' }[os.prioridade]} />
             {os.sla_limite ? (

@@ -7,6 +7,7 @@ import { baixarKmz } from "@/componentes/CaixasRede";
 import EditarOS from "@/componentes/EditarOS";
 import EditorClientesOS from "@/componentes/EditorClientesOS";
 import MapaOS from "@/componentes/MapaOS";
+import OkCliente from "@/componentes/OkCliente";
 import MaterialApoio from "@/componentes/MaterialApoio";
 import ProgramarOS from "@/componentes/ProgramarOS";
 import ExecucaoOS from "@/componentes/ExecucaoOS";
@@ -250,6 +251,11 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
           <div className="sm:col-span-2">
             <dt className="flex items-center gap-3 text-gray-500">
               Clientes do evento
+              {linhasClientes.length > 1 && (() => {
+                const ok = linhasClientes.filter((l) => l.restabelecido_em).length;
+                return ok > 0 ? <span className={`rounded px-1.5 text-xs font-semibold ${ok === linhasClientes.length ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>
+                  {ok === linhasClientes.length ? "Todos os clientes deram OK" : `Baixa parcial: ${ok} de ${linhasClientes.length} clientes OK`}</span> : null;
+              })()}
               {!encerrada && !editandoClientes && (
                 <button className="text-xs text-blue-700 hover:underline" onClick={() => setEditandoClientes(linhasClientes.length ? linhasClientes : [{ cliente_id: "", ticket: "", texto_acionamento: "" }])}>
                   {linhasClientes.length ? "Editar clientes" : "+ Adicionar cliente"}
@@ -275,6 +281,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
                         {c ? <span className="text-gray-500"> · SLA {fmtSla(c.sla_horas)}</span> : null}
                         {l.ticket ? <span> · Ticket <b>{l.ticket}</b></span> : null}
                         {l.texto_acionamento ? <p className="mt-1 whitespace-pre-wrap text-gray-700">{l.texto_acionamento}</p> : null}
+                        <OkCliente linha={l} podeEditar={os.status !== "cancelada"} mudou={(nova) => setLinhasClientes((v) => v.map((x) => (x.id === nova.id ? nova : x)))} />
                       </li>
                     );
                   })}

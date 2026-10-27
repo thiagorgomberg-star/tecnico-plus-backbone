@@ -35,7 +35,7 @@ export type OrdemServico = {
   criado_em?: string;
   origem_ponto_id?: string | null; // gerada a partir de um ponto da vistoria (tem fotos de referência)
   // Clientes atendidos no evento, cada um com o próprio ticket e texto de acionamento (o SLA da O.S. é o menor deles).
-  os_clientes?: { ticket: string | null; texto_acionamento: string | null; cliente: { nome: string; sla_horas: number } | null }[];
+  os_clientes?: { ticket: string | null; texto_acionamento: string | null; restabelecido_em?: string | null; cliente: { nome: string; sla_horas: number } | null }[];
 };
 
 export type Expediente = {

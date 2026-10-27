@@ -139,7 +139,7 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
     setJornada(await lerJornada());
     buscarBacklog().then((b) => b && setBacklog(b)).catch(() => {});
     // O banco já limita o técnico às O.S. abertas e às encerradas nos últimos 7 dias.
-    const { data, error } = await supabase.from('ordens_servico').select('*, os_clientes(ticket, texto_acionamento, cliente:clientes(nome, sla_horas))');
+    const { data, error } = await supabase.from('ordens_servico').select('*, os_clientes(ticket, texto_acionamento, restabelecido_em, cliente:clientes(nome, sla_horas))');
     if (error || !data) {
       setSemRede(true);
       const cache = await AsyncStorage.getItem(CACHE_OS);
