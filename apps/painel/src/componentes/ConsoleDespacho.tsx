@@ -32,7 +32,8 @@ const COR: Record<StatusOS, { fundo: string; texto: string }> = {
   baixada: { fundo: "#d6d3d1", texto: "#292524" },
   cancelada: { fundo: "#e5e7eb", texto: "#6b7280" },
 };
-const H_INICIO = 6, H_FIM = 22;
+// Dia inteiro (0h a 24h); a linha do tempo rola para os lados e abre perto da hora atual.
+const H_INICIO = 0, H_FIM = 24;
 const CENTRO_INICIAL: [number, number] = [-45.5, -23.0];
 const ABERTAS: StatusOS[] = ["rascunho", "enviada", "aceita", "em_execucao", "pausada", "devolvida"];
 const isoDia = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -57,6 +58,9 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
   const [alvo, setAlvo] = useState<string | null>(null);
   const divMapa = useRef<HTMLDivElement>(null);
   const mapa = useRef<Mapa | null>(null);
+  const rolagem = useRef<HTMLElement>(null);
+  // Técnicos de apoio de cada O.S. (a O.S. aparece também na linha deles).
+  const [apoios, setApoios] = useState<{ os_id: string; tecnico_id: string }[]>([]);
   const [mapaPronto, setMapaPronto] = useState(false);
 
   const inicioDia = useMemo(() => new Date(`${dia}T00:00:00`), [dia]);
@@ -67,6 +71,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
     const semana = new Date(inicioDia.getTime() - 7 * 86400000).toISOString();
     supabase.from("console_despacho_os").select("*").or(`status.in.(${ABERTAS.join(",")}),concluida_em.gte.${semana}`).lt("criado_em", fim).limit(2000)
       .then(({ data }) => { setOrdens((data as OsConsole[]) ?? []); setAgora(Date.now()); });
+    supabase.from("os_tecnicos_apoio").select("os_id, tecnico_id").then(({ data }) => setApoios(data ?? []));
     supabase.from("expedientes").select("tecnico_id, inicio, fim").lt("inicio", fim).or(`fim.is.null,fim.gt.${ini}`)
       .then(({ data }) => setExpedientes(data ?? []));
     supabase.from("refeicoes").select("tecnico_id, inicio, fim").lt("inicio", fim).or(`fim.is.null,fim.gt.${ini}`)
@@ -96,6 +101,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
     const canal = supabase.channel("console-despacho")
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens_servico" }, emBreve)
       .on("postgres_changes", { event: "*", schema: "public", table: "expedientes" }, emBreve)
+      .on("postgres_changes", { event: "*", schema: "public", table: "os_tecnicos_apoio" }, emBreve)
       .on("postgres_changes", { event: "*", schema: "public", table: "refeicoes" }, emBreve)
       .subscribe();
     return () => { clearInterval(relogio); if (agrupador) clearTimeout(agrupador); supabase.removeChannel(canal); };
@@ -130,7 +136,11 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
     .sort((a, b) => (a.sla_limite ?? a.criado_em).localeCompare(b.sla_limite ?? b.criado_em)), [ordens]);
 
   const linhas = useMemo(() => tecnicos.filter((t) => !busca || t.nome.toLowerCase().includes(busca.toLowerCase())).map((t) => {
-    const minhas = barras.filter((b) => b.os.tecnico_id === t.id);
+    const deApoio = new Set(apoios.filter((a) => a.tecnico_id === t.id).map((a) => a.os_id));
+    const minhas = [
+      ...barras.filter((b) => b.os.tecnico_id === t.id).map((b) => ({ ...b, apoio: false })),
+      ...barras.filter((b) => deApoio.has(b.os.id) && b.os.tecnico_id !== t.id).map((b) => ({ ...b, apoio: true })),
+    ];
     return {
       t, barras: minhas,
       expedientes: expedientes.filter((e) => e.tecnico_id === t.id),
@@ -138,7 +148,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
       abertas: ordens.filter((o) => o.tecnico_id === t.id && ABERTAS.includes(o.status) && o.status !== "rascunho").length,
       emCampo: expedientes.some((e) => e.tecnico_id === t.id && !e.fim),
     };
-  }), [tecnicos, busca, barras, expedientes, refeicoes, ordens]);
+  }), [tecnicos, busca, barras, expedientes, refeicoes, ordens, apoios]);
 
   // Despacha/transfere e, se veio de um arraste na linha do tempo, já programa o horário.
   async function despachar(osId: string, tecnicoId: string, horario?: { inicio: number; fim: number }) {
@@ -307,6 +317,13 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
   };
   const horas = Array.from({ length: H_FIM - H_INICIO + 1 }, (_, i) => H_INICIO + i);
   const posAgora = ehHoje && agora ? escala(agora) : null;
+  // Ao abrir (ou trocar o dia), rola até 2h antes da hora atual; em outro dia, até as 7h.
+  useEffect(() => {
+    const el = rolagem.current;
+    if (!el) return;
+    const hora = ehHoje ? Math.max(0, new Date().getHours() - 2) : 7;
+    el.scrollLeft = ((el.scrollWidth - 224) * hora) / (H_FIM - H_INICIO);
+  }, [dia, ehHoje]);
 
   return (
     <div className="grid gap-3">
@@ -373,9 +390,10 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
         </section>
       </div>
 
-      <section className="isolate overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <section ref={rolagem} className="isolate overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <div className="min-w-[1700px]">
         <div className="flex border-b border-gray-200 bg-gray-50 text-xs text-gray-500">
-          <div className="w-56 shrink-0 border-r border-gray-200 p-2">
+          <div className="sticky left-0 z-50 w-56 shrink-0 border-r border-gray-200 bg-gray-50 p-2">
             <input className="w-full rounded border border-gray-300 px-2 py-1 text-sm" placeholder="Nome do técnico" value={busca}
               onChange={(e) => setBusca(e.target.value)} />
           </div>
@@ -400,7 +418,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
             onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData("text/plain"); setAlvo(null); setArrastando(null); if (!id) return;
               const inicio = horaNoPonto(e.clientX, e.currentTarget.querySelector("[data-trilho]")!);
               despachar(id, t.id, { inicio, fim: inicio + 60 * 60000 }); }}>
-            <div className="flex w-56 shrink-0 items-center gap-2 border-r border-gray-200 px-2 py-2">
+            <div className="sticky left-0 z-50 flex w-56 shrink-0 items-center gap-2 border-r border-gray-200 bg-white px-2 py-2">
               <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded text-xs font-bold text-white ${emCampo ? "bg-green-700" : "bg-gray-500"}`}>
                 {iniciais(t.nome)}
               </span>
@@ -431,16 +449,16 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
                 </div>
               ))}
               {bs.map((barra) => {
-                const { os, planejada, programada } = barra;
+                const { os, planejada, programada, apoio } = barra;
                 const movendo = mover?.osId === os.id;
                 // Indo para outra linha: aqui fica só a sombra (ela continua recebendo o arraste).
                 const saindo = movendo && mover.modo === "mover" && mover.tecnicoId !== t.id;
                 const comeco = movendo && !saindo ? mover.comeco + (mover.modo === "mover" ? mover.delta : 0) : barra.comeco;
                 const termino = movendo && !saindo ? (mover.modo === "mover" ? mover.termino + mover.delta : Math.max(mover.comeco + PASSO, mover.termino + mover.delta)) : barra.termino;
                 const a = escala(comeco), b = escala(termino), c = COR[os.status];
-                const movel = planejada && ["rascunho", "enviada", "aceita"].includes(os.status);
+                const movel = !apoio && planejada && ["rascunho", "enviada", "aceita"].includes(os.status);
                 return (
-                  <button key={os.id} onClick={() => { if (!arrastou.current) setDetalhe(os); arrastou.current = false; }}
+                  <button key={`${os.id}${apoio ? "-apoio" : ""}`} onClick={() => { if (!arrastou.current) setDetalhe(os); arrastou.current = false; }}
                     onPointerDown={movel ? (e) => comecarMover(e, barra, "mover") : undefined}
                     onPointerMove={movel ? duranteMover : undefined}
                     onPointerUp={movel ? terminarMover : undefined}
@@ -448,10 +466,11 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
                     style={{
                       left: `${a}%`, width: `${Math.max(1.5, b - a)}%`, color: c.texto,
                       background: planejada && !programada ? `repeating-linear-gradient(135deg, ${c.fundo} 0 6px, #ffffff 6px 9px)` : c.fundo,
-                      border: planejada ? `1px ${programada ? "solid" : "dashed"} ${c.texto}` : undefined,
+                      border: apoio ? `2px dotted ${c.texto}` : planejada ? `1px ${programada ? "solid" : "dashed"} ${c.texto}` : undefined,
+                      opacity: apoio ? 0.75 : undefined,
                     }}
                     title={`O.S. ${os.numero} · ${os.titulo}\n${os.tipo} · ${rotuloStatus[os.status]}\n${programada ? `Programada ${hm(new Date(comeco).toISOString())} – ${hm(new Date(termino).toISOString())}` : planejada ? `Enviada ${hm(new Date(comeco).toISOString())}${os.sla_limite ? ` · SLA até ${hm(os.sla_limite)}` : ""}` : `${hm(new Date(comeco).toISOString())} – ${os.concluida_em ? hm(os.concluida_em) : "agora"}`}${os.endereco ? `\n${os.endereco}` : ""}${os.status === "rascunho" ? "\nBacklog programado: vai para o técnico às 08h do dia." : ""}${movel ? "\nArraste para mudar o horário ou o técnico; puxe a borda direita para mudar a duração." : ""}`}>
-                    {os.status === "rascunho" ? "📅 " : ""}{movendo && !saindo ? `${hm(new Date(comeco).toISOString())}–${hm(new Date(termino).toISOString())} ` : ""}{os.numero} {os.titulo}
+                    {apoio ? "APOIO · " : ""}{os.status === "rascunho" ? "📅 " : ""}{movendo && !saindo ? `${hm(new Date(comeco).toISOString())}–${hm(new Date(termino).toISOString())} ` : ""}{os.numero} {os.titulo}
                     {movel && (
                       <span className="absolute inset-y-0 right-0 w-2 cursor-ew-resize bg-black/10 hover:bg-black/30" aria-label="Mudar a duração"
                         onPointerDown={(e) => comecarMover(e, barra, "fim")}
@@ -474,8 +493,10 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
           <span className="flex items-center gap-1"><span className="h-3 w-5 rounded-sm border border-dashed border-gray-600"
             style={{ background: "repeating-linear-gradient(135deg, #93c5fd 0 4px, #fff 4px 6px)" }} />Aguardando início (até o SLA)</span>
           <span className="flex items-center gap-1"><span className="h-3 w-5 rounded-sm border border-gray-700" style={{ background: "#93c5fd" }} />Programada (arraste a barra para mudar horário ou técnico)</span>
+          <span className="flex items-center gap-1"><span className="h-3 w-5 rounded-sm border-2 border-dotted border-gray-600 bg-blue-100" />Apoio (O.S. de outro técnico)</span>
           <span className="flex items-center gap-1"><span className="h-3 w-5 rounded-sm bg-teal-50 ring-1 ring-teal-200" />Expediente</span>
           <span className="flex items-center gap-1"><span className="h-3 w-5 rounded-sm bg-gray-300" />Refeição</span>
+        </div>
         </div>
       </section>
 

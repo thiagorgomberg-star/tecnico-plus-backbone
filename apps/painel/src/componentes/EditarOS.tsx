@@ -6,6 +6,14 @@ import MaterialApoio from "@/componentes/MaterialApoio";
 import { supabase } from "@/lib/supabase";
 import { OrdemServico, Prioridade, TIPOS_OS } from "@/lib/tipos";
 
+// "2026-10-27T08:30" (campo datetime-local, hora local) <-> ISO.
+const paraCampo = (iso?: string | null) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
+const doCampo = (v: string) => (v ? new Date(v).toISOString() : null);
+
 // Supervisor altera os dados da O.S. enquanto ela não está encerrada (baixada ou cancelada: reabrir antes).
 export default function EditarOS({ os, fechar, salva }: { os: OrdemServico; fechar: () => void; salva?: () => void }) {
   const [f, setF] = useState({
@@ -17,6 +25,9 @@ export default function EditarOS({ os, fechar, salva }: { os: OrdemServico; fech
     descricao: os.descricao ?? "",
     observacao_tecnico: os.observacao_tecnico ?? "",
     observacao_supervisor: os.observacao_supervisor ?? "",
+    criado_em: paraCampo(os.criado_em),
+    programada_inicio: paraCampo(os.programada_inicio),
+    programada_fim: paraCampo(os.programada_fim),
   });
   const [salvando, setSalvando] = useState(false);
   const [apoio, setApoio] = useState(false);
@@ -27,6 +38,10 @@ export default function EditarOS({ os, fechar, salva }: { os: OrdemServico; fech
   async function salvar() {
     setErro("");
     if (!f.titulo.trim()) return setErro("Informe o título.");
+    if (!f.criado_em) return setErro("Informe a data e hora do acionamento.");
+    if (f.programada_fim && !f.programada_inicio) return setErro("Informe o início programado.");
+    if (f.programada_inicio && f.programada_fim && f.programada_fim <= f.programada_inicio) return setErro("O fim programado precisa ser depois do início.");
+    const acionamentoMudou = f.criado_em !== paraCampo(os.criado_em);
     setSalvando(true);
     const ticket = f.ticket.trim();
     const { error } = await supabase.from("ordens_servico").update({
@@ -37,9 +52,19 @@ export default function EditarOS({ os, fechar, salva }: { os: OrdemServico; fech
       descricao: f.descricao.trim() || null,
       observacao_tecnico: f.observacao_tecnico.trim() || null,
       observacao_supervisor: f.observacao_supervisor.trim() || null,
+      ...(acionamentoMudou ? { criado_em: doCampo(f.criado_em) } : {}),
+      programada_inicio: doCampo(f.programada_inicio),
+      // Sem fim informado: 1h depois do início (como na linha do tempo).
+      programada_fim: f.programada_inicio
+        ? doCampo(f.programada_fim) ?? new Date(new Date(f.programada_inicio).getTime() + 3600000).toISOString() : null,
       // Em branco mantém o token gerado pelo sistema; informado, vira o ticket de acionamento.
       ...(ticket && ticket !== os.ticket_acionamento ? { ticket_acionamento: ticket, ticket_interno: false } : {}),
     }).eq("id", os.id);
+    if (!error && acionamentoMudou) {
+      // O SLA conta do acionamento: recalcula o limite.
+      const r = await supabase.rpc("recalcular_sla_os", { p_os: os.id });
+      if (r.error) { setSalvando(false); return setErro(`Dados salvos, mas o SLA não foi recalculado: ${r.error.message}`); }
+    }
     setSalvando(false);
     if (error) return setErro(error.message);
     salva?.();
@@ -74,6 +99,18 @@ export default function EditarOS({ os, fechar, salva }: { os: OrdemServico; fech
               </select>
             </label>
           </div>
+          <label>Data e hora do acionamento (o SLA conta daqui)
+            <input type="datetime-local" className={campo} value={f.criado_em} onChange={muda("criado_em")} />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label>Programada: início
+              <input type="datetime-local" className={campo} value={f.programada_inicio} onChange={muda("programada_inicio")} />
+            </label>
+            <label>Programada: fim
+              <input type="datetime-local" className={campo} value={f.programada_fim} onChange={muda("programada_fim")} />
+            </label>
+          </div>
+          <p className="-mt-1 text-xs text-gray-500">O horário programado posiciona a O.S. na linha do tempo do console. Deixe em branco para não programar.</p>
           <label>Endereço ou referência<input className={campo} value={f.endereco} onChange={muda("endereco")} /></label>
           <label>Descrição<textarea className={campo} rows={3} value={f.descricao} onChange={muda("descricao")} /></label>
           <label>Observação do técnico<textarea className={campo} rows={3} value={f.observacao_tecnico} onChange={muda("observacao_tecnico")} /></label>
