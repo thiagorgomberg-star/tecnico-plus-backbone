@@ -31,7 +31,8 @@ export default function MascaraFoto({ dados, aoCarregar, ref }: Props) {
   return (
     <View ref={ref} collapsable={false} style={{ width: LARGURA_MASCARA, backgroundColor: '#fff' }}>
       <View style={{ width: LARGURA_MASCARA, height: alturaFoto }}>
-        <Image source={{ uri: dados.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" onLoad={aoCarregar} />
+        {/* fadeDuration 0: no Android a imagem entra com fade de 300 ms; capturada no meio dele, a foto sai esbranquiçada. */}
+        <Image source={{ uri: dados.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" fadeDuration={0} onLoad={aoCarregar} />
         <View style={{ position: 'absolute', left: 18 * s, bottom: 16 * s }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={[estilos.sombra, { color: '#fff', fontSize: 100 * s, fontFamily: 'RobotoCondensed_400Regular' }]}>
@@ -68,7 +69,7 @@ export default function MascaraFoto({ dados, aoCarregar, ref }: Props) {
           {dados.cargo ? <Text style={{ color: '#333', fontSize: 38 * s, marginTop: 2 * s, fontFamily: 'RobotoCondensed_400Regular' }} numberOfLines={1}>{dados.cargo}</Text> : null}
         </View>
         <Image source={require('../../assets/mascara/logo-multivale.png')}
-          style={{ width: 180 * s, height: 96 * s }} resizeMode="contain" />
+          style={{ width: 180 * s, height: 96 * s }} resizeMode="contain" fadeDuration={0} />
       </View>
     </View>
   );

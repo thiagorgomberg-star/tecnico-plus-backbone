@@ -187,7 +187,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
     if (!camera.current || tirando) return;
     setTirando(true);
     try {
-      const foto = await camera.current.takePictureAsync({ quality: 0.8, shutterSound: false });
+      const foto = await camera.current.takePictureAsync({ quality: 0.92, shutterSound: false });
       if (foto.width <= foto.height) {
         Alert.alert('Foto na vertical', 'Gire o celular na horizontal e tire a foto de novo.');
         return;
@@ -242,7 +242,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
     if (!atual || !dados || !mascara.current) return;
     try {
       const alturaFinal = Math.round((LARGURA_FINAL * dados.alturaFoto * 1.137) / dados.larguraFoto);
-      const temporario = await captureRef(mascara, { format: 'jpg', quality: 0.85, width: LARGURA_FINAL, height: alturaFinal });
+      const temporario = await captureRef(mascara, { format: 'jpg', quality: 0.92, width: LARGURA_FINAL, height: alturaFinal });
       const pasta = new Directory(Paths.document, 'fotos');
       if (!pasta.exists) pasta.create();
       const destino = new File(pasta, `${randomUUID()}.jpg`);
@@ -396,7 +396,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
       {/* Desenhada fora da tela só para gerar a imagem final com a máscara. */}
       {dados && (
         <View style={{ position: 'absolute', left: -10000, top: 0 }} pointerEvents="none">
-          <MascaraFoto key={dados.uri} ref={mascara} dados={dados} aoCarregar={() => setTimeout(salvarComMascara, 150)} />
+          <MascaraFoto key={dados.uri} ref={mascara} dados={dados} aoCarregar={() => setTimeout(salvarComMascara, 400)} />
         </View>
       )}
     </View>
