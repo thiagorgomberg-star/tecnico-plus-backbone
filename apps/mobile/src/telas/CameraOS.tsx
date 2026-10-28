@@ -9,6 +9,8 @@ import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleShe
 import { captureRef } from 'react-native-view-shot';
 
 import MascaraFoto, { DadosMascara, RefMascara } from '../componentes/MascaraFoto';
+import { compartilharFoto } from '../lib/compartilharFoto';
+import { minhaEquipe, MinhaEquipe } from '../lib/equipe';
 import { caminhoFotoOs, enfileirar, legendarFoto } from '../lib/fila';
 import { cores } from '../lib/estilo';
 import { enderecoDe } from '../lib/localizacao';
@@ -106,6 +108,9 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
   const endereco = useRef<{ latitude: number; longitude: number; texto: string } | null>(null);
   const consultando = useRef(false);
   const [miniaturas, setMiniaturas] = useState<string[]>([]);
+  // Técnico, auxiliar e classe da equipe para a máscara (guardado para funcionar sem sinal).
+  const [equipe, setEquipe] = useState<MinhaEquipe | null>(null);
+  useEffect(() => { minhaEquipe().then(setEquipe).catch(() => {}); }, []);
   // Balão "+ Legenda" da última foto (antes/depois). Some sozinho: sem toque, a foto segue sem legenda.
   const [balao, setBalao] = useState<{ uri: string; osId: string } | null>(null);
   const [escrevendo, setEscrevendo] = useState<{ uri: string; osId: string } | null>(null);
@@ -200,8 +205,10 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
         latitude: pos?.latitude ?? null,
         longitude: pos?.longitude ?? null,
         endereco: endereco.current?.texto ?? null,
-        nome: usuario.nome,
-        cargo: usuario.cargo,
+        nome: equipe?.tecnico.nome ?? usuario.nome,
+        cargo: equipe ? equipe.tecnico.cargo : usuario.cargo,
+        auxiliar: equipe?.auxiliares.map((a) => a.nome).join(', ') || null,
+        classe: equipe?.classe ?? null,
       };
       if (unica) {
         setFila((f) => [...f, { ...base, tiradaEm: new Date(), unica: true }]);
@@ -358,7 +365,12 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
       </View>
 
       <ScrollView horizontal style={estilos.miniaturas}>
-        {miniaturas.map((uri) => <Image key={uri} source={{ uri }} style={estilos.miniatura} />)}
+        {/* Tocar na miniatura abre o Compartilhar (WhatsApp) da foto já com a máscara. */}
+        {miniaturas.map((uri) => (
+          <Pressable key={uri} onPress={() => compartilharFoto(uri, 'Foto da O.S.')} accessibilityLabel="Compartilhar esta foto">
+            <Image source={{ uri }} style={estilos.miniatura} />
+          </Pressable>
+        ))}
       </ScrollView>
 
       {balao ? (

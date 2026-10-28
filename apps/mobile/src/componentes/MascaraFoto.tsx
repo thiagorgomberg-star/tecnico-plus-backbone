@@ -16,8 +16,10 @@ export type DadosMascara = {
   latitude: number | null;
   longitude: number | null;
   endereco: string | null;
-  nome: string;
+  nome: string; // técnico responsável (mesmo quando quem fotografa é o auxiliar)
   cargo: string | null;
+  auxiliar?: string | null;
+  classe?: 'L' | 'F' | null;
 };
 
 export type RefMascara = ComponentRef<typeof View>;
@@ -63,11 +65,25 @@ export default function MascaraFoto({ dados, aoCarregar, ref }: Props) {
           ) : null}
         </View>
       </View>
-      <View style={{ height: alturaBarra, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 28 * s }}>
+      {/* Técnico em cima, auxiliar embaixo; classe da equipe ao lado do logo. */}
+      <View style={{ minHeight: alturaBarra, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 28 * s, paddingVertical: 8 * s }}>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: '#111', fontSize: 48 * s, fontFamily: 'RobotoCondensed_700Bold' }} numberOfLines={1}>{dados.nome}</Text>
-          {dados.cargo ? <Text style={{ color: '#333', fontSize: 38 * s, marginTop: 2 * s, fontFamily: 'RobotoCondensed_400Regular' }} numberOfLines={1}>{dados.cargo}</Text> : null}
+          <Text style={{ color: '#111', fontSize: 46 * s, fontFamily: 'RobotoCondensed_700Bold' }} numberOfLines={1}>
+            {dados.nome}
+            {dados.cargo ? <Text style={{ color: '#333', fontSize: 34 * s, fontFamily: 'RobotoCondensed_400Regular' }}>{`  ${dados.cargo}`}</Text> : null}
+          </Text>
+          {dados.auxiliar ? (
+            <Text style={{ color: '#222', fontSize: 38 * s, marginTop: 4 * s, fontFamily: 'RobotoCondensed_400Regular' }} numberOfLines={1}>
+              Auxiliar: <Text style={{ fontFamily: 'RobotoCondensed_700Bold' }}>{dados.auxiliar}</Text>
+            </Text>
+          ) : null}
         </View>
+        {dados.classe ? (
+          <View style={{ borderWidth: 3 * s, borderColor: '#1a237e', borderRadius: 8 * s, paddingHorizontal: 14 * s, paddingVertical: 4 * s, marginRight: 20 * s, alignItems: 'center' }}>
+            <Text style={{ color: '#1a237e', fontSize: 24 * s, fontFamily: 'RobotoCondensed_700Bold' }}>EQUIPE</Text>
+            <Text style={{ color: '#1a237e', fontSize: 40 * s, lineHeight: 44 * s, fontFamily: 'RobotoCondensed_700Bold' }}>CLASSE {dados.classe}</Text>
+          </View>
+        ) : null}
         <Image source={require('../../assets/mascara/logo-multivale.png')}
           style={{ width: 180 * s, height: 96 * s }} resizeMode="contain" fadeDuration={0} />
       </View>

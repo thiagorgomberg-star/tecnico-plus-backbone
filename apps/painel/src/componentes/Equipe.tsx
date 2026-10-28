@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabase";
 const CARGO_PADRAO: Record<string, string> = { tecnico: "Técnico de Backbone", auxiliar: "Auxiliar técnico", supervisor: "Supervisor" };
 
 type Membro = {
-  id: string; nome: string; cargo: string | null; matricula: string | null; documento: string | null; papel: string; ativo: boolean; tecnico_responsavel_id: string | null;
+  id: string; nome: string; cargo: string | null; matricula: string | null; documento: string | null; papel: string; ativo: boolean; tecnico_responsavel_id: string | null; classe_equipe: "L" | "F" | null;
   inicio_jornada: string; fim_jornada: string; fim_jornada_sexta: string; regime_horas: "hora_extra" | "banco_horas";
 };
 
@@ -31,7 +31,7 @@ export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
   }, []);
 
   useEffect(() => {
-    supabase.from("usuarios").select("id, nome, cargo, matricula, documento, papel, ativo, tecnico_responsavel_id, inicio_jornada, fim_jornada, fim_jornada_sexta, regime_horas").is("excluido_em", null).order("nome")
+    supabase.from("usuarios").select("id, nome, cargo, matricula, documento, papel, ativo, tecnico_responsavel_id, classe_equipe, inicio_jornada, fim_jornada, fim_jornada_sexta, regime_horas").is("excluido_em", null).order("nome")
       .then(({ data }) => setMembros(data ?? []));
   }, [versao]);
 
@@ -114,6 +114,17 @@ export default function Equipe({ aoMudar }: { aoMudar: () => void }) {
             )}
             {m.papel === "tecnico" && auxiliaresDe(m.id).length > 0 && (
               <span className="text-xs text-gray-500">Auxiliar: {auxiliaresDe(m.id).join(", ")}</span>
+            )}
+            {m.papel === "tecnico" && (
+              <label className="flex items-center gap-1 text-gray-600" title="Sai na máscara das fotos da equipe (técnico e auxiliar)">
+                Equipe
+                <select className="rounded border border-gray-200 px-2 py-1" value={m.classe_equipe ?? ""}
+                  onChange={(e) => atualizar(m, { classe_equipe: (e.target.value || null) as Membro["classe_equipe"] })}>
+                  <option value="">— classe —</option>
+                  <option value="L">Classe L</option>
+                  <option value="F">Classe F</option>
+                </select>
+              </label>
             )}
             {m.papel === "tecnico" && (
               <label className="flex items-center gap-1 text-gray-600">

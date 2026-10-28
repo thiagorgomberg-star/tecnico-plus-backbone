@@ -7,6 +7,7 @@ import { CaixaRede, descreverFibra, descreverSaidas, origemNaoCadastrada, rotulo
 import { FotoCaixa, fotosDaCaixa, rotuloFotoCaixa } from '../lib/fotosCaixa';
 import { distanciaKm } from '../lib/navegacao';
 import Icone, { NomeIcone } from './Icone';
+import BotaoCompartilharFoto from './BotaoCompartilharFoto';
 import MapaVetorial from './MapaVetorial';
 import MargemInferior from './MargemInferior';
 
@@ -231,6 +232,7 @@ export default function MapaCaixas({ aberto, modo, caixas, aqui, atual, escolher
         <Pressable style={s.fotoFundo} onPress={() => setFoto(null)}>
           {foto ? <Image source={{ uri: foto.uri }} style={{ width: '100%', height: '80%' }} resizeMode="contain" /> : null}
           {foto ? <Text style={s.fotoLegenda}>{sel?.identificacao} · {rotuloFotoCaixa(foto)}{foto.tiradaEm ? ` · ${new Date(foto.tiradaEm).toLocaleDateString('pt-BR')}` : ''}</Text> : null}
+          {foto ? <BotaoCompartilharFoto uri={foto.uri} titulo={sel?.identificacao} /> : null}
         </Pressable>
       </Modal>
       <MargemInferior />

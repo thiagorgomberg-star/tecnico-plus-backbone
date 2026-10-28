@@ -4,6 +4,7 @@ import { Alert, Image, Modal, Pressable, StyleSheet, Text, TextInput, View } fro
 import { cores } from '../lib/estilo';
 import { aoMudarFila, caminhoFotoOs, enfileirar, itensPendentes, legendarFoto, removerDaFila } from '../lib/fila';
 import { supabase } from '../lib/supabase';
+import BotaoCompartilharFoto from './BotaoCompartilharFoto';
 import Icone from './Icone';
 
 type Foto = { uri: string; tipo: string; caminho: string; filaId?: string; tiradaEm: string | null; legenda: string | null };
@@ -129,6 +130,7 @@ export default function FotosDaOS({ osId, podeExcluir }: { osId: string; podeExc
               </Pressable>
             ) : null
           ) : null}
+          {aberta && !escrevendo ? <BotaoCompartilharFoto uri={aberta.uri} titulo={aberta.legenda ?? 'Foto da O.S.'} /> : null}
           {aberta && podeExcluir && !escrevendo ? (
             <Pressable style={s.excluir} onPress={() => excluir(aberta)}>
               <Icone nome="trash-can-outline" tamanho={18} cor={cores.perigo} />

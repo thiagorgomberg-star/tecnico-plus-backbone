@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleShe
 
 import { cores } from '../lib/estilo';
 import { excluirFotoCaixa, FotoCaixa, fotosDaCaixa, rotuloFotoCaixa } from '../lib/fotosCaixa';
+import BotaoCompartilharFoto from './BotaoCompartilharFoto';
 import Icone from './Icone';
 import MargemInferior from './MargemInferior';
 
@@ -59,7 +60,8 @@ export default function GaleriaFotosCaixa({ caixaId, filtro, fechar, tirar }: {
                 <Text style={[s.suave, { flex: 1 }]}>
                   {f.tiradaEm ? new Date(f.tiradaEm).toLocaleString('pt-BR') : ''}{f.pendente ? ' · aguardando envio' : ''}
                 </Text>
-                <Pressable style={s.excluir} onPress={() => excluir(f)}>
+                <BotaoCompartilharFoto uri={f.uri} titulo={filtro?.titulo} compacto />
+                <Pressable style={[s.excluir, { marginLeft: 14 }]} onPress={() => excluir(f)}>
                   <Icone nome="trash-can-outline" tamanho={18} cor={cores.perigo} />
                   <Text style={{ color: cores.perigo, fontWeight: '700' }}>Excluir</Text>
                 </Pressable>
@@ -77,6 +79,7 @@ export default function GaleriaFotosCaixa({ caixaId, filtro, fechar, tirar }: {
       <Modal visible={!!aberta} transparent animationType="fade" onRequestClose={() => setAberta(null)} supportedOrientations={['portrait', 'landscape']}>
         <Pressable style={s.fundo} onPress={() => setAberta(null)}>
           {aberta ? <Image source={{ uri: aberta.uri }} style={{ width: '100%', height: '80%' }} resizeMode="contain" /> : null}
+          {aberta ? <BotaoCompartilharFoto uri={aberta.uri} titulo={filtro?.titulo} /> : null}
           {aberta ? (
             <Pressable style={[s.excluir, { marginTop: 14, backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 }]} onPress={() => excluir(aberta)}>
               <Icone nome="trash-can-outline" tamanho={18} cor={cores.perigo} />
