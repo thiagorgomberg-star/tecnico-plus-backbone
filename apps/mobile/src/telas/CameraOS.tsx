@@ -2,12 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { randomUUID } from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
+import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 
+import Icone from '../componentes/Icone';
 import MascaraFoto, { DadosMascara, RefMascara } from '../componentes/MascaraFoto';
 import { compartilharFoto } from '../lib/compartilharFoto';
 import { minhaEquipe, MinhaEquipe } from '../lib/equipe';
@@ -78,6 +80,20 @@ function melhorTamanho(tamanhos: string[]) {
     .filter((x) => x.l >= LARGURA_FINAL && Math.abs(x.l / x.a - 4 / 3) < 0.05);
   validos.sort((x, y) => x.l * x.a - y.l * y.a);
   return validos[0]?.t;
+}
+
+// EXIF: coordenada em graus decimais ou [graus, minutos, segundos]; S/W ficam negativos.
+function coordExif(v: unknown, ref: unknown): number | null {
+  const n = Array.isArray(v) ? Number(v[0]) + Number(v[1] ?? 0) / 60 + Number(v[2] ?? 0) / 3600 : typeof v === 'string' ? parseFloat(v) : typeof v === 'number' ? v : NaN;
+  if (!Number.isFinite(n) || n === 0) return null;
+  return /^[SW]/i.test(String(ref ?? '')) ? -Math.abs(n) : n;
+}
+// EXIF "2026:10:28 14:03:22" (hora local do celular).
+function dataExif(v: unknown): Date | null {
+  const m = typeof v === 'string' ? v.match(/(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/) : null;
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 // Distância aproximada em metros (suficiente para decidir se o endereço precisa ser consultado de novo).
@@ -197,21 +213,57 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
         Alert.alert('Foto na vertical', 'Gire o celular na horizontal e tire a foto de novo.');
         return;
       }
-      const pos = posicao.current;
+      await registrar(foto);
+    } catch (e) {
+      Alert.alert('Erro ao tirar a foto', String(e));
+    } finally {
+      setTirando(false);
+    }
+  }
+
+  // Foto da galeria: usa data e GPS gravados na foto (EXIF); sem eles, a hora e a posição de agora.
+  async function daGaleria() {
+    const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: !unica, exif: true, quality: 1 });
+    if (r.canceled) return;
+    setTirando(true);
+    try {
+      for (const a of r.assets) {
+        const exif = (a.exif ?? {}) as Record<string, unknown>;
+        const lat = coordExif(exif.GPSLatitude, exif.GPSLatitudeRef);
+        const lng = coordExif(exif.GPSLongitude, exif.GPSLongitudeRef);
+        const data = dataExif(exif.DateTimeOriginal ?? exif.DateTime);
+        const gps = lat != null && lng != null ? { latitude: lat, longitude: lng } : null;
+        const texto = gps ? await enderecoDe(gps.latitude, gps.longitude, 8000).catch(() => null) : undefined;
+        // A cópia vai para o cache: registrar() move o arquivo, e o original da galeria não pode sumir.
+        const copia = new File(Paths.cache, `galeria-${randomUUID()}.jpg`);
+        new File(a.uri).copy(copia);
+        await registrar({ uri: copia.uri, width: a.width, height: a.height }, { tiradaEm: data, posicao: gps, endereco: gps ? texto ?? null : undefined });
+      }
+    } catch (e) {
+      Alert.alert('Erro ao trazer da galeria', String(e));
+    } finally {
+      setTirando(false);
+    }
+  }
+
+  async function registrar(foto: { uri: string; width: number; height: number },
+    origem?: { tiradaEm: Date | null; posicao: { latitude: number; longitude: number } | null; endereco?: string | null }) {
+      const pos = origem?.posicao ?? posicao.current;
+      const tiradaEm = origem?.tiradaEm ?? new Date();
       const base = {
         uri: foto.uri,
         larguraFoto: foto.width,
         alturaFoto: foto.height,
         latitude: pos?.latitude ?? null,
         longitude: pos?.longitude ?? null,
-        endereco: endereco.current?.texto ?? null,
+        endereco: origem?.endereco !== undefined ? origem.endereco : endereco.current?.texto ?? null,
         nome: equipe?.tecnico.nome ?? usuario.nome,
         cargo: equipe ? equipe.tecnico.cargo : usuario.cargo,
         auxiliar: equipe?.auxiliares.map((a) => a.nome).join(', ') || null,
         classe: equipe?.classe ?? null,
       };
       if (unica) {
-        setFila((f) => [...f, { ...base, tiradaEm: new Date(), unica: true }]);
+        setFila((f) => [...f, { ...base, tiradaEm, unica: true }]);
         return;
       }
       // Tira a foto do cache e grava os dados antes de qualquer outra coisa.
@@ -222,7 +274,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
       const crua: FotoCrua = {
         ...base,
         uri: arquivo.uri,
-        tiradaEm: new Date().toISOString(),
+        tiradaEm: tiradaEm.toISOString(),
         osId,
         tipoAnexo: ponto ? 'foto_ponto' : caixa?.tipo ?? tipo,
         caixaId: caixa?.id,
@@ -237,11 +289,6 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
         if (timerBalao.current) clearTimeout(timerBalao.current);
         timerBalao.current = setTimeout(() => setBalao(null), 7000);
       }
-    } catch (e) {
-      Alert.alert('Erro ao tirar a foto', String(e));
-    } finally {
-      setTirando(false);
-    }
   }
 
   // Chamado quando a máscara terminou de desenhar a foto: grava a imagem final e põe na fila.
@@ -400,6 +447,12 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
         </View>
       </Modal>
 
+      <Pressable style={[estilos.galeria, tirando && { opacity: 0.4 }]} disabled={tirando} onPress={daGaleria}
+        accessibilityLabel="Enviar foto da galeria">
+        <Icone nome="image-multiple" tamanho={22} cor="#fff" />
+        <Text style={[estilos.texto, { fontSize: 13 }]}>Galeria</Text>
+      </Pressable>
+
       <Pressable style={[estilos.disparo, (!horizontal || tirando) && { opacity: 0.4 }]}
         disabled={!horizontal || tirando} onPress={fotografar}>
         {tirando ? <ActivityIndicator color={cores.primaria} /> : null}
@@ -426,6 +479,7 @@ const estilos = StyleSheet.create({
   guiaFoto: { width: 164, height: 104, borderRadius: 6, borderWidth: 2, borderColor: '#FFD54F' },
   guiaTexto: { color: '#FFD54F', fontSize: 12, fontWeight: '700' },
   miniatura: { width: 96, height: 60, marginRight: 8, borderRadius: 4, borderWidth: 1, borderColor: '#fff' },
+  galeria: { position: 'absolute', right: 20, bottom: 24, alignItems: 'center', gap: 2, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.55)' },
   disparo: { position: 'absolute', right: 24, top: '50%', marginTop: -36, width: 72, height: 72, borderRadius: 36,
     backgroundColor: '#fff', borderWidth: 4, borderColor: 'rgba(255,255,255,0.5)', alignItems: 'center', justifyContent: 'center' },
   balao: { position: 'absolute', right: 108, top: '50%', marginTop: -24, flexDirection: 'row', alignItems: 'center', gap: 6,
