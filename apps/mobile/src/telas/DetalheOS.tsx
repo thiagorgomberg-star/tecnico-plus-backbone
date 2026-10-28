@@ -18,6 +18,7 @@ import { aoMudarFila, enfileirar, itensPendentes } from '../lib/fila';
 import { idadeOs, textoSla } from '../lib/formato';
 import { posicaoAtual } from '../lib/localizacao';
 import { compartilharKmz } from '../lib/kmz';
+import { compartilharBookFotos } from '../lib/bookFotos';
 import { compartilharOsApresentacao } from '../lib/osApresentacao';
 import { compartilharRelatorio } from '../lib/relatorioPdf';
 import { ponto, supabase } from '../lib/supabase';
@@ -200,6 +201,18 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
     } finally {
       setGerandoPdf(false);
     }
+  }
+
+  // Book de fotos: .zip com todas as fotos da O.S. para salvar ou mandar (WhatsApp, e-mail, Drive).
+  const [baixandoBook, setBaixandoBook] = useState('');
+  async function baixarBook() {
+    try {
+      const n = await compartilharBookFotos(os, setBaixandoBook);
+      if (!n) Alert.alert('Sem fotos enviadas', 'As fotos ainda não subiram ou não há sinal. Tente de novo com internet.');
+    } catch {
+      Alert.alert('Não deu para gerar o book', 'Precisa de internet para baixar as fotos. Tente de novo com sinal.');
+    }
+    setBaixandoBook('');
   }
 
   async function enviarKmz(alvo: OrdemServico = os) {
@@ -395,6 +408,10 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
               {!['baixada', 'cancelada'].includes(os.status) ? (
                 <Acao icone="card-account-details-outline" rotulo="O.S. abordagem" cor="#0B3C6E"
                   aoTocar={() => compartilharOsApresentacao(os).catch((e) => Alert.alert('Não foi possível gerar', String(e)))} />
+              ) : null}
+              {totalFotos > 0 ? (
+                <Acao icone="folder-zip-outline" rotulo={baixandoBook ? `Book ${baixandoBook}` : 'Book de fotos'} cor="#5B3FA0"
+                  aoTocar={baixandoBook ? undefined : () => baixarBook()} />
               ) : null}
               {['concluida', 'baixada'].includes(os.status) ? (
                 <>

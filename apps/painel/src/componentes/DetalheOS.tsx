@@ -13,6 +13,7 @@ import ProgramarOS from "@/componentes/ProgramarOS";
 import ExecucaoOS from "@/componentes/ExecucaoOS";
 import ReabrirOS from "@/componentes/ReabrirOS";
 import { Cliente, ClienteOS, clientesDaOS, fmtSla, listarClientes, salvarClientesOS } from "@/lib/clientes";
+import { baixarBookFotos } from "@/lib/bookFotos";
 import { encerrarPeloSupervisor } from "@/lib/encerrarOS";
 import { supabase } from "@/lib/supabase";
 import { corStatus, ENCERRADAS, OrdemServico, rotuloDaOs, rotuloStatus, StatusOS } from "@/lib/tipos";
@@ -111,6 +112,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
     await supabase.from("os_tecnicos_apoio").delete().eq("os_id", os.id);
     fechar();
   }
+  const [baixandoBook, setBaixandoBook] = useState("");
   const fotos = anexos.filter((a) => a.tipo === "foto_antes" || a.tipo === "foto_depois");
 
   // Navegar entre as fotos da O.S. no visualizador (setas na tela e no teclado; Esc fecha).
@@ -345,6 +347,19 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
           <span className="flex items-center gap-1 text-xs font-normal text-green-700">
             <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-green-600" /> ao vivo
           </span>
+          {fotos.length > 0 && (
+            <button className="ml-auto rounded-lg bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+              disabled={!!baixandoBook} title="Baixa um .zip com todas as fotos da O.S. (antes, depois e das caixas), já com a máscara"
+              onClick={async () => {
+                try {
+                  const n = await baixarBookFotos(os, setBaixandoBook);
+                  if (!n) alert("Nenhuma foto para baixar.");
+                } catch (e) { alert(`Não deu para gerar o book: ${(e as Error).message}`); }
+                setBaixandoBook("");
+              }}>
+              {baixandoBook ? `Preparando ${baixandoBook}...` : "⬇ Baixar book de fotos (.zip)"}
+            </button>
+          )}
         </h3>
         <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-blue-300 bg-blue-50/50 p-3 text-sm">
           <label className="flex flex-col gap-1">
