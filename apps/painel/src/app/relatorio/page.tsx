@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState } from "react";
 import type { CaixaPainel } from "@/componentes/CaixaDetalhe";
 import { calcularPlano, descreverFibra, descreverOlt, localDgo, padroesPorExtenso, ehPonta, faixasDaBandeja, rotuloInstalacao, rotuloPonto, posicoesDgo, separarBandejas, svgMapaFusao, descreverSaidas, origemNaoCadastrada, linhasDaBandeja } from "@/lib/fusao";
 import { rotuloStatus, StatusOS } from "@/lib/tipos";
+import TextoNegrito from "@/componentes/TextoNegrito";
 
 // Relatório do evento aberto pelo link compartilhado com parceiros (sem login).
 // Os dados vêm da função relatorio-os, que só responde a um token válido.
@@ -100,7 +101,7 @@ function Conteudo() {
           <div><dt className="text-gray-500">Situação</dt><dd>{rotuloStatus[os.status] ?? os.status}</dd></div>
           <div><dt className="text-gray-500">Trecho</dt><dd>{os.rota?.trecho ?? "—"}</dd></div>
           <div className="col-span-2"><dt className="text-gray-500">Endereço / referência</dt><dd>{os.endereco ?? "—"}</dd></div>
-          {os.descricao && <div className="col-span-2"><dt className="text-gray-500">Descrição</dt><dd className="whitespace-pre-wrap">{os.descricao}</dd></div>}
+          {os.descricao && <div className="col-span-2"><dt className="text-gray-500">Descrição</dt><dd className="whitespace-pre-wrap"><TextoNegrito texto={os.descricao} /></dd></div>}
         </dl>
       </section>
 

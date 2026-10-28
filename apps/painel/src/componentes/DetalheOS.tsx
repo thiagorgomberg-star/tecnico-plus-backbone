@@ -12,6 +12,7 @@ import MaterialApoio from "@/componentes/MaterialApoio";
 import ProgramarOS from "@/componentes/ProgramarOS";
 import ExecucaoOS from "@/componentes/ExecucaoOS";
 import ReabrirOS from "@/componentes/ReabrirOS";
+import TextoNegrito from "@/componentes/TextoNegrito";
 import { Cliente, ClienteOS, clientesDaOS, fmtSla, listarClientes, salvarClientesOS } from "@/lib/clientes";
 import { baixarBookFotos } from "@/lib/bookFotos";
 import { encerrarPeloSupervisor } from "@/lib/encerrarOS";
@@ -289,7 +290,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
                         <b>{c?.nome ?? "Cliente"}</b>
                         {c ? <span className="text-gray-500"> · SLA {fmtSla(c.sla_horas)}</span> : null}
                         {l.ticket ? <span> · Ticket <b>{l.ticket}</b></span> : null}
-                        {l.texto_acionamento ? <p className="mt-1 whitespace-pre-wrap text-gray-700">{l.texto_acionamento}</p> : null}
+                        {l.texto_acionamento ? <p className="mt-1 whitespace-pre-wrap text-gray-700"><TextoNegrito texto={l.texto_acionamento} /></p> : null}
                         <OkCliente linha={l} podeEditar={os.status !== "cancelada"} mudou={(nova) => setLinhasClientes((v) => v.map((x) => (x.id === nova.id ? nova : x)))} />
                       </li>
                     );
@@ -302,7 +303,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
           <div><dt className="text-gray-500">Cadastro</dt><dd>{quando(os.criado_em)}</dd></div>
           <div><dt className="text-gray-500">Endereço / referência</dt><dd>{os.endereco ?? "—"}</dd></div>
           <div><dt className="text-gray-500">SLA{linhasClientes.length ? " (menor entre os clientes)" : " (4h)"}</dt><dd>{quando(os.sla_limite)}</dd></div>
-          {os.descricao && <div className="sm:col-span-2"><dt className="text-gray-500">Descrição</dt><dd className="whitespace-pre-wrap">{os.descricao}</dd></div>}
+          {os.descricao && <div className="sm:col-span-2"><dt className="text-gray-500">Descrição</dt><dd className="whitespace-pre-wrap"><TextoNegrito texto={os.descricao} /></dd></div>}
           {os.observacao_tecnico && <div className="sm:col-span-2"><dt className="text-gray-500">Observação do técnico</dt><dd className="whitespace-pre-wrap">{os.observacao_tecnico}</dd></div>}
           {os.observacao_supervisor && <div className="sm:col-span-2"><dt className="text-gray-500">Observação do supervisor</dt><dd className="whitespace-pre-wrap">{os.observacao_supervisor}</dd></div>}
           {local && (

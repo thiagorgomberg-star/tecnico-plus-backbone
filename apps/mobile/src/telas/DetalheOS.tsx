@@ -19,6 +19,7 @@ import { idadeOs, textoSla } from '../lib/formato';
 import { posicaoAtual } from '../lib/localizacao';
 import { compartilharKmz } from '../lib/kmz';
 import { compartilharBookFotos } from '../lib/bookFotos';
+import TextoNegrito from '../componentes/TextoNegrito';
 import { compartilharOsApresentacao } from '../lib/osApresentacao';
 import { compartilharRelatorio } from '../lib/relatorioPdf';
 import { ponto, supabase } from '../lib/supabase';
@@ -399,7 +400,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
                   feito={!!os.evento_localizado_em} aoTocar={souApoio ? undefined : localizarEvento} />
               ) : null}
               {podeFotografar ? (
-                <Acao icone="camera-outline" rotulo="Tirar fotos" cor={cores.primaria} aoTocar={() => abrirCamera(totalFotos)} />
+                <Acao icone="camera-outline" rotulo="Tirar novas fotos" cor={cores.primaria} aoTocar={() => abrirCamera(totalFotos)} />
               ) : null}
               <Acao icone="image-multiple-outline" rotulo={`Ver fotos (${totalFotos})`} cor={cores.primaria} feito={totalFotos > 0}
                 aoTocar={() => setAba('fotos')} />
@@ -571,7 +572,7 @@ function Info({ icone, rotulo, valor }: { icone: NomeIcone; rotulo: string; valo
       <Icone nome={icone} tamanho={20} cor={cores.suave} style={{ marginTop: 1 }} />
       <View style={{ flex: 1 }}>
         <Text style={s.infoRotulo}>{rotulo}</Text>
-        <Text style={s.valor}>{valor}</Text>
+        <TextoNegrito style={s.valor}>{valor}</TextoNegrito>
       </View>
     </View>
   );

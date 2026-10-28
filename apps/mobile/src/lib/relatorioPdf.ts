@@ -17,6 +17,9 @@ type Lancamento = { item_id: string; quantidade: number; observacao: string | nu
 type Pessoa = { id: string; nome: string };
 type Foto = { src: string; tiradaEm: string | null; tipo: string; caixaId: string | null; fibra: number | null; bandeja?: number | null; descricao?: string | null };
 
+// Formatação do WhatsApp (*negrito*, **negrito**, _itálico_, ~riscado~) em HTML já escapado.
+const whatsHtml = (t: string) => t.replace(/\*\*(\S(?:[^*\n]*\S)?)\*\*/g, '<b>$1</b>').replace(/\*(\S(?:[^*\n]*\S)?)\*/g, '<b>$1</b>')
+  .replace(/_(\S(?:[^_\n]*\S)?)_/g, '<i>$1</i>').replace(/~(\S(?:[^~\n]*\S)?)~/g, '<s>$1</s>');
 const esc = (t: unknown) =>
   String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const quando = (v: string | null | undefined) =>
@@ -211,7 +214,7 @@ export async function compartilharRelatorio(os: OrdemServico) {
     <div><div class="l">Situação</div>${esc(rotuloStatus[os.status] ?? os.status)}</div>
     <div><div class="l">Trecho</div>${esc(extra?.rota?.trecho ?? '—')}</div>
     <div style="grid-column: span 2"><div class="l">Endereço / referência</div>${esc(os.endereco ?? '—')}</div>
-    ${os.descricao ? `<div style="grid-column: span 2"><div class="l">Atividades</div><pre>${esc(os.descricao)}</pre></div>` : ''}
+    ${os.descricao ? `<div style="grid-column: span 2"><div class="l">Atividades</div><pre>${whatsHtml(esc(os.descricao))}</pre></div>` : ''}
   </div>
   <h2>Equipe</h2><div class="g">
     <div><div class="l">Técnico responsável</div>${esc(tecnico || '—')}${extra?.tecnico?.cargo ? ` · ${esc(extra.tecnico.cargo)}` : ''}</div>
