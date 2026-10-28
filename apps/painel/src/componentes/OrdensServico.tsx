@@ -9,6 +9,7 @@ import ExcluirDados from "@/componentes/ExcluirDados";
 import MaterialApoio from "@/componentes/MaterialApoio";
 import NovaOS from "@/componentes/NovaOS";
 import ReabrirOS from "@/componentes/ReabrirOS";
+import { encerrarPeloSupervisor } from "@/lib/encerrarOS";
 import { supabase } from "@/lib/supabase";
 import { corStatus, ENCERRADAS, OrdemServico, rotuloDaOs, StatusOS, Tecnico } from "@/lib/tipos";
 
@@ -170,6 +171,10 @@ export default function OrdensServico({ tecnicos }: { tecnicos: Tecnico[] }) {
                           <button className={`${botao} bg-green-700 text-white`} onClick={() => mudarStatus(os, "baixada")}>Dar baixa</button>
                           <button className={`${botao} border border-gray-300`} onClick={() => mudarStatus(os, "devolvida", true)}>Devolver</button>
                         </>
+                      )}
+                      {["enviada", "aceita", "em_execucao", "pausada", "devolvida"].includes(os.status) && os.tecnico_id && (
+                        <button className={`${botao} border border-green-600 text-green-800`} title="Concluir pelo supervisor, sem o técnico"
+                          onClick={async () => (await encerrarPeloSupervisor(os)) && carregar()}>Encerrar</button>
                       )}
                       {(ENCERRADAS.includes(os.status) || os.status === "concluida") && (
                         <button className={`${botao} border border-amber-500 text-amber-800`} onClick={() => setReabrir(os)}>Reabrir</button>

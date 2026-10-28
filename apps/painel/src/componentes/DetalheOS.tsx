@@ -13,6 +13,7 @@ import ProgramarOS from "@/componentes/ProgramarOS";
 import ExecucaoOS from "@/componentes/ExecucaoOS";
 import ReabrirOS from "@/componentes/ReabrirOS";
 import { Cliente, ClienteOS, clientesDaOS, fmtSla, listarClientes, salvarClientesOS } from "@/lib/clientes";
+import { encerrarPeloSupervisor } from "@/lib/encerrarOS";
 import { supabase } from "@/lib/supabase";
 import { corStatus, ENCERRADAS, OrdemServico, rotuloDaOs, rotuloStatus, StatusOS } from "@/lib/tipos";
 
@@ -222,6 +223,12 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
           ) : null}
           {!encerrada && (
             <button className="rounded-lg border border-gray-300 px-3 py-1.5 hover:bg-gray-50" onClick={() => setEditar(true)}>Editar dados</button>
+          )}
+          {["enviada", "aceita", "em_execucao", "pausada", "devolvida"].includes(os.status) && os.tecnico_id && (
+            <button className="rounded-lg border border-green-600 px-3 py-1.5 font-medium text-green-800 hover:bg-green-50"
+              title="Concluir pelo supervisor, sem o técnico" onClick={async () => (await encerrarPeloSupervisor(os)) && recarregar()}>
+              Encerrar O.S. (supervisor)
+            </button>
           )}
           {EM_ANDAMENTO.includes(os.status) && (
             <button className="rounded-lg border border-red-400 px-3 py-1.5 font-medium text-red-800 hover:bg-red-50" onClick={voltarBacklog}>
