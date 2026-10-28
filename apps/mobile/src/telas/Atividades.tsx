@@ -21,6 +21,7 @@ import {
   iniciarRefeicao,
   Jornada,
   lerJornada,
+  conferirEncerramentoRemoto,
   ultimoKm,
 } from '../lib/jornada';
 import { abrirAjusteBateria, economiaBateriaLigada, garantirRastreio, SituacaoRastreio } from '../lib/rastreio';
@@ -100,7 +101,15 @@ export default function Atividades({ nome, abrirOS, abrirInventario, iniciarAtiv
 
   // Confere o trajeto a cada minuto e ao voltar para o app; religa o GPS se o Android tiver parado.
   useEffect(() => {
-    const conferir = () => garantirRastreio().then(setRastreio).catch(() => {});
+    // Também confere se o supervisor encerrou o expediente pelo painel.
+    const conferir = () => conferirEncerramentoRemoto().then(async (fechado) => {
+      if (fechado) {
+        setJornada(await lerJornada());
+        Alert.alert('Expediente encerrado', 'O supervisor encerrou seu expediente pelo painel. O GPS foi desligado.');
+        return;
+      }
+      setRastreio(await garantirRastreio());
+    }).catch(() => {});
     conferir();
     const timer = setInterval(conferir, 60_000);
     const aoVoltar = AppState.addEventListener('change', (e) => e === 'active' && conferir());

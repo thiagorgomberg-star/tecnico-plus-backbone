@@ -52,6 +52,16 @@ export default function TecnicosAoVivo() {
   const [mapaPronto, setMapaPronto] = useState(false);
   const enquadrado = useRef(false);
 
+  async function encerrarExpediente(tecnicoId: string, nome: string) {
+    const motivo = prompt(`Encerrar agora o expediente de ${nome}?\nO app dele para o GPS e recebe um aviso. As O.S. abertas continuam com ele.\n\nMotivo (obrigatório):`)?.trim();
+    if (!motivo) return;
+    const { data, error } = await supabase.rpc("encerrar_expediente_remoto", { p_tecnico: tecnicoId, p_motivo: motivo });
+    if (error) return alert(error.message);
+    alert(data ? `Expediente de ${nome} encerrado.` : `${nome} não tinha expediente aberto.`);
+    setSelecionado(null);
+    carregar();
+  }
+
   const carregar = useCallback(() => {
     supabase.from("posicao_atual_tecnicos").select("*").order("nome").then(({ data }) => {
       setPosicoes(data ?? []);
@@ -343,6 +353,11 @@ export default function TecnicosAoVivo() {
                   </button>
                   {aberto && (
                     <div className="border-b border-gray-100 bg-blue-50/50 px-4 pb-3 text-sm">
+                      <button className="mt-2 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                        title="Fecha o expediente do técnico agora, mesmo com O.S. aberta. O app dele para o GPS e recebe um aviso."
+                        onClick={() => encerrarExpediente(p.tecnico_id, p.nome)}>
+                        ⏻ Encerrar expediente remotamente
+                      </button>
                       <p className="py-2 text-xs text-gray-500">
                         Paradas de {PARADA_MIN_MINUTOS} min ou mais (clique para ver no mapa) · {res?.pontos ?? 0} pontos de GPS hoje
                       </p>

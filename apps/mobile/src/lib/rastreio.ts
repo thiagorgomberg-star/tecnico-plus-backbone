@@ -6,7 +6,7 @@ import { Linking, Platform } from 'react-native';
 
 import { verificarAlertas } from './avisos';
 import { enfileirar } from './fila';
-import { lerJornada } from './jornada';
+import { conferirEncerramentoRemoto, lerJornada } from './jornada';
 
 // Rastreio do dia: roda em segundo plano (notificação fixa no Android) do início ao fim do expediente.
 // Cada lote de posições vai para a fila e sobe quando houver internet.
@@ -44,6 +44,7 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(TAREFA, async (
   if (Date.now() - ultimaVerificacao < 60_000) return;
   ultimaVerificacao = Date.now();
   await verificarAlertas();
+  await conferirEncerramentoRemoto();
 });
 
 // Pede "permitir o tempo todo"; sem isso o trajeto só é gravado com o app aberto.

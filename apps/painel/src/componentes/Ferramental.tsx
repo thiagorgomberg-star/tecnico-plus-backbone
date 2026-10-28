@@ -13,7 +13,7 @@ type Item = {
   proxima_ate: string; ciclo: "pendente" | "vencida" | "vence_em_breve" | "em_dia";
   devolucao_solicitada_em: string | null; devolucao_observacao: string | null;
 };
-type Inspecao = { id: string; feita_em: string; condicao: string; observacao: string | null; foto: string | null };
+type Inspecao = { id: string; feita_em: string; condicao: string; observacao: string | null; foto: string | null; foto_serial: string | null; numero_serie: string | null; urlSerial?: string };
 
 const SUGESTOES = {
   ferramenta: ["Máquina de fusão", "Clivador", "OTDR", "Power meter", "Fonte de luz", "Caneta VFL (laser)", "Catraca", "Chave de fenda",
@@ -66,14 +66,14 @@ export default function Ferramental({ tecnicos }: { tecnicos: Tecnico[] }) {
 
   useEffect(() => {
     if (!aberto) return;
-    supabase.from("inventario_inspecoes").select("id, feita_em, condicao, observacao, foto").eq("ferramenta_id", aberto.id)
+    supabase.from("inventario_inspecoes").select("id, feita_em, condicao, observacao, foto, foto_serial, numero_serie").eq("ferramenta_id", aberto.id)
       .order("feita_em", { ascending: false }).then(async ({ data }) => {
         const lista = (data as Inspecao[]) ?? [];
-        const caminhos = lista.map((i) => i.foto).filter((c): c is string => !!c);
+        const caminhos = lista.flatMap((i) => [i.foto, i.foto_serial]).filter((c): c is string => !!c);
         const { data: assinados } = caminhos.length
           ? await supabase.storage.from("inventario").createSignedUrls(caminhos, 3600) : { data: [] };
         const urls = new Map((assinados ?? []).map((s) => [s.path, s.signedUrl]));
-        setHistorico(lista.map((i) => ({ ...i, url: i.foto ? urls.get(i.foto) ?? undefined : undefined })));
+        setHistorico(lista.map((i) => ({ ...i, url: i.foto ? urls.get(i.foto) ?? undefined : undefined, urlSerial: i.foto_serial ? urls.get(i.foto_serial) ?? undefined : undefined })));
       });
   }, [aberto]);
 
@@ -284,6 +284,8 @@ export default function Ferramental({ tecnicos }: { tecnicos: Tecnico[] }) {
                     <figcaption className="mt-1">
                       <b>{new Date(h.feita_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</b> ·{" "}
                       <span className={h.condicao !== "ok" ? "font-semibold text-red-700" : ""}>{CONDICAO[h.condicao]}</span>
+                      {h.numero_serie && <div>S/N <b>{h.numero_serie}</b></div>}
+                      {h.urlSerial && <a className="text-blue-700 hover:underline" href={h.urlSerial} target="_blank" rel="noreferrer">Foto do número de série</a>}
                       {h.observacao && <div className="text-gray-500">{h.observacao}</div>}
                     </figcaption>
                   </figure>

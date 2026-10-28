@@ -114,7 +114,12 @@ function Inspecao({ item, usuario, fechar, feito, restantes }: {
   item: ItemInventario; usuario: { nome: string; cargo: string | null }; fechar: () => void; feito: () => void; restantes: number;
 }) {
   const [foto, setFoto] = useState<{ arquivo: string; tiradaEm: string; latitude: number | null; longitude: number | null } | null>(null);
-  const [camera, setCamera] = useState(false);
+  const [camera, setCamera] = useState<'item' | 'serial' | null>(null);
+  // Número de série: foto da plaqueta + número digitado (obrigatório nas ferramentas). Já vem com o do cadastro.
+  const [fotoSerial, setFotoSerial] = useState<{ arquivo: string } | null>(null);
+  const [serie, setSerie] = useState(item.numero_serie ?? '');
+  const [semSerie, setSemSerie] = useState(false);
+  const exigeSerie = item.categoria === 'ferramenta' && !semSerie;
   const [condicao, setCondicao] = useState<Condicao>('ok');
   const [observacao, setObservacao] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -132,6 +137,8 @@ function Inspecao({ item, usuario, fechar, feito, restantes }: {
 
   async function salvar() {
     if (!foto) return Alert.alert('Falta a foto', 'Fotografe o item para registrar a inspeção.');
+    if (exigeSerie && !fotoSerial) return Alert.alert('Falta a foto do número de série', 'Fotografe a plaqueta ou etiqueta com o número de série.');
+    if (exigeSerie && !serie.trim()) return Alert.alert('Falta o número de série', 'Digite o número de série que aparece na foto.');
     if (condicao !== 'ok' && !observacao.trim()) return Alert.alert('Descreva o problema', 'Conte o que aconteceu com o item.');
     setSalvando(true);
     const { data: sessao } = await supabase.auth.getSession();
@@ -143,7 +150,9 @@ function Inspecao({ item, usuario, fechar, feito, restantes }: {
     await enfileirar({
       tipo: 'inventario',
       arquivo: foto.arquivo,
+      arquivoSerial: fotoSerial?.arquivo,
       linha: {
+        numero_serie: serie.trim() ? serie.trim().toUpperCase() : null,
         id: randomUUID(), ferramenta_id: item.id, tecnico_id: usuarioId, feita_em: foto.tiradaEm, condicao,
         observacao: observacao.trim() || null,
         posicao: foto.latitude != null && foto.longitude != null ? `SRID=4326;POINT(${foto.longitude} ${foto.latitude})` : null,
@@ -166,10 +175,29 @@ function Inspecao({ item, usuario, fechar, feito, restantes }: {
 
           <Text style={s.rotulo}>Foto do item *</Text>
           {foto ? <Image source={{ uri: foto.arquivo }} style={s.foto} resizeMode="contain" /> : null}
-          <Pressable style={[s.botaoFoto, { backgroundColor: cores.primaria }]} onPress={() => setCamera(true)}>
+          <Pressable style={[s.botaoFoto, { backgroundColor: cores.primaria }]} onPress={() => setCamera('item')}>
             <Icone nome="camera" cor="#fff" />
             <Text style={s.botaoFotoTexto}>{foto ? 'Fotografar de novo' : 'Fotografar'}</Text>
           </Pressable>
+
+          <Text style={s.rotulo}>Foto do número de série {exigeSerie ? '*' : '(opcional)'}</Text>
+          {fotoSerial ? <Image source={{ uri: fotoSerial.arquivo }} style={s.foto} resizeMode="contain" /> : null}
+          <Pressable style={[s.botaoFoto, { backgroundColor: cores.primaria }]} onPress={() => setCamera('serial')}>
+            <Icone nome="barcode-scan" cor="#fff" />
+            <Text style={s.botaoFotoTexto}>{fotoSerial ? 'Fotografar o serial de novo' : 'Fotografar o número de série'}</Text>
+          </Pressable>
+          <Text style={s.rotulo}>Número de série {exigeSerie ? '*' : '(opcional)'}</Text>
+          <TextInput placeholderTextColor={cores.apagado} style={estilo.campo} value={serie} onChangeText={setSerie} autoCapitalize="characters"
+            autoCorrect={false} placeholder="Digite como está na plaqueta" />
+          {item.numero_serie && serie.trim() && serie.trim().toUpperCase() !== item.numero_serie.toUpperCase() ? (
+            <Text style={[estilo.suave, { color: cores.alerta, marginTop: 4 }]}>Diferente do cadastro ({item.numero_serie}). Ao salvar, o cadastro passa a ter o novo número.</Text>
+          ) : null}
+          {item.categoria === 'ferramenta' ? (
+            <Pressable style={[s.chips, { alignItems: 'center' }]} onPress={() => setSemSerie((v) => !v)} accessibilityRole="checkbox" accessibilityState={{ checked: semSerie }}>
+              <Icone nome={semSerie ? 'checkbox-marked' : 'checkbox-blank-outline'} cor={cores.primaria} />
+              <Text style={s.chipTexto}>Este item não tem número de série</Text>
+            </Pressable>
+          ) : null}
 
           <Text style={s.rotulo}>Condição *</Text>
           <View style={s.chips}>
@@ -205,10 +233,10 @@ function Inspecao({ item, usuario, fechar, feito, restantes }: {
           )}
         </View>
       </RolarComTeclado>
-      <Modal visible={camera} onRequestClose={() => setCamera(false)} animationType="fade" supportedOrientations={['landscape', 'portrait']}>
+      <Modal visible={!!camera} onRequestClose={() => setCamera(null)} animationType="fade" supportedOrientations={['landscape', 'portrait']}>
         {camera ? (
-          <CameraOS osId="" fotosJaFeitas={0} minimo={1} usuario={usuario} fechar={() => setCamera(false)}
-            unica={{ titulo: item.nome, aoSalvar: setFoto }} />
+          <CameraOS osId="" fotosJaFeitas={0} minimo={1} usuario={usuario} fechar={() => setCamera(null)}
+            unica={camera === 'serial' ? { titulo: `${item.nome} · número de série`, aoSalvar: setFotoSerial } : { titulo: item.nome, aoSalvar: setFoto }} />
         ) : null}
       </Modal>
     </View>

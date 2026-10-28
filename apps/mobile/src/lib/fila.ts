@@ -39,8 +39,10 @@ export type ItemFila =
       tipo: 'inventario';
       id: string;
       // Inspeção do Inventário Matinal: foto do item + condição.
-      linha: { id: string; ferramenta_id: string; tecnico_id: string; feita_em: string; condicao: string; observacao: string | null; posicao: string | null };
+      linha: { id: string; ferramenta_id: string; tecnico_id: string; feita_em: string; condicao: string; observacao: string | null; posicao: string | null;
+        numero_serie?: string | null };
       arquivo: string;
+      arquivoSerial?: string; // foto da plaqueta com o número de série
     }
   | { tipo: 'os'; id: string; osId: string; campos: Record<string, unknown> }
   | { tipo: 'inserir'; id: string; tabela: string; linha: Record<string, unknown>; conflito?: string }
@@ -199,10 +201,17 @@ async function enviar(item: ItemFila) {
     const conteudo = await new File(item.arquivo).arrayBuffer();
     const envio = await supabase.storage.from('inventario').upload(foto, conteudo, { contentType: 'image/jpeg' });
     if (envio.error && !/exist|duplicate/i.test(envio.error.message)) throw envio.error;
+    let fotoSerial: string | null = null;
+    if (item.arquivoSerial && new File(item.arquivoSerial).exists) {
+      fotoSerial = `${item.linha.tecnico_id}/${item.linha.id}-serial.jpg`;
+      const r = await supabase.storage.from('inventario').upload(fotoSerial, await new File(item.arquivoSerial).arrayBuffer(), { contentType: 'image/jpeg' });
+      if (r.error && !/exist|duplicate/i.test(r.error.message)) throw r.error;
+    }
     const { error } = await supabase.from('inventario_inspecoes')
-      .upsert({ ...item.linha, foto }, { onConflict: 'id', ignoreDuplicates: true });
+      .upsert({ ...item.linha, foto, foto_serial: fotoSerial }, { onConflict: 'id', ignoreDuplicates: true });
     if (error) throw error;
     new File(item.arquivo).delete();
+    if (item.arquivoSerial) try { new File(item.arquivoSerial).delete(); } catch { /* já removida */ }
   } else if (item.tipo === 'os') {
     const { error } = await supabase.from('ordens_servico').update(item.campos).eq('id', item.osId);
     if (error) throw error;

@@ -122,4 +122,17 @@ export async function encerrarRefeicao(j: Jornada) {
   return gravar({ ...j, inicioRefeicao: null, refeicaoFeita: true });
 }
 
+// O supervisor pode encerrar o expediente pelo painel: com sinal, confere se o expediente aberto no celular
+// já está fechado no servidor; se estiver, para o GPS e limpa o dia. Devolve true quando encerrou.
+export async function conferirEncerramentoRemoto(): Promise<boolean> {
+  const j = await lerJornada();
+  if (!j.expedienteId) return false;
+  const r = await comLimite(supabase.from('expedientes').select('fim').eq('id', j.expedienteId).maybeSingle(), 5000).catch(() => undefined);
+  // Sem resposta ou sem a linha (o início ainda está na fila): continua aberto.
+  if (!r || r.error || !r.data?.fim) return false;
+  await pararRastreio().catch(() => {});
+  await gravar(VAZIA);
+  return true;
+}
+
 export const limparJornadaLocal = () => AsyncStorage.removeItem(CHAVE);

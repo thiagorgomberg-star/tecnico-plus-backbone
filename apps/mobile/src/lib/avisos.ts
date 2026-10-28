@@ -34,6 +34,7 @@ const titulos: Record<string, string> = {
   os_reaberta: 'O.S. reaberta',
   apoio_os: 'Você é apoio numa O.S.',
   os_retirada: 'O.S. retirada de você',
+  expediente_encerrado: 'Expediente encerrado pelo supervisor',
 };
 
 // Registra o token do Firebase deste celular para o usuário logado: o servidor manda a notificação
