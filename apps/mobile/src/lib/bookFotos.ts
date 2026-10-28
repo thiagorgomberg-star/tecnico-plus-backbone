@@ -7,13 +7,13 @@ import { supabase } from './supabase';
 type Anexo = { caminho_arquivo: string; tipo: string; caixa_id: string | null; descricao: string | null; tirada_em: string | null; criado_em: string };
 
 const limpar = (t: string) => t.replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 60);
-const ROTULO: Record<string, string> = { foto_antes: 'Antes', foto_depois: 'Depois' };
+const ROTULO: Record<string, string> = { foto_antes: 'Antes', foto_depois: 'Depois', foto_ponto: 'Pontos' };
 
 // Book de fotos da O.S.: .zip com todas as fotos já enviadas (com a máscara), em pastas Antes, Depois e por caixa.
 // Precisa de sinal (as fotos vêm do servidor). Devolve quantas fotos entraram.
 export async function compartilharBookFotos(os: { id: string; numero: number }, aoProgresso?: (texto: string) => void) {
   const { data, error } = await supabase.from('os_anexos').select('caminho_arquivo, tipo, caixa_id, descricao, tirada_em, criado_em')
-    .eq('os_id', os.id).like('tipo', 'foto%').order('tirada_em', { nullsFirst: false }).order('criado_em');
+    .eq('os_id', os.id).in('tipo', ['foto_antes', 'foto_depois', 'foto_caixa', 'foto_otdr', 'foto_bandeja', 'foto_olt', 'foto_ponto']).order('tirada_em', { nullsFirst: false }).order('criado_em');
   if (error) throw error;
   const fotos = (data ?? []) as Anexo[];
   if (!fotos.length) return 0;

@@ -6,6 +6,7 @@ import type { GeoJSONSource, Map as Mapa } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import DetalheOS from "@/componentes/DetalheOS";
+import FichaCampo from "@/componentes/FichaCampo";
 import { abrirInfoNoMapa, alvoDoPonto } from "@/lib/aoVivo";
 import { atualizarGeocarAgora } from "@/lib/geocar";
 import { supabase } from "@/lib/supabase";
@@ -54,6 +55,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
   const [busca, setBusca] = useState("");
   const [agora, setAgora] = useState(0);
   const [detalhe, setDetalhe] = useState<OsConsole | null>(null);
+  const [ficha, setFicha] = useState<{ id: string; nome: string } | null>(null);
   const [arrastando, setArrastando] = useState<string | null>(null);
   const [alvo, setAlvo] = useState<string | null>(null);
   const divMapa = useRef<HTMLDivElement>(null);
@@ -423,7 +425,8 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
                 {iniciais(t.nome)}
               </span>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">{t.nome}</div>
+                <button className="block max-w-full truncate text-left text-sm font-medium text-blue-800 hover:underline" title="Abrir a ficha do técnico"
+                  onClick={() => setFicha({ id: t.id, nome: t.nome })}>{t.nome}</button>
                 <div className="text-xs text-gray-500">{emCampo ? "Em expediente" : "Fora do expediente"}</div>
               </div>
               {abertas > 0 && <span className="rounded bg-gray-200 px-1.5 text-xs font-semibold" title="O.S. em aberto">{abertas}</span>}
@@ -501,6 +504,22 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
       </section>
 
       {detalhe && <DetalheOS os={detalhe} fechar={() => { setDetalhe(null); carregar(); }} />}
+      {ficha && !detalhe && (
+        <FichaCampo tecnico={ficha} dia={dia} fechar={() => setFicha(null)}
+          verNoMapa={(lon, lat) => {
+            setFicha(null);
+            const m = mapa.current;
+            if (!m) return;
+            m.getContainer().scrollIntoView({ behavior: "smooth", block: "center" });
+            m.flyTo({ center: [lon, lat], zoom: 15 });
+            import("maplibre-gl").then(({ Popup }) => abrirInfoNoMapa(m, Popup, { tipo: "celular", tecnicoId: ficha.id, nome: ficha.nome }, lon, lat));
+          }}
+          abrirOs={async (id) => {
+            const os = ordens.find((o) => o.id === id)
+              ?? ((await supabase.from("console_despacho_os").select("*").eq("id", id).maybeSingle()).data as OsConsole | null);
+            if (os) setDetalhe(os);
+          }} />
+      )}
     </div>
   );
 }
