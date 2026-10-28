@@ -36,7 +36,7 @@ const TIPOS: Record<string, string> = {
   roteamento_fibras: 'Roteamento de fibras', vistoria_rota: 'Vistoria de rota',
 };
 
-export async function compartilharOsApresentacao(os: Pick<OrdemServico, 'id' | 'numero' | 'tipo' | 'titulo' | 'endereco' | 'ticket_acionamento'>) {
+export async function compartilharOsApresentacao(os: Pick<OrdemServico, 'id' | 'numero' | 'tipo' | 'titulo' | 'endereco' | 'ticket_acionamento'> & Partial<Pick<OrdemServico, 'os_clientes'>>) {
   const { data: sessao } = await supabase.auth.getSession();
   const uid = sessao.session?.user.id ?? '';
   const [empresa, tecnico, veiculo, auxiliares] = await Promise.all([
@@ -45,6 +45,11 @@ export async function compartilharOsApresentacao(os: Pick<OrdemServico, 'id' | '
     meuVeiculo().catch(() => meuVeiculo(false)),
     comCache<Auxiliar[]>('meus-auxiliares', () => supabase.rpc('meus_auxiliares')),
   ]);
+  // Tickets de acionamento dos clientes (um por cliente); o gerado pelo sistema (ticket interno) não vai para o documento.
+  const doBanco = os.numero ? await supabase.from('ordens_servico').select('ticket_interno, os_clientes(ticket, cliente:clientes(nome))').eq('id', os.id).maybeSingle()
+    .then(({ data }) => data as { ticket_interno: boolean | null; os_clientes: { ticket: string | null; cliente: { nome: string } | null }[] } | null, () => null) : null;
+  const tickets = (doBanco?.os_clientes ?? os.os_clientes ?? []).flatMap((c) => (c.ticket?.trim() ? [{ cliente: c.cliente?.nome ?? null, ticket: c.ticket.trim() }] : []));
+  if (!tickets.length && os.ticket_acionamento && !doBanco?.ticket_interno) tickets.push({ cliente: null, ticket: os.ticket_acionamento });
   const documentos = (p: { cpf: string | null; rg: string | null; documento?: string | null } | null) =>
     [p?.cpf ? `CPF ${p.cpf}` : null, p?.rg ? `RG ${p.rg}` : null].filter(Boolean).join(' · ') || p?.documento || null;
   const logo = await Asset.fromModule(require('../../assets/mascara/logo-multivale.png')).downloadAsync()
@@ -93,7 +98,7 @@ export async function compartilharOsApresentacao(os: Pick<OrdemServico, 'id' | '
   ${linha('Tipo', TIPOS[os.tipo] ?? os.tipo)}
   ${linha('Atividade', os.titulo)}
   ${linha('Local / endereço', os.endereco)}
-  ${os.ticket_acionamento ? linha('Ticket de acionamento', os.ticket_acionamento) : ''}
+  ${tickets.map((t) => linha(t.cliente ? `Ticket de acionamento · ${t.cliente}` : 'Ticket de acionamento', t.ticket)).join('')}
   </table>
 
   <div class="aviso">O técnico acima está a serviço da empresa, realizando manutenção da rede de fibra óptica (backbone) no local indicado.

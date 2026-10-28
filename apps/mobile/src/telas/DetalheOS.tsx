@@ -398,8 +398,11 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
                 <Acao icone="crosshairs-gps" rotulo={os.evento_localizado_em ? 'Evento localizado' : 'Localizei o evento'} cor={cores.perigo}
                   feito={!!os.evento_localizado_em} aoTocar={souApoio ? undefined : localizarEvento} />
               ) : null}
-              <Acao icone="camera-outline" rotulo={`Fotos ${totalFotos}`} cor={cores.primaria} feito={totalFotos > 0}
-                aoTocar={podeFotografar ? () => abrirCamera(totalFotos) : () => setAba('fotos')} />
+              {podeFotografar ? (
+                <Acao icone="camera-outline" rotulo="Tirar fotos" cor={cores.primaria} aoTocar={() => abrirCamera(totalFotos)} />
+              ) : null}
+              <Acao icone="image-multiple-outline" rotulo={`Ver fotos (${totalFotos})`} cor={cores.primaria} feito={totalFotos > 0}
+                aoTocar={() => setAba('fotos')} />
               <Acao icone="draw-pen" rotulo={assinadoPor ? 'O.S. assinada' : 'Assinar O.S.'} cor={cores.texto2} feito={!!assinadoPor}
                 aoTocar={podeEditar && !assinadoPor && !souApoio ? () => assinar() : undefined} />
               {vistoriaMg ? <Acao icone="transmission-tower" rotulo="Postes" cor={cores.primaria} aoTocar={() => setAba('postes')} /> : null}
