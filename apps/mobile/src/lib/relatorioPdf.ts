@@ -190,7 +190,9 @@ export async function compartilharRelatorio(os: OrdemServico) {
     </div>`;
   }).join('');
 
-  const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+  // Título do PDF e nome do arquivo: token/ticket + título da atividade (não o nome do app).
+  const tituloPdf = [os.ticket_acionamento, os.titulo].filter(Boolean).join(' - ') || `Relatorio O.S. ${os.numero || os.id.slice(0, 8)}`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(tituloPdf)}</title><style>
     @page { size: A4; margin: 12mm; }
     body { font-family: sans-serif; font-size: 11pt; color: #1f2937; }
     header { display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
@@ -240,12 +242,12 @@ export async function compartilharRelatorio(os: OrdemServico) {
 
   const { uri } = await Print.printToFileAsync({ html });
   // Nome legível para quem recebe no WhatsApp.
-  const destino = new File(Paths.cache, `Relatorio-OS-${os.numero || os.id.slice(0, 8)}.pdf`);
+  const destino = new File(Paths.cache, `${tituloPdf.replace(/[\\/:*?"<>|\n\r]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120)}.pdf`);
   if (destino.exists) destino.delete();
   new File(uri).move(destino);
   await Sharing.shareAsync(destino.uri, {
     mimeType: 'application/pdf',
-    dialogTitle: `Relatório O.S. ${os.numero || ''}`,
+    dialogTitle: tituloPdf,
     UTI: 'com.adobe.pdf',
   });
 }

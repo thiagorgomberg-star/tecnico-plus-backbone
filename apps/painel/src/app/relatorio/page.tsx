@@ -57,6 +57,8 @@ function Conteudo() {
         const corpo = await r.json();
         if (!r.ok) throw new Error(corpo.erro ?? "Não foi possível abrir o relatório.");
         setDados(corpo);
+        // Título do PDF (Imprimir > Salvar como PDF): token/ticket + título da atividade, não o nome do app.
+        document.title = [corpo.os?.ticket_acionamento, corpo.os?.titulo].filter(Boolean).join(" - ") || `Relatório O.S. ${corpo.os?.numero ?? ""}`;
       })
       .catch((e: Error) => setErro(e.message));
   }, [token]);
