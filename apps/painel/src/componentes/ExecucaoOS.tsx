@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { lerValor } from "@/componentes/Catalogo";
 import { supabase } from "@/lib/supabase";
 
-type Item = { id: string; nome: string; unidade: string; categoria: "servico" | "material"; aprovado?: boolean };
-type Lancamento = { id: string; quantidade: number; observacao: string | null; lancado_em: string; item: Item | null; autor: { nome: string } | null };
+type Item = { id: string; nome: string; unidade: string; categoria: "servico" | "material"; aprovado?: boolean; cliente_id?: string | null; valor?: number | null };
+type Lancamento = { id: string; quantidade: number; valor_unitario: number | null; observacao: string | null; lancado_em: string; item: Item | null; autor: { nome: string } | null };
 type Apoio = { tecnico_id: string; tecnico: { nome: string } | null };
 type Pessoa = { id: string; nome: string };
 
@@ -23,7 +24,7 @@ export default function ExecucaoOS({ osId, responsavelId, bloqueado = false }: {
 
   useEffect(() => {
     supabase.from("os_servicos_executados")
-      .select("id, quantidade, observacao, lancado_em, item:itens_execucao(id, nome, unidade, categoria, aprovado), autor:usuarios!os_servicos_executados_lancado_por_fkey(nome)")
+      .select("id, quantidade, valor_unitario, observacao, lancado_em, item:itens_execucao(id, nome, unidade, categoria, aprovado, cliente_id, valor), autor:usuarios!os_servicos_executados_lancado_por_fkey(nome)")
       .eq("os_id", osId).order("lancado_em")
       .then(({ data }) => setLancamentos((data as unknown as Lancamento[]) ?? []));
     supabase.from("os_tecnicos_apoio").select("tecnico_id, tecnico:usuarios!os_tecnicos_apoio_tecnico_id_fkey(nome)").eq("os_id", osId)
@@ -31,7 +32,7 @@ export default function ExecucaoOS({ osId, responsavelId, bloqueado = false }: {
   }, [osId, versao]);
 
   useEffect(() => {
-    supabase.from("itens_execucao").select("id, nome, unidade, categoria").eq("ativo", true).order("ordem")
+    supabase.from("itens_execucao").select("id, nome, unidade, categoria, cliente_id, valor").eq("ativo", true).order("ordem")
       .then(({ data }) => setCatalogo(data ?? []));
     supabase.from("usuarios").select("id, nome").eq("papel", "tecnico").eq("ativo", true).order("nome")
       .then(({ data }) => setTecnicos(data ?? []));
@@ -50,7 +51,8 @@ export default function ExecucaoOS({ osId, responsavelId, bloqueado = false }: {
     e.preventDefault();
     const quantidade = Number(novo.quantidade.replace(",", "."));
     if (!novo.item_id || !(quantidade > 0)) return;
-    const { error } = await supabase.from("os_servicos_executados").insert({ os_id: osId, item_id: novo.item_id, quantidade });
+    const item = catalogo.find((c) => c.id === novo.item_id);
+    const { error } = await supabase.from("os_servicos_executados").insert({ os_id: osId, item_id: novo.item_id, quantidade, valor_unitario: item?.cliente_id ? item.valor ?? null : null });
     if (error) return alert(error.message);
     setNovo({ item_id: "", quantidade: "" });
     recarregar();
@@ -77,7 +79,18 @@ export default function ExecucaoOS({ osId, responsavelId, bloqueado = false }: {
     recarregar();
   }
 
+  async function mudarValor(l: Lancamento, texto: string) {
+    const v = lerValor(texto);
+    if (v === l.valor_unitario) return;
+    const { error } = await supabase.from("os_servicos_executados").update({ valor_unitario: v }).eq("id", l.id);
+    if (error) alert(error.message);
+    recarregar();
+  }
+
   const fmt = (n: number) => Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+  const real = (n: number) => Number(n).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const comValor = lancamentos.filter((l) => l.item?.cliente_id || l.valor_unitario != null);
+  const total = comValor.reduce((t, l) => t + (l.valor_unitario ?? 0) * l.quantidade, 0);
   const disponiveis = tecnicos.filter((t) => t.id !== responsavelId && !apoio.some((a) => a.tecnico_id === t.id));
 
   return (
@@ -114,6 +127,17 @@ export default function ExecucaoOS({ osId, responsavelId, bloqueado = false }: {
                     <tr key={l.id} className="border-b border-gray-100 last:border-0">
                       <td className="py-1.5">{l.item?.nome}{l.item?.aprovado === false ? <span className="ml-1 rounded bg-amber-100 px-1 text-xs text-amber-800">aguardando aprovação</span> : null}{l.observacao ? <span className="text-gray-500"> · {l.observacao}</span> : null}</td>
                       <td className="py-1.5 text-right font-medium">{fmt(l.quantidade)} {l.item?.unidade}</td>
+                      {comValor.length ? (
+                        <td className="py-1.5 pl-3 text-right">
+                          {l.item?.cliente_id || l.valor_unitario != null ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-gray-500">R$
+                              <input aria-label="Valor unitário" disabled={bloqueado} className="w-20 rounded border border-gray-200 px-1 text-right text-sm text-gray-900" inputMode="decimal"
+                                key={`${l.id}-${l.valor_unitario}`} defaultValue={l.valor_unitario != null ? String(l.valor_unitario).replace(".", ",") : ""}
+                                onBlur={(e) => mudarValor(l, e.target.value)} />
+                            </span>
+                          ) : null}
+                        </td>
+                      ) : null}
                       <td className="py-1.5 pl-3 text-xs text-gray-500">{l.autor?.nome}</td>
                       <td className="py-1.5 pl-2 text-right">
                         {!bloqueado && <button className="text-xs text-red-700 hover:underline" onClick={() => remover(l)}>remover</button>}
@@ -127,11 +151,13 @@ export default function ExecucaoOS({ osId, responsavelId, bloqueado = false }: {
         );
       })}
 
+      {comValor.length ? <p className="mt-2 text-right text-sm font-semibold">Total LPU: {real(total)}</p> : null}
+
       {!bloqueado && <form onSubmit={lancar} className="mt-3 flex flex-wrap gap-2 text-sm">
         <select className="flex-1 rounded-lg border border-gray-300 p-1.5" value={novo.item_id} onChange={(e) => setNovo({ ...novo, item_id: e.target.value })}>
           <option value="">Lançar serviço ou material...</option>
           <optgroup label="Serviços">
-            {catalogo.filter((c) => c.categoria === "servico").map((c) => <option key={c.id} value={c.id}>{c.nome} ({c.unidade})</option>)}
+            {catalogo.filter((c) => c.categoria === "servico").map((c) => <option key={c.id} value={c.id}>{c.nome} ({c.unidade}){c.valor != null ? ` · ${real(c.valor)}` : ""}</option>)}
           </optgroup>
           <optgroup label="Materiais">
             {catalogo.filter((c) => c.categoria === "material").map((c) => <option key={c.id} value={c.id}>{c.nome} ({c.unidade})</option>)}

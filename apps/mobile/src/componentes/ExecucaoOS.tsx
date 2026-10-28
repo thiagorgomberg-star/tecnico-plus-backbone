@@ -7,8 +7,8 @@ import { cores } from '../lib/estilo';
 import { enfileirar } from '../lib/fila';
 import { supabase } from '../lib/supabase';
 
-type Item = { id: string; nome: string; unidade: string; categoria: 'servico' | 'material'; aprovado?: boolean };
-type Lancamento = { id: string; item_id: string; quantidade: number; observacao: string | null };
+type Item = { id: string; nome: string; unidade: string; categoria: 'servico' | 'material'; aprovado?: boolean; cliente_id?: string | null; valor?: number | null };
+type Lancamento = { id: string; item_id: string; quantidade: number; observacao: string | null; valor_unitario?: number | null };
 type Pessoa = { id: string; nome: string };
 
 const CACHE_CATALOGO = 'catalogo-execucao';
@@ -17,7 +17,7 @@ const UNIDADES = ['un', 'm', 'km', 'pç', 'cx', 'rolo', 'kg', 'h'];
 
 // Serviços executados, materiais utilizados e técnicos de apoio da O.S. Tudo funciona sem internet.
 // Item que não está na lista: o técnico cadastra (CAIXA ALTA) e lança; ele fica aguardando a aprovação do supervisor.
-export default function ExecucaoOS({ osId, podeEditar, euId, souApoio, tipoOs }: { osId: string; podeEditar: boolean; euId: string | null; souApoio?: boolean; tipoOs?: string }) {
+export default function ExecucaoOS({ osId, podeEditar, euId, souApoio, tipoOs, clientesIds = [] }: { osId: string; podeEditar: boolean; euId: string | null; souApoio?: boolean; tipoOs?: string; clientesIds?: string[] }) {
   // Quem é apoio lança serviços e materiais, mas a lista de apoio é do técnico responsável.
   const editaApoio = podeEditar && !souApoio;
   const [catalogo, setCatalogo] = useState<Item[]>([]);
@@ -30,6 +30,7 @@ export default function ExecucaoOS({ osId, podeEditar, euId, souApoio, tipoOs }:
   const [categoria, setCategoria] = useState<'servico' | 'material'>('servico');
   const [itemId, setItemId] = useState<string | null>(null);
   const [quantidade, setQuantidade] = useState('');
+  const [valorUnit, setValorUnit] = useState('');
   const [busca, setBusca] = useState('');
   const [novo, setNovo] = useState<{ nome: string; unidade: string } | null>(null);
   const cacheOs = `execucao-${osId}`;
@@ -59,7 +60,7 @@ export default function ExecucaoOS({ osId, podeEditar, euId, souApoio, tipoOs }:
         setApoio(salvo.apoio ?? []);
       }
     });
-    supabase.from('itens_execucao').select('id, nome, unidade, categoria, aprovado').eq('ativo', true).order('ordem').then(({ data }) => {
+    supabase.from('itens_execucao').select('id, nome, unidade, categoria, aprovado, cliente_id, valor').eq('ativo', true).order('ordem').then(({ data }) => {
       if (!data) return;
       setCatalogo(data);
       AsyncStorage.setItem(CACHE_CATALOGO, JSON.stringify(data));
@@ -70,7 +71,7 @@ export default function ExecucaoOS({ osId, podeEditar, euId, souApoio, tipoOs }:
       AsyncStorage.setItem(CACHE_TECNICOS, JSON.stringify(data));
     });
     Promise.all([
-      supabase.from('os_servicos_executados').select('id, item_id, quantidade, observacao').eq('os_id', osId).order('lancado_em'),
+      supabase.from('os_servicos_executados').select('id, item_id, quantidade, observacao, valor_unitario').eq('os_id', osId).order('lancado_em'),
       supabase.from('os_tecnicos_apoio').select('tecnico_id').eq('os_id', osId),
     ]).then(([l, a]) => {
       if (l.error || a.error) return;
@@ -85,8 +86,13 @@ export default function ExecucaoOS({ osId, podeEditar, euId, souApoio, tipoOs }:
   }, [cacheOs, lancamentos, apoio]);
 
   const porId = useMemo(() => new Map(catalogo.map((c) => [c.id, c])), [catalogo]);
-  const opcoes = catalogo
-    .filter((c) => c.categoria === categoria && c.nome.toLowerCase().includes(busca.trim().toLowerCase()))
+  // Cliente com LPU própria (ex.: Master-C.C, casa do cliente): só os serviços dele, com valor, e sem material.
+  const lpu = catalogo.filter((c) => c.cliente_id && clientesIds.includes(c.cliente_id));
+  const modoLpu = lpu.length > 0;
+  const base = modoLpu ? lpu : catalogo.filter((c) => !c.cliente_id);
+  const cat = modoLpu ? 'servico' : categoria;
+  const opcoes = base
+    .filter((c) => c.categoria === cat && c.nome.toLowerCase().includes(busca.trim().toLowerCase()))
     .sort((a, b) => (usados[b.id] ?? 0) - (usados[a.id] ?? 0));
   // Os 5 primeiros com uso ganham a estrela.
   const destaque = new Set(opcoes.filter((c) => usados[c.id]).slice(0, 5).map((c) => c.id));
@@ -111,12 +117,18 @@ export default function ExecucaoOS({ osId, podeEditar, euId, souApoio, tipoOs }:
     }
     if (!item) return Alert.alert('Escolha o item da lista');
     if (!(valor > 0)) return Alert.alert('Informe a quantidade', `Em ${item.unidade}.`);
-    const linha = { id: randomUUID(), os_id: osId, item_id: item.id, quantidade: valor, observacao: null };
+    let valor_unitario: number | null = null;
+    if (modoLpu) {
+      valor_unitario = valorUnit.trim() ? Number(valorUnit.includes(',') ? valorUnit.replace(/\./g, '').replace(',', '.') : valorUnit) : null;
+      if (valor_unitario != null && !(valor_unitario >= 0)) return Alert.alert('Valor inválido', 'Use só números, ex.: 35,00');
+    }
+    const linha = { id: randomUUID(), os_id: osId, item_id: item.id, quantidade: valor, observacao: null, ...(modoLpu ? { valor_unitario } : {}) };
     await enfileirar({ tipo: 'inserir', tabela: 'os_servicos_executados', linha });
     setLancamentos((l) => [...l, linha]);
     setItemId(null);
     setNovo(null);
     setQuantidade('');
+    setValorUnit('');
     setBusca('');
   }
 
@@ -160,10 +172,13 @@ export default function ExecucaoOS({ osId, podeEditar, euId, souApoio, tipoOs }:
 
   const fmt = (n: number) => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
   const grupo = (cat: 'servico' | 'material') => lancamentos.filter((l) => porId.get(l.item_id)?.categoria === cat);
+  const real = (n: number) => Number(n).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const totalLpu = lancamentos.reduce((t, l) => t + (l.valor_unitario ?? 0) * l.quantidade, 0);
+  const escolher = (c: Item) => { setItemId(c.id); setNovo(null); if (modoLpu) setValorUnit(c.valor != null ? String(c.valor).replace('.', ',') : ''); };
 
   return (
     <View>
-      {(['servico', 'material'] as const).map((cat) => (
+      {(modoLpu ? (['servico'] as const) : (['servico', 'material'] as const)).map((cat) => (
         <View key={cat} style={s.bloco}>
           <Text style={s.blocoTitulo}>{cat === 'servico' ? 'SERVIÇOS EXECUTADOS' : 'MATERIAIS UTILIZADOS'}</Text>
           {grupo(cat).length === 0 ? <Text style={s.vazio}>Nada lançado.</Text> : null}
@@ -175,7 +190,7 @@ export default function ExecucaoOS({ osId, podeEditar, euId, souApoio, tipoOs }:
                   <Text style={s.linhaNome}>{(item?.nome ?? 'Item').toUpperCase()}</Text>
                   {item?.aprovado === false ? <Text style={s.pendente}>AGUARDANDO APROVAÇÃO DO SUPERVISOR</Text> : null}
                 </View>
-                <Text style={s.linhaQtd}>{fmt(l.quantidade)} {item?.unidade}</Text>
+                <Text style={s.linhaQtd}>{fmt(l.quantidade)} {item?.unidade}{modoLpu && l.valor_unitario != null ? ` · ${real(l.valor_unitario * l.quantidade)}` : ''}</Text>
                 {podeEditar ? (
                   <Pressable hitSlop={10} onPress={() => remover(l)}><Text style={s.remover}>✕</Text></Pressable>
                 ) : null}
@@ -185,9 +200,17 @@ export default function ExecucaoOS({ osId, podeEditar, euId, souApoio, tipoOs }:
         </View>
       ))}
 
+      {modoLpu ? (
+        <View style={[s.bloco, { flexDirection: 'row', justifyContent: 'space-between' }]}>
+          <Text style={s.blocoTitulo}>TOTAL LPU</Text>
+          <Text style={s.linhaQtd}>{real(totalLpu)}</Text>
+        </View>
+      ) : null}
+
       {podeEditar ? (
         <View style={s.bloco}>
-          <Text style={s.blocoTitulo}>LANÇAR</Text>
+          <Text style={s.blocoTitulo}>{modoLpu ? 'LANÇAR SERVIÇO (LPU DO CLIENTE · SEM MATERIAL)' : 'LANÇAR'}</Text>
+          {modoLpu ? null : (
           <View style={s.segmento}>
             {(['servico', 'material'] as const).map((c) => (
               <Pressable key={c} style={[s.segmentoItem, categoria === c && s.segmentoAtivo]} onPress={() => { setCategoria(c); setItemId(null); setNovo(null); }}>
@@ -195,23 +218,24 @@ export default function ExecucaoOS({ osId, podeEditar, euId, souApoio, tipoOs }:
               </Pressable>
             ))}
           </View>
+          )}
           <Text style={s.rotuloBusca}>Buscar na lista</Text>
           <TextInput placeholderTextColor={cores.apagado} style={s.campo} placeholder="Digite parte do nome" value={busca} onChangeText={setBusca} />
           {destaque.size ? <Text style={s.dicaUsados}>★ = mais usados neste tipo de O.S.</Text> : null}
           <View style={s.chips}>
             {opcoes.map((c) => (
               <Pressable key={c.id} style={[s.chip, itemId === c.id && s.chipAtivo, c.aprovado === false && s.chipPendente]}
-                onPress={() => { setItemId(c.id); setNovo(null); }}>
-                <Text style={[s.chipTexto, itemId === c.id && { color: '#fff' }]}>{destaque.has(c.id) ? '★ ' : ''}{c.nome.toUpperCase()}{c.aprovado === false ? ' ⏳' : ''}</Text>
+                onPress={() => escolher(c)}>
+                <Text style={[s.chipTexto, itemId === c.id && { color: '#fff' }]}>{destaque.has(c.id) ? '★ ' : ''}{c.nome.toUpperCase()}{c.aprovado === false ? ' ⏳' : ''}{modoLpu && c.valor != null ? ` · ${real(c.valor)}` : ''}</Text>
               </Pressable>
             ))}
             {opcoes.length === 0 && !busca ? <Text style={s.vazio}>Nenhum item na lista.</Text> : null}
-            <Pressable style={[s.chip, s.chipNovo, novo && s.chipAtivo]}
+            {modoLpu ? null : <Pressable style={[s.chip, s.chipNovo, novo && s.chipAtivo]}
               onPress={() => { setItemId(null); setNovo({ nome: busca.toUpperCase(), unidade: categoria === 'servico' ? 'un' : 'm' }); }}>
               <Text style={[s.chipTexto, { color: novo ? '#fff' : cores.primaria, fontWeight: '700' }]}>
                 + {categoria === 'servico' ? 'NOVO SERVIÇO' : 'NOVO MATERIAL'}
               </Text>
-            </Pressable>
+            </Pressable>}
           </View>
           {novo ? (
             <View style={s.novo}>
@@ -234,10 +258,20 @@ export default function ExecucaoOS({ osId, podeEditar, euId, souApoio, tipoOs }:
             </View>
           ) : null}
           {escolhido && !novo ? (
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-              <TextInput placeholderTextColor={cores.apagado} style={[s.campo, { flex: 1, marginTop: 0 }]} keyboardType="decimal-pad" value={quantidade} onChangeText={setQuantidade}
-                placeholder={`Quantidade (${escolhido.unidade})`} autoFocus />
-              <Pressable style={s.botao} onPress={lancar}><Text style={s.botaoTexto}>Lançar</Text></Pressable>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, alignItems: 'flex-end' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.rotuloBusca}>Quantidade ({escolhido.unidade})</Text>
+                <TextInput placeholderTextColor={cores.apagado} style={s.campo} keyboardType="decimal-pad" value={quantidade} onChangeText={setQuantidade}
+                  placeholder="Ex.: 1" autoFocus />
+              </View>
+              {modoLpu ? (
+                <View style={{ flex: 1 }}>
+                  <Text style={s.rotuloBusca}>Valor unitário (R$)</Text>
+                  <TextInput placeholderTextColor={cores.apagado} style={s.campo} keyboardType="decimal-pad" value={valorUnit} onChangeText={setValorUnit}
+                    placeholder="Ex.: 35,00" />
+                </View>
+              ) : null}
+              <Pressable style={[s.botao, { height: 46 }]} onPress={lancar}><Text style={s.botaoTexto}>Lançar</Text></Pressable>
             </View>
           ) : null}
         </View>

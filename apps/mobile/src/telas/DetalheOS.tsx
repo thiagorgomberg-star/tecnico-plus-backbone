@@ -452,7 +452,8 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
           <CaixasOS osId={os.id} podeEditar={podeEditar} versao={versaoCaixas} abrir={(caixa, daOs) => setCaixaAberta({ caixa, daOs })} />
         ) : null}
 
-        {aba === 'execucao' ? <ExecucaoOS osId={os.id} podeEditar={podeEditar} euId={euId} souApoio={souApoio} tipoOs={os.tipo} /> : null}
+        {aba === 'execucao' ? <ExecucaoOS osId={os.id} podeEditar={podeEditar} euId={euId} souApoio={souApoio} tipoOs={os.tipo}
+          clientesIds={(os.os_clientes ?? []).map((c) => c.cliente_id).filter((x): x is string => !!x)} /> : null}
 
         {aba === 'fotos' ? (
           <View style={s.bloco}>
