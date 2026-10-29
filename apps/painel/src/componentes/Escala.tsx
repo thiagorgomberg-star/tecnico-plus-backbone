@@ -6,12 +6,14 @@ import { feriadosNacionais } from "@/lib/feriados";
 import { supabase } from "@/lib/supabase";
 import { Tecnico } from "@/lib/tipos";
 
-type TipoEscala = "jornada" | "folga_programada" | "plantao" | "sobreaviso" | "ferias" | "atestado" | "outro";
+type TipoEscala = "jornada" | "folga_programada" | "folga_interjornada" | "manutencao_carro" | "plantao" | "sobreaviso" | "ferias" | "atestado" | "outro";
 type Item = { id: string; tecnico_id: string; data: string; tipo: TipoEscala; inicio: string | null; fim: string | null; observacao: string | null };
 
 const TIPOS: { valor: TipoEscala; rotulo: string; cor: string }[] = [
   { valor: "jornada", rotulo: "Jornada", cor: "bg-blue-100 text-blue-800" },
   { valor: "folga_programada", rotulo: "Folga programada", cor: "bg-green-100 text-green-800" },
+  { valor: "folga_interjornada", rotulo: "Folga interjornada", cor: "bg-lime-100 text-lime-800" },
+  { valor: "manutencao_carro", rotulo: "Manutenção do carro", cor: "bg-orange-100 text-orange-800" },
   { valor: "plantao", rotulo: "Plantão/sobreaviso", cor: "bg-red-100 text-red-800" },
   { valor: "sobreaviso", rotulo: "Sobreaviso", cor: "bg-amber-100 text-amber-800" },
   { valor: "ferias", rotulo: "Férias", cor: "bg-cyan-100 text-cyan-800" },

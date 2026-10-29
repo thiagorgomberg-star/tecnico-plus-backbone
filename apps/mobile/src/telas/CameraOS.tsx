@@ -82,12 +82,6 @@ function melhorTamanho(tamanhos: string[]) {
   return validos[0]?.t;
 }
 
-// EXIF: coordenada em graus decimais ou [graus, minutos, segundos]; S/W ficam negativos.
-function coordExif(v: unknown, ref: unknown): number | null {
-  const n = Array.isArray(v) ? Number(v[0]) + Number(v[1] ?? 0) / 60 + Number(v[2] ?? 0) / 3600 : typeof v === 'string' ? parseFloat(v) : typeof v === 'number' ? v : NaN;
-  if (!Number.isFinite(n) || n === 0) return null;
-  return /^[SW]/i.test(String(ref ?? '')) ? -Math.abs(n) : n;
-}
 // EXIF "2026:10:28 14:03:22" (hora local do celular).
 function dataExif(v: unknown): Date | null {
   const m = typeof v === 'string' ? v.match(/(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/) : null;
@@ -221,23 +215,20 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
     }
   }
 
-  // Foto da galeria: usa data e GPS gravados na foto (EXIF). Sem GPS na foto, fica sem localização (não usa a de agora).
+  // Foto da galeria: entra com a máscara e a data gravada na foto, sem localização.
   async function daGaleria() {
     const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: !unica, exif: true, quality: 1 });
     if (r.canceled) return;
     setTirando(true);
     try {
       for (const a of r.assets) {
+        // Thiago: localização só em foto tirada na câmera do app. Da galeria vem só a data gravada na foto.
         const exif = (a.exif ?? {}) as Record<string, unknown>;
-        const lat = coordExif(exif.GPSLatitude, exif.GPSLatitudeRef);
-        const lng = coordExif(exif.GPSLongitude, exif.GPSLongitudeRef);
         const data = dataExif(exif.DateTimeOriginal ?? exif.DateTime);
-        const gps = lat != null && lng != null ? { latitude: lat, longitude: lng } : null;
-        const texto = gps ? await enderecoDe(gps.latitude, gps.longitude, 8000).catch(() => null) : undefined;
         // A cópia vai para o cache: registrar() move o arquivo, e o original da galeria não pode sumir.
         const copia = new File(Paths.cache, `galeria-${randomUUID()}.jpg`);
         new File(a.uri).copy(copia);
-        await registrar({ uri: copia.uri, width: a.width, height: a.height }, { tiradaEm: data, posicao: gps, endereco: gps ? texto ?? null : null });
+        await registrar({ uri: copia.uri, width: a.width, height: a.height }, { tiradaEm: data, posicao: null, endereco: null });
       }
     } catch (e) {
       Alert.alert('Erro ao trazer da galeria', String(e));

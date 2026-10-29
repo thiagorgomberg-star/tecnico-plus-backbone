@@ -2,12 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { supabase } from './supabase';
 
-export type TipoEscala = 'jornada' | 'folga_programada' | 'plantao' | 'sobreaviso' | 'ferias' | 'atestado' | 'outro';
+export type TipoEscala = 'jornada' | 'folga_programada' | 'folga_interjornada' | 'manutencao_carro' | 'plantao' | 'sobreaviso' | 'ferias' | 'atestado' | 'outro';
 export type ItemEscala = { id: string; data: string; tipo: TipoEscala; inicio: string | null; fim: string | null; observacao: string | null };
 
 export const rotuloEscala: Record<TipoEscala, string> = {
   jornada: 'Jornada',
   folga_programada: 'Folga programada',
+  folga_interjornada: 'Folga interjornada',
+  manutencao_carro: 'Manutenção do carro',
   plantao: 'Plantão/sobreaviso',
   sobreaviso: 'Sobreaviso',
   ferias: 'Férias',
@@ -18,6 +20,8 @@ export const rotuloEscala: Record<TipoEscala, string> = {
 export const corEscala: Record<TipoEscala, string> = {
   jornada: '#0572CE',
   folga_programada: '#508223',
+  folga_interjornada: '#6B8E23',
+  manutencao_carro: '#C2410C',
   plantao: '#C74634',
   sobreaviso: '#E08A1E',
   ferias: '#227E9E',
@@ -25,7 +29,7 @@ export const corEscala: Record<TipoEscala, string> = {
   outro: '#6F6964',
 };
 
-const BLOQUEIAM: TipoEscala[] = ['folga_programada', 'ferias', 'atestado'];
+const BLOQUEIAM: TipoEscala[] = ['folga_programada', 'folga_interjornada', 'ferias', 'atestado'];
 const CACHE = 'escala-cache';
 
 // Data local no formato do banco (AAAA-MM-DD).

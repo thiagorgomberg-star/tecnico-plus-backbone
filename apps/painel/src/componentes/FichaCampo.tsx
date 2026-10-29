@@ -17,6 +17,11 @@ type Dados = {
   carro: { matricula: string; datahora: string | null; ignicao: boolean | null; velocidade_kmh: number | null; rua: string | null; latitude: number | null; longitude: number | null } | null;
   ordens: Os[];
   pontos: PontoGps[];
+  escala: { tipo: string; observacao: string | null }[];
+};
+const ESCALA: Record<string, string> = {
+  folga_programada: "Folga programada", folga_interjornada: "Folga interjornada", manutencao_carro: "Manutenção do carro",
+  plantao: "Plantão", sobreaviso: "Sobreaviso", ferias: "Férias", atestado: "Atestado", outro: "Outro",
 };
 
 const ABERTAS: StatusOS[] = ["enviada", "aceita", "em_execucao", "pausada", "devolvida"];
@@ -44,7 +49,8 @@ export default function FichaCampo({ tecnico, dia, fechar, verNoMapa, abrirOs }:
       supabase.from("veiculos").select("id, placa, marca, modelo, cor, odometro_km").eq("tecnico_id", id).eq("ativo", true).limit(1).maybeSingle(),
       supabase.from("ordens_servico").select("id, numero, titulo, tipo, status, enviada_em, iniciada_em, concluida_em, endereco").eq("tecnico_id", id)
         .or(`status.in.(${ABERTAS.join(",")}),and(concluida_em.gte.${ini},concluida_em.lt.${fim}),and(iniciada_em.gte.${ini},iniciada_em.lt.${fim})`).order("numero"),
-    ]).then(async ([pessoa, pos, exp, ref, vei, os]) => {
+      supabase.from("escala").select("tipo, observacao").eq("tecnico_id", id).eq("data", dia).neq("tipo", "jornada"),
+    ]).then(async ([pessoa, pos, exp, ref, vei, os, esc]) => {
       const expIds = (exp.data ?? []).map((e) => e.id);
       const [carro, gps] = await Promise.all([
         vei.data ? supabase.from("geocar_viaturas").select("matricula, datahora, ignicao, velocidade_kmh, rua, latitude, longitude").eq("veiculo_id", vei.data.id).maybeSingle() : Promise.resolve({ data: null }),
@@ -54,7 +60,7 @@ export default function FichaCampo({ tecnico, dia, fechar, verNoMapa, abrirOs }:
       ]);
       setD({
         pessoa: pessoa.data, posicao: pos.data, expedientes: exp.data ?? [], refeicoes: ref.data ?? [], veiculo: vei.data,
-        carro: carro.data, ordens: (os.data as Os[]) ?? [], pontos: (gps.data as PontoGps[]) ?? [],
+        carro: carro.data, ordens: (os.data as Os[]) ?? [], pontos: (gps.data as PontoGps[]) ?? [], escala: esc.data ?? [],
       });
     });
   }, [tecnico.id, dia, versao]);
@@ -82,6 +88,7 @@ export default function FichaCampo({ tecnico, dia, fechar, verNoMapa, abrirOs }:
     await baixarXlsxAbas(`Tecnico-${tecnico.nome.split(" ")[0]}-${dia}.xlsx`, [
       { nome: "Resumo", cabecalho: ["Campo", "Valor"], linhas: [
         ["Técnico", tecnico.nome], ["Dia", dia], ["Situação agora", situacao],
+        ["Escala do dia", d.escala.map((e) => ESCALA[e.tipo] ?? e.tipo).join(", ") || "—"],
         ["Expediente", d.expedientes.map((e) => `${hm(e.inicio)}–${e.fim ? hm(e.fim) : "em andamento"}`).join(", ") || "não iniciou"],
         ["Refeição", d.refeicoes.map((r) => `${hm(r.inicio)}–${r.fim ? hm(r.fim) : "em andamento"}`).join(", ") || "—"],
         ["km pelo GPS do celular", Number(km.toFixed(1))], ["Paradas (10 min ou mais)", pars.length],
@@ -116,6 +123,12 @@ export default function FichaCampo({ tecnico, dia, fechar, verNoMapa, abrirOs }:
             <div className={`mt-3 rounded-lg p-3 text-sm font-semibold ${emExecucao ? "bg-green-50 text-green-800" : abertas.length ? "bg-blue-50 text-blue-800" : "bg-gray-100 text-gray-700"}`}>
               {emExpediente ? "Em expediente" : "Fora do expediente"} · {situacao}
             </div>
+            {d.escala.length > 0 && (
+              <div className="mt-2 rounded-lg bg-orange-50 p-2 text-sm text-orange-900">
+                Escala do dia: <b>{d.escala.map((e) => ESCALA[e.tipo] ?? e.tipo).join(", ")}</b>
+                {d.escala.some((e) => e.observacao) && <span className="block text-xs">{d.escala.map((e) => e.observacao).filter(Boolean).join(" · ")}</span>}
+              </div>
+            )}
 
             <div className="mt-3 flex flex-wrap gap-2 text-sm">
               {pos?.latitude != null && pos.longitude != null && (

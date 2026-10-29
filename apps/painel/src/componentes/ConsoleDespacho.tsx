@@ -37,6 +37,10 @@ const COR: Record<StatusOS, { fundo: string; texto: string }> = {
 const H_INICIO = 0, H_FIM = 24;
 const CENTRO_INICIAL: [number, number] = [-45.5, -23.0];
 const ABERTAS: StatusOS[] = ["rascunho", "enviada", "aceita", "em_execucao", "pausada", "devolvida"];
+const ESCALA_ROTULO: Record<string, string> = {
+  folga_programada: "Folga programada", folga_interjornada: "Folga interjornada", manutencao_carro: "Manutenção do carro",
+  plantao: "Plantão", sobreaviso: "Sobreaviso", ferias: "Férias", atestado: "Atestado", outro: "Outro",
+};
 const isoDia = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const hm = (s: string) => new Date(s).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 const iniciais = (n: string) => n.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
@@ -55,6 +59,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
   const [busca, setBusca] = useState("");
   const [agora, setAgora] = useState(0);
   const [detalhe, setDetalhe] = useState<OsConsole | null>(null);
+  const [escalaDia, setEscalaDia] = useState<{ tecnico_id: string; tipo: string; observacao: string | null }[]>([]);
   const [ficha, setFicha] = useState<{ id: string; nome: string } | null>(null);
   const [arrastando, setArrastando] = useState<string | null>(null);
   const [alvo, setAlvo] = useState<string | null>(null);
@@ -78,6 +83,9 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
       .then(({ data }) => setExpedientes(data ?? []));
     supabase.from("refeicoes").select("tecnico_id, inicio, fim").lt("inicio", fim).or(`fim.is.null,fim.gt.${ini}`)
       .then(({ data }) => setRefeicoes(data ?? []));
+    // Escala do dia (folga, interjornada, manutenção do carro...): justifica o técnico sem O.S.
+    supabase.from("escala").select("tecnico_id, tipo, observacao").eq("data", dia).neq("tipo", "jornada")
+      .then(({ data }) => setEscalaDia(data ?? []));
     supabase.from("posicao_atual_tecnicos").select("tecnico_id, nome, latitude, longitude, registrado_em")
       .then(({ data }) => { setPosicoes(data ?? []); setAtualizadoEm(new Date()); });
     supabase.from("geocar_viaturas").select("viat_id, matricula, latitude, longitude, datahora, veiculos(tecnico_id)")
@@ -149,8 +157,9 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
       refeicoes: refeicoes.filter((r) => r.tecnico_id === t.id),
       abertas: ordens.filter((o) => o.tecnico_id === t.id && ABERTAS.includes(o.status) && o.status !== "rascunho").length,
       emCampo: expedientes.some((e) => e.tecnico_id === t.id && !e.fim),
+      escala: escalaDia.filter((e) => e.tecnico_id === t.id),
     };
-  }), [tecnicos, busca, barras, expedientes, refeicoes, ordens, apoios]);
+  }), [tecnicos, busca, barras, expedientes, refeicoes, ordens, apoios, escalaDia]);
 
   // Despacha/transfere e, se veio de um arraste na linha do tempo, já programa o horário.
   async function despachar(osId: string, tecnicoId: string, horario?: { inicio: number; fim: number }) {
@@ -413,7 +422,7 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
           </div>
         </div>
 
-        {linhas.map(({ t, barras: bs, expedientes: ex, refeicoes: rf, abertas, emCampo }) => (
+        {linhas.map(({ t, barras: bs, expedientes: ex, refeicoes: rf, abertas, emCampo, escala: esc }) => (
           <div key={t.id} data-tecnico={t.id} className={`flex border-b border-gray-100 ${alvo === t.id ? "bg-blue-50" : ""}`}
             onDragOver={(e) => { if (arrastando) { e.preventDefault(); setAlvo(t.id); } }}
             onDragLeave={() => setAlvo((a) => (a === t.id ? null : a))}
@@ -428,6 +437,11 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
                 <button className="block max-w-full truncate text-left text-sm font-medium text-blue-800 hover:underline" title="Abrir a ficha do técnico"
                   onClick={() => setFicha({ id: t.id, nome: t.nome })}>{t.nome}</button>
                 <div className="text-xs text-gray-500">{emCampo ? "Em expediente" : "Fora do expediente"}</div>
+                {esc.map((e) => (
+                  <span key={e.tipo} className="mr-1 inline-block rounded bg-orange-100 px-1.5 text-[11px] font-semibold text-orange-800" title={e.observacao ?? undefined}>
+                    {ESCALA_ROTULO[e.tipo] ?? e.tipo}
+                  </span>
+                ))}
               </div>
               {abertas > 0 && <span className="rounded bg-gray-200 px-1.5 text-xs font-semibold" title="O.S. em aberto">{abertas}</span>}
             </div>

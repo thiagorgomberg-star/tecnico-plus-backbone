@@ -12,7 +12,7 @@ type Dia = {
 
 const TIPO_DIA: Record<string, string> = {
   util: "Dia útil", sabado: "Sábado", domingo: "Domingo", feriado: "Feriado",
-  folga_programada: "Folga", ferias: "Férias", atestado: "Atestado",
+  folga_programada: "Folga", folga_interjornada: "Folga interjornada", ferias: "Férias", atestado: "Atestado",
 };
 const hm = (min: number) => {
   if (!min) return "—";
