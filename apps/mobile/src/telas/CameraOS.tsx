@@ -221,7 +221,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
     }
   }
 
-  // Foto da galeria: usa data e GPS gravados na foto (EXIF); sem eles, a hora e a posição de agora.
+  // Foto da galeria: usa data e GPS gravados na foto (EXIF). Sem GPS na foto, fica sem localização (não usa a de agora).
   async function daGaleria() {
     const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: !unica, exif: true, quality: 1 });
     if (r.canceled) return;
@@ -237,7 +237,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
         // A cópia vai para o cache: registrar() move o arquivo, e o original da galeria não pode sumir.
         const copia = new File(Paths.cache, `galeria-${randomUUID()}.jpg`);
         new File(a.uri).copy(copia);
-        await registrar({ uri: copia.uri, width: a.width, height: a.height }, { tiradaEm: data, posicao: gps, endereco: gps ? texto ?? null : undefined });
+        await registrar({ uri: copia.uri, width: a.width, height: a.height }, { tiradaEm: data, posicao: gps, endereco: gps ? texto ?? null : null });
       }
     } catch (e) {
       Alert.alert('Erro ao trazer da galeria', String(e));
@@ -248,7 +248,8 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
 
   async function registrar(foto: { uri: string; width: number; height: number },
     origem?: { tiradaEm: Date | null; posicao: { latitude: number; longitude: number } | null; endereco?: string | null }) {
-      const pos = origem?.posicao ?? posicao.current;
+      // Foto da galeria nunca recebe a posição de agora: só a gravada nela (se tiver).
+      const pos = origem ? origem.posicao : posicao.current;
       const tiradaEm = origem?.tiradaEm ?? new Date();
       const base = {
         uri: foto.uri,
