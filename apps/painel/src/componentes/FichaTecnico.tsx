@@ -167,6 +167,30 @@ export default function FichaTecnico({ id, fechar, aoSalvar }: { id: string; fec
     fechar();
   }
 
+  // E-mail de login (Supabase Auth): lido e trocado pela função email-login, só para supervisor.
+  const [emailLogin, setEmailLogin] = useState<string | null>(null);
+  const [novoEmail, setNovoEmail] = useState("");
+  const [trocandoEmail, setTrocandoEmail] = useState(false);
+  useEffect(() => {
+    supabase.functions.invoke("email-login", { body: { id } }).then(({ data }) => {
+      setEmailLogin(data?.email ?? "");
+      setNovoEmail(data?.email ?? "");
+    });
+  }, [id]);
+
+  async function trocarEmail() {
+    const email = novoEmail.trim().toLowerCase();
+    if (!confirm(`Trocar o e-mail de login para ${email}?\nO técnico passa a entrar com esse e-mail e a mesma senha.`)) return;
+    setTrocandoEmail(true);
+    const { data, error } = await supabase.functions.invoke("email-login", { body: { id, email } });
+    setTrocandoEmail(false);
+    // Erro da função vem no corpo ({ erro }); o supabase-js só dá a mensagem genérica.
+    const msg = data?.erro ?? (error ? await (error as { context?: Response }).context?.json?.().then((j: { erro?: string }) => j.erro).catch(() => null) ?? error.message : null);
+    if (msg) return alert(msg);
+    setEmailLogin(data.email);
+    alert("E-mail de login alterado.");
+  }
+
   const vencida = dados.cnh_validade && dados.cnh_validade < new Date().toISOString().slice(0, 10);
 
   return (
@@ -182,6 +206,21 @@ export default function FichaTecnico({ id, fechar, aoSalvar }: { id: string; fec
           <h2 className="mr-auto text-lg font-semibold">Ficha do técnico</h2>
           <button type="button" className="text-2xl leading-none text-gray-500" onClick={fechar} aria-label="Fechar">×</button>
         </div>
+        <fieldset className="mt-3 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+          <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-blue-700">Login no app e no painel</legend>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="grid min-w-64 flex-1 gap-1 text-xs text-gray-600">
+              E-mail de login {emailLogin === null ? "(carregando…)" : emailLogin === "" ? "(sem login: auxiliar sem acesso ao app)" : ""}
+              <input type="email" value={novoEmail} onChange={(e) => setNovoEmail(e.target.value)} placeholder="nome@empresa.com.br"
+                className="rounded-lg border border-gray-300 bg-white p-2 text-sm text-gray-900" />
+            </label>
+            <button type="button" disabled={trocandoEmail || !novoEmail.trim() || novoEmail.trim().toLowerCase() === emailLogin}
+              className="rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50" onClick={trocarEmail}>
+              {trocandoEmail ? "Alterando…" : "Alterar e-mail de login"}
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-gray-500">A senha continua a mesma. No próximo acesso, o técnico entra com o e-mail novo.</p>
+        </fieldset>
         {SECOES.map(([titulo, campos]) => (
           <fieldset key={titulo} className="mt-3">
             <legend className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-400">{titulo}</legend>
