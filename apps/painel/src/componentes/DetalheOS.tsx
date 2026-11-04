@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import CaixaDetalhe, { CaixaPainel } from "@/componentes/CaixaDetalhe";
 import { baixarKmz } from "@/componentes/CaixasRede";
 import EditarOS from "@/componentes/EditarOS";
+import CopiarLocal from "@/componentes/CopiarLocal";
 import EditorClientesOS from "@/componentes/EditorClientesOS";
 import MapaOS from "@/componentes/MapaOS";
 import OkCliente from "@/componentes/OkCliente";
@@ -315,7 +316,8 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
                 <a className="text-blue-700 hover:underline" target="_blank" rel="noreferrer"
                   href={`https://www.google.com/maps?q=${local.latitude},${local.longitude}`}>
                   {local.latitude.toFixed(6)}, {local.longitude.toFixed(6)}
-                </a>
+                </a>{" "}
+                <CopiarLocal latitude={local.latitude} longitude={local.longitude} />
               </dd>
             </div>
           )}

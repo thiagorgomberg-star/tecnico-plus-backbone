@@ -5,6 +5,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { Map as Mapa } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 
+import CopiarLocal from "@/componentes/CopiarLocal";
+
 type Ponto = { lat: number; lon: number; aproximado: boolean; doEvento: boolean };
 
 // Mapa pequeno com o local da O.S. Usa o ponto do evento ou o de abertura; sem eles, procura o endereço
@@ -67,6 +69,7 @@ export default function MapaOS({ latitude, longitude, doEvento, endereco }: { la
           <span>{ponto.aproximado ? "📍 Local aproximado pelo endereço" : ponto.doEvento ? "📍 Local do evento registrado pelo técnico" : "📍 Local informado na abertura da O.S."}</span>
           <a className="font-medium text-blue-700 hover:underline" target="_blank" rel="noreferrer"
             href={`https://www.google.com/maps/dir/?api=1&destination=${ponto.lat},${ponto.lon}`}>Navegar até aqui</a>
+          <CopiarLocal latitude={ponto.lat} longitude={ponto.lon} />
         </div>
       )}
     </div>
