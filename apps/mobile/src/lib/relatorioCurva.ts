@@ -39,8 +39,11 @@ function svgTraco(s: Sor, niveis: Nivel[], ini: number, fim: number, L: number, 
   </svg>`;
 }
 
+export type Analista = { nome: string; cargo: string; empresa: string; registro: string; observacoes: string };
+
 // Relatório em PDF da análise de uma curva OTDR, gerado no celular (funciona sem internet) e compartilhado.
-export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm: number | null, trecho?: string | null) {
+export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm: number | null, trecho?: string | null,
+  analista?: Analista | null, modo: 'completa' | 'otdr' = 'otdr') {
   const a = analisarSor(s, extensaoKm);
   const niveis = a.diagnosticos.map((d) => d.nivel);
   const total = Math.max(s.traco.at(-1)?.km ?? 0, ...s.eventos.map((e) => e.distanciaKm)) || 1;
@@ -79,7 +82,7 @@ export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm:
   </style></head><body>
   <header>${logo ? `<img src="${logo}">` : ''}<div class="t"><h1>Análise de curva OTDR</h1>
     <div class="s">${esc(nome)}${trecho ? ` · Trecho ${esc(trecho)}` : ''}</div></div>
-    <div class="s" style="text-align:right;font-size:9pt">Gerado em ${new Date().toLocaleString('pt-BR')}${perfil?.nome ? `<br>por ${esc(perfil.nome)}` : ''}</div>
+    <div class="s" style="text-align:right;font-size:9pt">Gerado em ${new Date().toLocaleString('pt-BR')}${analista?.nome || perfil?.nome ? `<br>por ${esc(analista?.nome || perfil?.nome)}` : ''}</div>
   </header>
   <h2>Resumo</h2>
   <div class="ind">
@@ -101,14 +104,25 @@ export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm:
   ${svgTraco(s, niveis, 0, fimVista, 960, 300)}
   ${detalhes ? `<h2>Detalhe dos eventos que pedem ação</h2><div class="det">${detalhes}</div>` : ''}
   <h2>Eventos</h2>
+  <p class="s" style="font-size:8.5pt;margin:0 0 4px">${modo === 'completa'
+    ? `Curva lida por inteiro: ${s.eventos.filter((e) => e.detectado).length} evento(s) marcados como "lido da curva" foram encontrados na leitura do traço, além dos salvos pelo OTDR.`
+    : 'Somente os eventos salvos pelo OTDR no arquivo.'}</p>
   <table><tr><th>#</th><th>Distância</th><th>Tipo</th><th>Perda</th><th>Reflectância</th><th>Lance</th><th>Situação</th><th>O que fazer</th></tr>
-  ${a.diagnosticos.map((d) => `<tr><td>${d.evento.numero}</td><td style="white-space:nowrap"><b>${km(d.evento.distanciaKm)}</b></td><td>${esc(d.tipo)}</td>
+  ${a.diagnosticos.map((d) => `<tr><td>${d.evento.numero}</td><td style="white-space:nowrap"><b>${km(d.evento.distanciaKm)}</b></td><td>${esc(d.tipo)}${d.evento.detectado ? '<br><span class="l">lido da curva</span>' : ''}</td>
     <td style="white-space:nowrap">${fmt(d.evento.perdaDb, 3)} dB</td><td style="white-space:nowrap">${d.evento.reflectanciaDb ? `${fmt(d.evento.reflectanciaDb)} dB` : '—'}</td>
     <td style="white-space:nowrap">${d.evento.inclinacaoDbKm ? `${fmt(d.evento.inclinacaoDbKm, 3)} dB/km` : '—'}</td>
     <td><span class="selo" style="background:${COR[d.nivel]}1F;color:${COR[d.nivel]}">${ROTULO[d.nivel]}</span></td><td>${esc(d.texto)}</td></tr>`).join('')}
   </table>
   <p class="s" style="font-size:8pt">Limites usados: fusão até 0,30 dB; perda sem reflexão acima de 0,50 dB é crítica; conector até 0,75 dB; reflexão acima de -35 dB;
     lance acima de ${s.comprimentoOndaNm >= 1500 ? '0,30' : '0,45'} dB/km. A distância é a da fibra (inclui sobras técnicas), não a do mapa.</p>
+  ${analista && (analista.nome || analista.observacoes) ? `<h2>Responsável pela análise</h2>
+  ${analista.observacoes ? `<p style="white-space:pre-wrap;margin:0 0 10px"><b>Parecer:</b> ${esc(analista.observacoes)}</p>` : ''}
+  <div style="display:flex;gap:24px;align-items:flex-end;break-inside:avoid">
+    <div style="flex:1"><div class="info" style="grid-template-columns:repeat(4,1fr)">${[
+      ['Analista', analista.nome], ['Cargo / função', analista.cargo], ['Empresa', analista.empresa], ['Registro', analista.registro],
+    ].filter(([, v]) => v).map(([r, v]) => `<div><span class="l">${r}</span><b>${esc(v)}</b></div>`).join('')}</div></div>
+    <div style="width:220px;text-align:center"><div style="border-top:1px solid #333;padding-top:3px;font-size:8.5pt">Assinatura</div></div>
+  </div>` : ''}
   <p class="s" style="font-size:8pt;margin-top:12px;border-top:1px solid #ccc;padding-top:4px">Multivale Engenharia · Backbone · gerado pelo Técnico Plus</p>
   </body></html>`;
 

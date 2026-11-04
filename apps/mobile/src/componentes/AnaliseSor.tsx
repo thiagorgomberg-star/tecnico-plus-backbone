@@ -1,13 +1,15 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  ActivityIndicator, Alert, GestureResponderEvent, Modal, PanResponder, Pressable, ScrollView, ScrollViewInstance, StyleSheet, Text, useWindowDimensions, View,
+  ActivityIndicator, Alert, GestureResponderEvent, KeyboardAvoidingView, Modal, PanResponder, Pressable, ScrollView, ScrollViewInstance, StyleSheet, Text, TextInput,
+  useWindowDimensions, View,
 } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
 import { cores, sombra } from '../lib/estilo';
-import { analisarSor, km, lerSor, Nivel, Sor, tracoJanela } from '../lib/sor';
-import { compartilharAnaliseCurva } from '../lib/relatorioCurva';
+import { analisarSor, curvaCompleta, km, lerSor, Nivel, Sor, tracoJanela } from '../lib/sor';
+import { Analista, compartilharAnaliseCurva } from '../lib/relatorioCurva';
 import { supabase } from '../lib/supabase';
 import Icone from './Icone';
 import MargemInferior from './MargemInferior';
@@ -22,7 +24,10 @@ const fmt = (n: number, casas = 2) => n.toLocaleString('pt-BR', { minimumFractio
 export default function AnaliseSor({ curva, extensaoKm, trecho, fechar }: {
   curva: { nome: string; bucket?: string; caminho?: string; uri?: string } | null; extensaoKm: number | null; trecho?: string | null; fechar: () => void;
 }) {
-  const [sor, setSor] = useState<Sor | null>(null);
+  const [bruto, setSor] = useState<Sor | null>(null);
+  // "Ler a curva toda" acha também as emendas/curvaturas que o OTDR não salvou como evento; "Somente eventos do OTDR" usa só os salvos.
+  const [modo, setModo] = useState<'completa' | 'otdr'>('completa');
+  const sor = useMemo(() => (bruto && modo === 'completa' ? curvaCompleta(bruto) : bruto), [bruto, modo]);
   const [erro, setErro] = useState('');
   const [selecionado, setSelecionado] = useState<number | null>(null);
   const [janela, setJanela] = useState<Janela>({ ini: 0, fim: 1 });
@@ -62,11 +67,22 @@ export default function AnaliseSor({ curva, extensaoKm, trecho, fechar }: {
   };
 
   const [gerando, setGerando] = useState(false);
+  // Antes do PDF, os dados de quem assina a análise (lembrados para a próxima vez).
+  const [analista, setAnalista] = useState<Analista | null>(null);
+  async function pedirAnalista() {
+    const salvo = await AsyncStorage.getItem('analista-curva').then((t) => (t ? JSON.parse(t) as Analista : null)).catch(() => null);
+    const perfil = salvo ? null : await AsyncStorage.getItem('meu-perfil').then((t) => (t ? JSON.parse(t) as { nome?: string; cargo?: string } : null)).catch(() => null);
+    setAnalista({ nome: '', cargo: '', empresa: 'Multivale Engenharia', registro: '', ...(perfil ? { nome: perfil.nome ?? '', cargo: perfil.cargo ?? '' } : {}), ...salvo, observacoes: '' });
+  }
   async function exportar() {
-    if (!sor || !curva) return;
+    if (!sor || !curva || !analista) return;
+    const dados = analista;
+    setAnalista(null);
+    const { observacoes: _o, ...lembrar } = dados;
+    AsyncStorage.setItem('analista-curva', JSON.stringify(lembrar)).catch(() => {});
     setGerando(true);
     try {
-      await compartilharAnaliseCurva(sor, curva.nome, extensaoKm, trecho);
+      await compartilharAnaliseCurva(sor, curva.nome, extensaoKm, trecho, dados, modo);
     } catch (e) {
       Alert.alert('Não foi possível gerar o PDF', (e as Error).message);
     } finally {
@@ -86,7 +102,7 @@ export default function AnaliseSor({ curva, extensaoKm, trecho, fechar }: {
             <Text style={s.topoSub} numberOfLines={1}>{curva?.nome}</Text>
           </View>
           {sor ? (
-            <Pressable style={s.pdf} onPress={exportar} disabled={gerando} hitSlop={8}>
+            <Pressable style={s.pdf} onPress={pedirAnalista} disabled={gerando} hitSlop={8}>
               {gerando ? <ActivityIndicator size="small" color="#fff" /> : <Icone nome="file-pdf-box" tamanho={22} cor="#fff" />}
               <Text style={s.pdfTexto}>PDF</Text>
             </Pressable>
@@ -94,6 +110,21 @@ export default function AnaliseSor({ curva, extensaoKm, trecho, fechar }: {
         </View>
         {erro ? <Text style={s.erro}>{erro}</Text> : !sor || !analise ? <ActivityIndicator style={{ marginTop: 40 }} color={cores.primaria} /> : (
           <ScrollView ref={rolar} contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }}>
+            <View>
+              <Text style={s.indRotulo}>EVENTOS ANALISADOS</Text>
+              <View style={s.modos}>
+                {([['otdr', 'Somente eventos do OTDR'], ['completa', 'Ler a curva toda']] as const).map(([m, t]) => (
+                  <Pressable key={m} style={[s.modo, modo === m && s.modoAtivo]} onPress={() => { setModo(m); setSelecionado(null); }}>
+                    <Text style={[s.modoTexto, modo === m && { color: '#fff' }]}>{t}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={s.info}>
+                {modo === 'completa'
+                  ? `${sor.eventos.filter((e) => e.detectado).length} evento(s) encontrados na leitura da curva, além dos ${bruto?.eventos.length ?? 0} salvos pelo OTDR.`
+                  : 'Mostra só os eventos que o OTDR salvou no arquivo.'}
+              </Text>
+            </View>
             <View style={s.grade}>
               <Indicador rotulo="FIBRA" valor={km(analise.comprimentoKm)} alerta={!!extensaoKm && analise.comprimentoKm < extensaoKm * 0.97}
                 extra={extensaoKm ? `trecho ${km(extensaoKm)}` : undefined} />
@@ -135,6 +166,7 @@ export default function AnaliseSor({ curva, extensaoKm, trecho, fechar }: {
                   <View style={[s.numero, { backgroundColor: COR[d.nivel] }]}><Text style={s.numeroTexto}>{d.evento.numero}</Text></View>
                   <View style={{ flex: 1 }}>
                     <Text style={s.eventoTitulo}>{km(d.evento.distanciaKm)} · {d.tipo}</Text>
+                    {d.evento.detectado ? <Text style={s.lido}>LIDO DA CURVA</Text> : null}
                     <Text style={s.eventoSub}>
                       Perda {fmt(d.evento.perdaDb, 3)} dB{d.evento.reflectanciaDb ? ` · Reflexão ${fmt(d.evento.reflectanciaDb)} dB` : ''}
                       {d.evento.inclinacaoDbKm ? ` · Lance ${fmt(d.evento.inclinacaoDbKm, 3)} dB/km` : ''}
@@ -150,6 +182,29 @@ export default function AnaliseSor({ curva, extensaoKm, trecho, fechar }: {
         )}
       </View>
       <MargemInferior />
+      <Modal visible={!!analista} transparent animationType="fade" onRequestClose={() => setAnalista(null)}>
+        <KeyboardAvoidingView behavior="padding" style={s.fundoForm}>
+          <ScrollView contentContainerStyle={s.form} keyboardShouldPersistTaps="handled">
+            <Text style={s.formTitulo}>Dados do analista</Text>
+            <Text style={s.info}>Saem no PDF, no campo de responsável pela análise.</Text>
+            {analista ? ([
+              ['nome', 'Nome do analista'], ['cargo', 'Cargo / função'], ['empresa', 'Empresa'], ['registro', 'Registro (CREA, matrícula...)'], ['observacoes', 'Observações / parecer'],
+            ] as [keyof Analista, string][]).map(([k, rotulo]) => (
+              <View key={k}>
+                <Text style={s.formRotulo}>{rotulo}</Text>
+                <TextInput style={[s.formCampo, k === 'observacoes' && { minHeight: 80, textAlignVertical: 'top' }]} value={analista[k]} multiline={k === 'observacoes'}
+                  onChangeText={(v) => setAnalista({ ...analista, [k]: v })} placeholderTextColor={cores.apagado} />
+              </View>
+            )) : null}
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
+              <Pressable style={[s.formBotao, { backgroundColor: cores.selecionado }]} onPress={() => setAnalista(null)}>
+                <Text style={[s.formBotaoTexto, { color: cores.primaria }]}>Cancelar</Text>
+              </Pressable>
+              <Pressable style={s.formBotao} onPress={exportar}><Text style={s.formBotaoTexto}>Gerar PDF</Text></Pressable>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
     </Modal>
   );
 }
@@ -319,4 +374,16 @@ const s = StyleSheet.create({
   zoomTudo: { textAlign: 'center', color: cores.primaria, fontWeight: '700', fontSize: 13, marginTop: 8 },
   zoomDica: { textAlign: 'center', color: cores.suave, fontSize: 11.5, marginTop: 2 },
   seloTexto: { fontSize: 11, fontWeight: '800' },
+  modos: { flexDirection: 'row', gap: 8, marginTop: 6, marginBottom: 4 },
+  modo: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: cores.cartao, borderWidth: 1, borderColor: cores.borda, alignItems: 'center' },
+  modoAtivo: { backgroundColor: cores.primaria, borderColor: cores.primaria },
+  modoTexto: { fontSize: 13, fontWeight: '700', color: cores.texto },
+  lido: { fontSize: 10, fontWeight: '800', color: cores.primaria, letterSpacing: 0.5, marginTop: 1 },
+  fundoForm: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center' },
+  form: { margin: 20, backgroundColor: cores.cartao, borderRadius: 16, padding: 16, gap: 8 },
+  formTitulo: { fontSize: 18, fontWeight: '800', color: cores.texto },
+  formRotulo: { fontSize: 12, fontWeight: '700', color: cores.suave, marginBottom: 3 },
+  formCampo: { borderWidth: 1, borderColor: cores.borda, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, fontSize: 15, color: cores.texto },
+  formBotao: { flex: 1, height: 46, borderRadius: 12, backgroundColor: cores.primaria, alignItems: 'center', justifyContent: 'center' },
+  formBotaoTexto: { color: '#fff', fontWeight: '800', fontSize: 15 },
 });

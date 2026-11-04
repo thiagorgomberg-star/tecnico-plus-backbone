@@ -3,11 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { pdfDoElemento } from "@/lib/pdfDoElemento";
-import { analisarSor, km, lerSor, Nivel, Sor } from "@/lib/sor";
+import { analisarSor, curvaCompleta, km, lerSor, Nivel, Sor } from "@/lib/sor";
 import { supabase } from "@/lib/supabase";
 
 const COR: Record<Nivel, string> = { ok: "#1E9E4A", atencao: "#D99A00", critico: "#D0453B" };
 const ROTULO: Record<Nivel, string> = { ok: "OK", atencao: "Atenção", critico: "Crítico" };
+type Analista = { nome: string; cargo: string; empresa: string; registro: string; observacoes: string };
+type Acao = "compartilhar" | "baixar" | "imprimir";
+const CAMPOS: [keyof Analista, string][] = [
+  ["nome", "Nome do analista"], ["cargo", "Cargo / função"], ["empresa", "Empresa"], ["registro", "Registro (CREA, matrícula...)"], ["observacoes", "Observações / parecer"],
+];
 
 // Análise de um arquivo .SOR do OTDR: resumo da fibra, traço com os eventos marcados e o que fazer em cada evento.
 // A curva vem do armazenamento (bucket + caminho) ou de um arquivo escolhido no computador (arquivo).
@@ -15,7 +20,27 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
   bucket?: string; caminho?: string; arquivo?: File; nome: string; extensaoKm: number | null; fechar: () => void;
   aoAnalisar?: (resumo: { comprimentoKm: number; perdaTotalDb: number; criticos: number; atencao: number }) => void;
 }) {
-  const [sor, setSor] = useState<Sor | null>(null);
+  const [bruto, setSor] = useState<Sor | null>(null);
+  // "Ler a curva toda" acha também as emendas/curvaturas que o OTDR não salvou como evento; "Somente eventos do OTDR" usa só os salvos.
+  const [modo, setModo] = useState<"completa" | "otdr">("completa");
+  const sor = useMemo(() => (bruto && modo === "completa" ? curvaCompleta(bruto) : bruto), [bruto, modo]);
+  // Dados de quem assina a análise: pedidos antes do PDF/impressão e lembrados neste navegador.
+  const [analista, setAnalista] = useState<Analista | null>(null);
+  const [pedindo, setPedindo] = useState<Acao | null>(null);
+  function pedir(acao: Acao) {
+    let salvo: Partial<Analista> = {};
+    try { salvo = JSON.parse(localStorage.getItem("analista-curva") || "{}"); } catch { /* sem dados salvos */ }
+    setAnalista((a) => ({ nome: "", cargo: "", empresa: "Multivale Engenharia", registro: "", ...salvo, observacoes: a?.observacoes ?? "" }));
+    setPedindo(acao);
+  }
+  function confirmar() {
+    if (!analista || !pedindo) return;
+    try { const { observacoes: _o, ...lembrar } = analista; localStorage.setItem("analista-curva", JSON.stringify(lembrar)); } catch { /* opcional */ }
+    const acao = pedindo;
+    setPedindo(null);
+    // Espera o bloco do analista aparecer na tela antes de gerar.
+    setTimeout(() => (acao === "imprimir" ? imprimir() : pdf(acao === "compartilhar")), 80);
+  }
   const [erro, setErro] = useState("");
   const [selecionado, setSelecionado] = useState<number | null>(null);
 
@@ -78,14 +103,52 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
             <h2 className="font-semibold">Análise da curva OTDR</h2>
             <p className="text-xs text-gray-500">{nome}</p>
           </div>
-          <button className="rounded-lg bg-[#163A6B] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50" disabled={!analise || gerando} onClick={() => pdf(true)}>
+          <button className="rounded-lg bg-[#163A6B] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50" disabled={!analise || gerando} onClick={() => pedir("compartilhar")}>
             {gerando ? "Gerando PDF..." : "Compartilhar PDF"}
           </button>
-          <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50" disabled={!analise || gerando} onClick={() => pdf(false)}>Baixar PDF</button>
-          <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={imprimir}>Imprimir</button>
+          <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50" disabled={!analise || gerando} onClick={() => pedir("baixar")}>Baixar PDF</button>
+          <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={() => pedir("imprimir")}>Imprimir</button>
           <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={fechar}>Fechar</button>
         </div>
 
+        {bruto ? (
+          <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 px-4 py-2 text-sm">
+            <span className="text-xs font-semibold text-gray-500">Eventos analisados:</span>
+            {([["otdr", "Somente eventos do OTDR"], ["completa", "Ler a curva toda"]] as const).map(([m, t]) => (
+              <button key={m} onClick={() => { setModo(m); setSelecionado(null); }}
+                className={`rounded-lg border px-3 py-1 ${modo === m ? "border-[#163A6B] bg-[#163A6B] text-white" : "border-gray-300 hover:bg-gray-50"}`}>{t}</button>
+            ))}
+            <span className="text-xs text-gray-500">
+              {modo === "completa" ? `${sor?.eventos.filter((e) => e.detectado).length ?? 0} evento(s) encontrados na leitura do traço, além dos ${bruto.eventos.length} salvos pelo OTDR.`
+                : "Só os eventos que o OTDR salvou no arquivo."}
+            </span>
+          </div>
+        ) : null}
+        {pedindo && analista ? (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setPedindo(null)}>
+            <form className="grid w-full max-w-md gap-3 rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}
+              onSubmit={(e) => { e.preventDefault(); confirmar(); }}>
+              <div>
+                <h3 className="font-semibold">Dados do analista</h3>
+                <p className="text-xs text-gray-500">Saem no relatório, no campo de responsável pela análise.</p>
+              </div>
+              {CAMPOS.map(([k, rotulo]) => (
+                <label key={k} className="grid gap-1 text-sm">
+                  <span className="text-xs font-medium text-gray-600">{rotulo}</span>
+                  {k === "observacoes"
+                    ? <textarea rows={3} className="rounded-lg border border-gray-300 px-3 py-2" value={analista[k]} onChange={(e) => setAnalista({ ...analista, [k]: e.target.value })} />
+                    : <input className="rounded-lg border border-gray-300 px-3 py-2" value={analista[k]} onChange={(e) => setAnalista({ ...analista, [k]: e.target.value })} />}
+                </label>
+              ))}
+              <div className="flex justify-end gap-2">
+                <button type="button" className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={() => setPedindo(null)}>Cancelar</button>
+                <button type="submit" className="rounded-lg bg-[#163A6B] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90">
+                  {pedindo === "imprimir" ? "Imprimir" : pedindo === "compartilhar" ? "Gerar e compartilhar" : "Gerar PDF"}
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : null}
         {erro ? <p className="p-6 text-red-700">{erro}</p> : !sor || !analise ? <p className="p-6 text-gray-500">Lendo o arquivo...</p> : (
           <div ref={conteudo} className="grid gap-4 bg-white p-4 text-sm">
             <div>
@@ -122,7 +185,7 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
                     onClick={() => setSelecionado(i)}>
                     <td className="p-2 font-mono">{d.evento.numero}</td>
                     <td className="whitespace-nowrap py-2 font-semibold">{km(d.evento.distanciaKm)}</td>
-                    <td className="py-2">{d.tipo}</td>
+                    <td className="py-2">{d.tipo}{d.evento.detectado ? <div className="text-[10px] font-semibold uppercase text-[#163A6B]">lido da curva</div> : null}</td>
                     <td className="whitespace-nowrap py-2">{fmt(d.evento.perdaDb, 3)} dB</td>
                     <td className="whitespace-nowrap py-2">{d.evento.reflectanciaDb ? `${fmt(d.evento.reflectanciaDb)} dB` : "—"}</td>
                     <td className="whitespace-nowrap py-2">{d.evento.inclinacaoDbKm ? `${fmt(d.evento.inclinacaoDbKm, 3)} dB/km` : "—"}</td>
@@ -137,7 +200,21 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
             <p className="text-xs text-gray-500">
               Limites usados: fusão até 0,30 dB, perda sem reflexão acima de 0,50 dB é crítica, conector até 0,75 dB, reflexão acima de -35 dB,
               lance acima de {sor.comprimentoOndaNm >= 1500 ? "0,30" : "0,45"} dB/km. A distância é a da fibra (inclui sobras), não a do mapa.
+              {modo === "completa" ? " Curva lida por inteiro: os eventos marcados \"lido da curva\" foram encontrados na leitura do traço." : " Somente os eventos salvos pelo OTDR."}
             </p>
+            {analista && (analista.nome || analista.observacoes) ? (
+              <div className="grid gap-2 border-t border-gray-200 pt-3" style={{ breakInside: "avoid" }}>
+                <div className="text-xs font-semibold uppercase text-[#0572CE]">Responsável pela análise</div>
+                {analista.observacoes ? <p className="whitespace-pre-wrap"><b>Parecer:</b> {analista.observacoes}</p> : null}
+                <div className="flex flex-wrap items-end gap-6">
+                  {([["Analista", analista.nome], ["Cargo / função", analista.cargo], ["Empresa", analista.empresa], ["Registro", analista.registro]] as const)
+                    .filter(([, v]) => v).map(([r, v]) => (
+                      <div key={r}><div className="text-xs text-gray-500">{r}</div><div className="font-semibold">{v}</div></div>
+                    ))}
+                  <div className="ml-auto w-56 border-t border-gray-700 pt-1 text-center text-xs">Assinatura</div>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

@@ -14,6 +14,7 @@ export type EventoSor = {
   manual: boolean;
   codigo: string;
   comentario: string;
+  detectado?: boolean; // encontrado pela leitura da curva toda (não estava entre os eventos salvos pelo OTDR)
 };
 
 export type Sor = {
@@ -225,6 +226,113 @@ export function tracoJanela(s: Sor, iniKm: number, fimKm: number, maxFaixas = 60
     if (alto !== baixo) saida.push({ km: (i + passo / 2) * passoKm, db: baixo });
   }
   return saida;
+}
+
+// Reta (mínimos quadrados) de y[a..b) em função do índice; null com menos de 5 pontos.
+function reta(y: Float32Array, a: number, b: number) {
+  a = Math.max(0, a); b = Math.min(y.length, b);
+  const n = b - a;
+  if (n < 5) return null;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (let i = a; i < b; i++) { sx += i; sy += y[i]; sxx += i * i; sxy += i * y[i]; }
+  const d = n * sxx - sx * sx;
+  if (!d) return null;
+  const inc = (n * sxy - sx * sy) / d;
+  return { inc, b0: (sy - inc * sx) / n, em: (x: number) => (sy - inc * sx) / n + inc * x };
+}
+
+function mediaMovel(y: Float32Array, m: number) {
+  const n = y.length, out = new Float32Array(n);
+  const acc = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) acc[i + 1] = acc[i] + y[i];
+  const h = Math.floor(m / 2);
+  for (let i = 0; i < n; i++) {
+    const a = Math.max(0, i - h), b = Math.min(n, i - h + m);
+    out[i] = (acc[b] - acc[a]) / (b - a);
+  }
+  return out;
+}
+
+// Lê a curva inteira e encontra degraus (emendas, curvaturas) e picos (conectores) que o OTDR não salvou como evento.
+// Muitos OTDRs gravam só os eventos acima do limiar configurado; aqui a curva é varrida ponto a ponto.
+export function detectarEventos(s: Sor): EventoSor[] {
+  const y = s.niveis, N = y.length, r = s.resolucaoM / 1000;
+  if (N < 50 || !r) return [];
+  const fimEv = s.eventos.find((e) => e.fimDeFibra);
+  let fim = Math.min(N - 1, fimEv ? Math.round(fimEv.distanciaKm / r) : N - 1);
+  const pulsoKm = (0.2042 * (s.pulsoNs || 100)) / 1000 / 2;
+  const g = Math.max(4, Math.round(pulsoKm / r)), h = g;
+  const m = Math.max(3, Math.floor(g / 2));
+  const ys = mediaMovel(y, m);
+  const res2 = new Float32Array(N);
+  for (let i = 0; i < N; i++) res2[i] = (y[i] - ys[i]) ** 2;
+  const sig = mediaMovel(res2, Math.max(20, Math.round(1 / r))).map(Math.sqrt);
+  const dy = new Float32Array(N);
+  for (let i = h; i < N - h; i++) dy[i] = (ys[i - h] - ys[i + h]) / (2 * h * r);
+  // Atenuação típica da fibra (mediana da inclinação) para separar o que é degrau do que é a queda normal.
+  const ia = Math.round(2 / r), ib = Math.min(fim, Math.round(30 / r));
+  const amostra = Array.from(dy.subarray(Math.min(ia, ib), ib)).sort((a, b) => a - b);
+  const alfa = amostra.length ? amostra[Math.floor(amostra.length / 2)] : 0;
+  const exc = new Float32Array(N), lim = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    exc[i] = (dy[i] - alfa) * 2 * h * r;
+    lim[i] = Math.max(0.06, 4 * sig[i] * Math.sqrt(2 / m) * 2);
+  }
+  // Para onde o ruído já engole degraus de 0,5 dB (fim do alcance útil).
+  const k0 = Math.round(1 / r);
+  // (só depois dos primeiros 3 km, onde a zona morta do pulso também eleva o ruído, e quando dura 1 km seguido)
+  for (let i = Math.max(k0, Math.round(3 / r)), seguidos = 0; i < fim; i++) {
+    seguidos = lim[i] > 0.5 ? seguidos + 1 : 0;
+    if (seguidos >= Math.round(1 / r)) { fim = i - seguidos; break; }
+  }
+  const regs: [number, number][] = [];
+  for (let i = k0; i < fim;) {
+    if (Math.abs(exc[i]) > lim[i]) {
+      const sg = Math.sign(exc[i]);
+      let j = i;
+      while (j < fim && Math.sign(exc[j]) === sg && Math.abs(exc[j]) > lim[j] * 0.5) j++;
+      regs.push([i, j]);
+      i = j;
+    } else i++;
+  }
+  const L = Math.round(1 / r);
+  const achados: EventoSor[] = [];
+  regs.forEach(([a, b], k) => {
+    const c = Math.floor((a + b) / 2);
+    const antes = k > 0 ? regs[k - 1][1] : k0, depois = k + 1 < regs.length ? regs[k + 1][0] : fim;
+    const esq = reta(y, Math.max(antes, a - L), a), dir = reta(y, b, Math.min(depois, b + L));
+    if (!esq || !dir) return;
+    const perda = esq.em(c) - dir.em(c);
+    let pico = -Infinity;
+    for (let i = Math.max(0, a - h); i < Math.min(N, b + h); i++) pico = Math.max(pico, y[i] - esq.em(i));
+    const reflexivo = pico > 0.5;
+    if (Math.abs(perda) < 0.05 && !reflexivo) return;
+    achados.push({
+      numero: 0, distanciaKm: c * r, perdaDb: Math.round(perda * 1000) / 1000, reflectanciaDb: 0,
+      inclinacaoDbKm: Math.max(0, -esq.inc / r), reflexivo, fimDeFibra: false, manual: false,
+      codigo: reflexivo ? '1F' : '0F', comentario: '', detectado: true,
+    });
+  });
+  return achados;
+}
+
+// Eventos salvos pelo OTDR + os encontrados lendo a curva toda (os salvos têm prioridade quando coincidem).
+export function curvaCompleta(s: Sor): Sor {
+  const r = s.resolucaoM / 1000;
+  const pulsoKm = (0.2042 * (s.pulsoNs || 100)) / 1000 / 2;
+  const perto = Math.max(2 * pulsoKm, 4 * r, 0.05);
+  const novos = detectarEventos(s).filter((d) => !s.eventos.some((e) => Math.abs(e.distanciaKm - d.distanciaKm) < perto));
+  const eventos = [...s.eventos.map((e) => ({ ...e })), ...novos].sort((a, b) => a.distanciaKm - b.distanciaKm);
+  // Atenuação de cada lance recalculada entre os eventos vizinhos (os lances ficaram mais curtos).
+  const g = Math.max(4, Math.round(pulsoKm / (r || 1)));
+  eventos.forEach((e, i) => {
+    e.numero = i + 1;
+    if (i === 0 || !r || !s.niveis.length) return;
+    const a = Math.round(eventos[i - 1].distanciaKm / r) + 2 * g, b = Math.round(e.distanciaKm / r) - 2 * g;
+    const f = b - a >= 0.5 / r ? reta(s.niveis, a, b) : null;
+    if (f) e.inclinacaoDbKm = Math.max(0, -f.inc / r);
+  });
+  return { ...s, eventos };
 }
 
 export type Nivel = 'ok' | 'atencao' | 'critico';
