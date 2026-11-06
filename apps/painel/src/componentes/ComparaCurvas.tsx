@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  Comparacao, compararAntesDepois, compararBidirecional, fimDaFibra, Momento, ROTULO_MOMENTO, ROTULO_SENTIDO, Sentido, tracoParaComparar,
+  Comparacao, compararAntesDepois, compararBidirecional, compararFibras, fimDaFibra, Momento, ROTULO_MOMENTO, ROTULO_SENTIDO, Sentido, tracoParaComparar,
 } from "@/lib/comparaSor";
 import { pdfDoElemento } from "@/lib/pdfDoElemento";
 import { curvaCompleta, km, lerSor, Nivel, Sor } from "@/lib/sor";
@@ -13,13 +13,14 @@ export type CurvaParaComparar = {
   chave: string; nome: string; bucket?: string; caminho?: string; arquivo?: File; salvaId?: string;
   fibra: string; sentido: Sentido | ""; momento: Momento;
 };
-type Tipo = "bidirecional" | "antesDepois";
+type Tipo = "bidirecional" | "antesDepois" | "fibras";
 
 const COR: Record<Nivel, string> = { ok: "#1E9E4A", atencao: "#D99A00", critico: "#D0453B" };
 const CORES_CURVA = ["#163A6B", "#E07B00"]; // curva 1 (A→B / antes) e curva 2 (B→A / depois)
 const fmt = (n: number | null, casas = 2) => (n == null ? "—" : n.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas }));
 
-// Comparativo de duas curvas da mesma fibra: A→B × B→A (média bidirecional) ou antes × depois no mesmo sentido.
+// Comparativo de duas curvas: A→B × B→A (média bidirecional), antes × depois no mesmo sentido, ou duas fibras
+// do mesmo cabo no mesmo sentido (pontos de atenuação comuns = esforço no cabo ou caixa mal acomodada).
 // Cada curva é marcada com a fibra, o sentido e o momento, e a lista pode ser filtrada pela fibra.
 export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar }: {
   curvas: CurvaParaComparar[];
@@ -49,7 +50,8 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
   }, [curvas.map((c) => c.chave).join()]);
 
   const fibras = [...new Set(curvas.map((c) => c.fibra.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
-  const visiveis = curvas.filter((c) => !fibra || c.fibra.trim() === fibra);
+  // Duas fibras: o filtro não se aplica (são fibras diferentes de propósito).
+  const visiveis = curvas.filter((c) => tipo === "fibras" || !fibra || c.fibra.trim() === fibra);
   const sor = (chave: string) => { const s = lidas[chave]; return s && typeof s !== "string" ? (modo === "completa" ? curvaCompleta(s) : s) : null; };
 
   // Sugere o par conforme o tipo: A→B com B→A, ou antes com depois no mesmo sentido.
@@ -59,6 +61,11 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
     if (tipo === "bidirecional") {
       setC1(v.find((c) => c.sentido === "AB")?.chave ?? v[0]?.chave ?? "");
       setC2(v.find((c) => c.sentido === "BA")?.chave ?? v[1]?.chave ?? "");
+    } else if (tipo === "fibras") {
+      const a = v[0];
+      setC1(a?.chave ?? "");
+      setC2((v.find((c) => c.chave !== a?.chave && c.fibra.trim() !== a?.fibra.trim() && (!a?.sentido || !c.sentido || c.sentido === a.sentido))
+        ?? v.find((c) => c.chave !== a?.chave))?.chave ?? "");
     } else {
       const antes = v.find((c) => c.momento === "antes") ?? v[0];
       setC1(antes?.chave ?? "");
@@ -69,15 +76,19 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
   }, [tipo, fibra, Object.keys(lidas).length, curvas.map((c) => `${c.chave}${c.sentido}${c.momento}`).join()]);
 
   const s1 = c1 ? sor(c1) : null, s2 = c2 && c2 !== c1 ? sor(c2) : null;
+  const curva = (k: string) => curvas.find((c) => c.chave === k);
+  const nomeFibra = (k: string, n: number) => `Fibra ${curva(k)?.fibra.trim() || n}`;
+  const nomes: [string, string] = tipo === "bidirecional" ? ["A → B", "B → A"] : tipo === "fibras"
+    ? (() => { const a = nomeFibra(c1, 1), b = nomeFibra(c2, 2); return a === b ? ["Fibra 1", "Fibra 2"] : [a, b]; })() : ["Antes", "Depois"];
   const comp: Comparacao | null = useMemo(
-    () => (s1 && s2 ? (tipo === "bidirecional" ? compararBidirecional(s1, s2) : compararAntesDepois(s1, s2)) : null),
+    () => (s1 && s2 ? (tipo === "bidirecional" ? compararBidirecional(s1, s2) : tipo === "fibras" ? compararFibras(s1, s2, nomes) : compararAntesDepois(s1, s2)) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [c1, c2, tipo, modo, lidas[c1], lidas[c2]],
   );
-  const curva = (k: string) => curvas.find((c) => c.chave === k);
-  const nomes = tipo === "bidirecional" ? ["A → B", "B → A"] : ["Antes", "Depois"];
   const sentidoErrado = tipo === "bidirecional" && c1 && c2 && curva(c1)?.sentido && curva(c2)?.sentido && curva(c1)!.sentido === curva(c2)!.sentido;
-  const fibraDiferente = c1 && c2 && curva(c1)?.fibra && curva(c2)?.fibra && curva(c1)!.fibra.trim() !== curva(c2)!.fibra.trim();
+  const sentidoDiferente = tipo !== "bidirecional" && c1 && c2 && curva(c1)?.sentido && curva(c2)?.sentido && curva(c1)!.sentido !== curva(c2)!.sentido;
+  const mesmaFibra = tipo === "fibras" && c1 && c2 && curva(c1)?.fibra && curva(c1)!.fibra.trim() === curva(c2)?.fibra.trim();
+  const fibraDiferente = tipo !== "fibras" && c1 && c2 && curva(c1)?.fibra && curva(c2)?.fibra && curva(c1)!.fibra.trim() !== curva(c2)!.fibra.trim();
 
   const conteudo = useRef<HTMLDivElement>(null);
   const [gerando, setGerando] = useState(false);
@@ -148,7 +159,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
           <div className="flex flex-wrap items-end gap-3 text-sm">
             <label className="grid gap-1">
               <span className="text-xs font-medium text-gray-600">Filtrar fibra</span>
-              <select className={campo} value={fibra} onChange={(e) => setFibra(e.target.value)}>
+              <select className={campo} value={fibra} disabled={tipo === "fibras"} onChange={(e) => setFibra(e.target.value)}>
                 <option value="">Todas</option>
                 {fibras.map((f) => <option key={f} value={f}>Fibra {f}</option>)}
               </select>
@@ -158,6 +169,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
               <select className={campo} value={tipo} onChange={(e) => setTipo(e.target.value as Tipo)}>
                 <option value="bidirecional">A → B × B → A (bidirecional)</option>
                 <option value="antesDepois">Antes × depois (mesmo sentido)</option>
+                <option value="fibras">Duas fibras do mesmo cabo (mesmo sentido)</option>
               </select>
             </label>
             {[[c1, setC1], [c2, setC2]].map(([v, set], i) => (
@@ -184,6 +196,8 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
             </div>
           </div>
           {sentidoErrado ? <p className="text-sm text-amber-700">As duas curvas estão marcadas no mesmo sentido; para o bidirecional use uma A → B e uma B → A.</p> : null}
+          {sentidoDiferente ? <p className="text-sm text-amber-700">As duas curvas estão marcadas em sentidos diferentes; aqui as duas precisam ser medidas do mesmo lado.</p> : null}
+          {mesmaFibra ? <p className="text-sm text-amber-700">As duas curvas são da mesma fibra; escolha duas fibras diferentes do mesmo cabo.</p> : null}
           {fibraDiferente ? <p className="text-sm text-amber-700">As curvas escolhidas estão marcadas com fibras diferentes.</p> : null}
         </div>
 
@@ -193,7 +207,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
           <div ref={conteudo} className="grid gap-4 bg-white p-4 text-sm">
             <div>
               <div className="text-base font-semibold">
-                Comparativo {tipo === "bidirecional" ? "bidirecional (A → B × B → A)" : "antes × depois"}{fibra || curva(c1)?.fibra ? ` · fibra ${fibra || curva(c1)?.fibra}` : ""}
+                Comparativo {tipo === "bidirecional" ? "bidirecional (A → B × B → A)" : tipo === "fibras" ? `de duas fibras do mesmo cabo (${nomes[0]} × ${nomes[1]})` : "antes × depois"}{tipo !== "fibras" && (fibra || curva(c1)?.fibra) ? ` · fibra ${fibra || curva(c1)?.fibra}` : ""}
               </div>
               <div className="text-xs text-gray-500">
                 <span style={{ color: CORES_CURVA[0] }}>■</span> {nomes[0]}: {curva(c1)?.nome} · <span style={{ color: CORES_CURVA[1] }}>■</span> {nomes[1]}: {curva(c2)?.nome}
@@ -205,7 +219,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
               <Indicador rotulo={`Comprimento ${nomes[1]}`} valor={km(comp.comprimento2Km)} alerta={comp.avisos.some((a) => a.nivel === "critico")} />
               <Indicador rotulo={`Perda total ${nomes[0]}`} valor={`${fmt(comp.perdaTotal1Db)} dB`} />
               <Indicador rotulo={`Perda total ${nomes[1]}`} valor={`${fmt(comp.perdaTotal2Db)} dB`}
-                extra={tipo === "bidirecional" ? `média ${fmt((comp.perdaTotal1Db + comp.perdaTotal2Db) / 2)} dB` : `diferença ${fmt(comp.perdaTotal2Db - comp.perdaTotal1Db)} dB`} />
+                extra={tipo === "fibras" ? `diferença ${fmt(Math.abs(comp.perdaTotal2Db - comp.perdaTotal1Db))} dB` : tipo === "bidirecional" ? `média ${fmt((comp.perdaTotal1Db + comp.perdaTotal2Db) / 2)} dB` : `diferença ${fmt(comp.perdaTotal2Db - comp.perdaTotal1Db)} dB`} />
               <Indicador rotulo="Eventos" valor={`${comp.linhas.length}`} extra={`${comp.criticos} crítico(s) · ${comp.atencao} atenção`} alerta={comp.criticos > 0} />
             </div>
             {comp.avisos.map((a, i) => (
@@ -216,7 +230,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
               <thead className="border-b border-gray-200 text-xs text-gray-500">
                 <tr>
                   <th className="p-2">#</th><th>Distância (de A)</th><th>{nomes[0]}</th><th>{nomes[1]}</th>
-                  <th>{tipo === "bidirecional" ? "Média (perda real)" : "Diferença"}</th><th>Situação</th><th>O que fazer</th>
+                  <th>{tipo === "bidirecional" ? "Média (perda real)" : tipo === "fibras" ? "Perda comum" : "Diferença"}</th><th>Situação</th><th>O que fazer</th>
                 </tr>
               </thead>
               <tbody>
@@ -238,8 +252,9 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
             <p className="text-xs text-gray-500">
               {tipo === "bidirecional"
                 ? "A perda real de cada emenda é a média dos dois sentidos. As distâncias do B → A foram espelhadas para ficarem contadas a partir de A."
+                : tipo === "fibras" ? "Perda comum = a menor perda das duas fibras no mesmo ponto. Acima de 0,15 dB nas duas é sinal de esforço no cabo (torção, esmagamento, curvatura, ferragem apertada) ou acomodação ruim na caixa; perda alta só numa fibra é fusão/acomodação daquela fibra. Para confirmar a perda real, meça também no outro sentido."
                 : "Diferença = perda depois − perda antes. Piorou acima de 0,10 dB; acima de 0,30 dB é crítico."}
-              {" "}Limites da média: fusão até 0,30 dB, acima de 0,50 dB sem reflexão é crítico, conector até 0,75 dB.
+              {tipo === "bidirecional" ? " Limites da média: fusão até 0,30 dB, acima de 0,50 dB sem reflexão é crítico, conector até 0,75 dB." : ""}
             </p>
             {analista.nome ? (
               <div className="flex flex-wrap items-end gap-6 border-t border-gray-200 pt-3">

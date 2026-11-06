@@ -2,6 +2,7 @@
 // - Bidirecional (A→B × B→A): a perda real de uma emenda é a média dos dois sentidos; num sentido só ela pode
 //   aparecer como ganho (fibras com retroespalhamento diferente). As distâncias do B→A são espelhadas para A.
 // - Antes × depois (mesmo sentido): mostra o que mudou entre duas medições (emenda que piorou, evento novo, fibra mais curta).
+// - Duas fibras do mesmo cabo (mesmo sentido): perda nas duas no mesmo ponto = esforço no cabo ou caixa mal acomodada.
 import { EventoSor, km, Nivel, Sor, tracoJanela } from './sor';
 
 export type Sentido = 'AB' | 'BA';
@@ -22,7 +23,7 @@ export type LinhaComparada = {
 };
 
 export type Comparacao = {
-  tipo: 'bidirecional' | 'antesDepois';
+  tipo: 'bidirecional' | 'antesDepois' | 'fibras';
   comprimento1Km: number;
   comprimento2Km: number;
   perdaTotal1Db: number;
@@ -142,6 +143,67 @@ export function compararAntesDepois(antes: Sor, depois: Sor): Comparacao {
   const dp = perdaTotal(depois) - perdaTotal(antes);
   if (dp > 0.3) avisos.push({ nivel: 'atencao', texto: `A perda total subiu ${dec(dp)} dB (${dec(perdaTotal(antes))} → ${dec(perdaTotal(depois))} dB).` });
   return resumir({ tipo: 'antesDepois', comprimento1Km: L1, comprimento2Km: L2, perdaTotal1Db: perdaTotal(antes), perdaTotal2Db: perdaTotal(depois), linhas, avisos });
+}
+
+// Duas fibras do mesmo cabo, medidas no mesmo sentido: um ponto onde as DUAS perdem é esforço no cabo
+// (torção, esmagamento, curvatura, cabo estrangulado na ferragem) ou acomodação ruim da caixa/bandeja;
+// uma perda só numa fibra aponta a fusão/acomodação daquela fibra.
+export function compararFibras(f1: Sor, f2: Sor, nomes: [string, string] = ['Fibra 1', 'Fibra 2']): Comparacao {
+  const L1 = fimDaFibra(f1), L2 = fimDaFibra(f2);
+  const pares = parear(meio(f1).map((e) => ({ km: e.distanciaKm, e })), meio(f2).map((e) => ({ km: e.distanciaKm, e })), tolerancia(f1, f2));
+  const linhas: LinhaComparada[] = pares.map(({ km: k, x, y }) => {
+    const reflexivo = !!(x?.reflexivo || y?.reflexivo);
+    const lidoDaCurva = !!(x?.detectado || y?.detectado);
+    if (x && y) {
+      const comum = Math.min(x.perdaDb, y.perdaDb), maior = Math.max(x.perdaDb, y.perdaDb);
+      const qual = x.perdaDb >= y.perdaDb ? nomes[0] : nomes[1];
+      if (comum > 0.15) {
+        const nivel: Nivel = comum > 0.3 ? 'critico' : 'atencao';
+        return {
+          km: k, perda1: x.perdaDb, perda2: y.perdaDb, resultado: comum, reflexivo, lidoDaCurva, nivel, situacao: 'Comum às duas',
+          texto: `As duas fibras perdem no mesmo ponto (${dec(x.perdaDb)} e ${dec(y.perdaDb)} dB): ${reflexivo ? 'conector/caixa com problema que afeta o cabo todo' : 'esforço no cabo (torção, esmagamento, curvatura, cabo estrangulado na ferragem) ou acomodação ruim na caixa/bandeja'}. Ir ao local${nivel === 'atencao' ? ' na próxima passagem' : ''}.`,
+        };
+      }
+      if (maior > 0.3) return {
+        km: k, perda1: x.perdaDb, perda2: y.perdaDb, resultado: comum, reflexivo, lidoDaCurva, nivel: 'atencao', situacao: `Só ${qual}`,
+        texto: `Só a ${qual} perde aqui (${dec(maior)} dB) e a outra está boa: fusão ruim ou fibra mal acomodada na bandeja (raio pequeno, presa na tampa). O cabo está bem neste ponto.`,
+      };
+      return {
+        km: k, perda1: x.perdaDb, perda2: y.perdaDb, resultado: comum, reflexivo, lidoDaCurva, nivel: 'ok', situacao: 'OK',
+        texto: 'Evento nas duas fibras com perda baixa: emenda normal (caixa).',
+      };
+    }
+    const e = (x ?? y)!;
+    const qual = x ? nomes[0] : nomes[1];
+    const nivel = nivelPerda(e.perdaDb, reflexivo);
+    return {
+      km: k, perda1: x?.perdaDb ?? null, perda2: y?.perdaDb ?? null, resultado: null, reflexivo, lidoDaCurva, nivel, situacao: `Só ${qual}`,
+      texto: nivel === 'ok' ? `Evento pequeno só na ${qual} (${dec(e.perdaDb)} dB).`
+        : `Perda de ${dec(e.perdaDb)} dB só na ${qual}: problema daquela fibra (fusão, acomodação ou microcurvatura), não do cabo.`,
+    };
+  });
+  const avisos: Comparacao['avisos'] = [];
+  const dif = Math.abs(L1 - L2);
+  if (dif > Math.max(0.05, Math.max(L1, L2) * 0.01)) {
+    const curta = L1 < L2 ? nomes[0] : nomes[1];
+    avisos.push({ nivel: 'critico', texto: `Os comprimentos não batem: ${nomes[0]} vai até ${km(L1)} e ${nomes[1]} até ${km(L2)}. A ${curta} pode estar rompida ou terminar antes (sangria/derivação); confira também se as duas foram medidas do mesmo ponto e com o mesmo IOR.` });
+  } else avisos.push({ nivel: 'ok', texto: `As duas fibras têm o mesmo comprimento (${km(L1)} × ${km(L2)}).` });
+  const comuns = linhas.filter((l) => l.situacao === 'Comum às duas');
+  if (comuns.length) avisos.push({ nivel: comuns.some((l) => l.nivel === 'critico') ? 'critico' : 'atencao', texto: `${comuns.length} ponto(s) de atenuação comum às duas fibras: ${comuns.map((l) => km(l.km)).join(', ')}. É ali que o cabo está sofrendo.` });
+  else avisos.push({ nivel: 'ok', texto: 'Nenhum ponto de atenuação comum às duas fibras: o cabo não mostra esforço; perdas isoladas são de emenda.' });
+  // Lances (entre eventos) com atenuação alta nas duas: cabo torcido/tracionado ao longo do lance.
+  const lances = (s: Sor) => {
+    const ev = s.eventos;
+    return ev.map((e, i) => ({ de: i ? ev[i - 1].distanciaKm : 0, ate: e.distanciaKm, a: e.inclinacaoDbKm })).filter((l) => l.a > 0);
+  };
+  const l1 = lances(f1), l2 = lances(f2);
+  const limite = (s: Sor) => (s.comprimentoOndaNm >= 1500 ? 0.3 : 0.45);
+  for (const p of l1.filter((l) => l.ate - l.de >= 0.5 && l.a > limite(f1))) {
+    const q = l2.find((l) => l.de < p.ate && l.ate > p.de && l.a > limite(f2));
+    if (q) avisos.push({ nivel: 'atencao', texto: `Atenuação alta nas duas fibras entre ${km(Math.max(p.de, q.de))} e ${km(Math.min(p.ate, q.ate))} (${dec(p.a)} e ${dec(q.a)} dB/km): cabo tracionado, torcido ou com umidade ao longo do lance.` });
+  }
+  if (f1.comprimentoOndaNm !== f2.comprimentoOndaNm) avisos.push({ nivel: 'atencao', texto: `Comprimentos de onda diferentes (${f1.comprimentoOndaNm} nm × ${f2.comprimentoOndaNm} nm): compare as duas na mesma onda (1550 nm mostra melhor curvatura).` });
+  return resumir({ tipo: 'fibras', comprimento1Km: L1, comprimento2Km: L2, perdaTotal1Db: perdaTotal(f1), perdaTotal2Db: perdaTotal(f2), linhas, avisos });
 }
 
 // Traço para sobrepor no gráfico: em dB relativos ao início de cada medição (0 = nível a 0,5 km da ponta onde o OTDR estava);

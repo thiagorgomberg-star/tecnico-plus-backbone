@@ -136,10 +136,10 @@ export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm:
   await Sharing.shareAsync(destino.uri, { mimeType: 'application/pdf', dialogTitle: 'Análise da curva OTDR', UTI: 'com.adobe.pdf' });
 }
 
-// PDF do comparativo de duas curvas (A → B × B → A ou antes × depois), gerado no celular.
+// PDF do comparativo de duas curvas (A → B × B → A, antes × depois ou duas fibras do mesmo cabo), gerado no celular.
 export async function compartilharComparativo(c: Comparacao, s1: Sor, s2: Sor,
   o: { nomes: string[]; curva1: string; curva2: string; fibra: string; modo: 'completa' | 'otdr' }) {
-  const bi = c.tipo === 'bidirecional';
+  const bi = c.tipo === 'bidirecional', fb = c.tipo === 'fibras';
   const analista = await AsyncStorage.getItem('analista-curva').then((t) => (t ? JSON.parse(t) as Partial<Analista> : null)).catch(() => null);
   const logo = await Asset.fromModule(require('../../assets/mascara/logo-multivale.png')).downloadAsync()
     .then((x) => (x.localUri ? dataUrl(x.localUri) : null)).catch(() => null);
@@ -170,25 +170,25 @@ export async function compartilharComparativo(c: Comparacao, s1: Sor, s2: Sor,
     .aviso { border-radius: 6px; padding: 6px 10px; margin: 4px 0; }
   </style></head><body>
   <header>${logo ? `<img src="${logo}">` : ''}<div style="flex:1"><h1>Comparativo de curvas OTDR</h1>
-    <div class="s">${bi ? 'Bidirecional (A → B × B → A)' : 'Antes × depois'}${o.fibra ? ` · Fibra ${esc(o.fibra)}` : ''}</div></div>
+    <div class="s">${bi ? 'Bidirecional (A → B × B → A)' : fb ? `Duas fibras do mesmo cabo (${esc(o.nomes[0])} × ${esc(o.nomes[1])})` : 'Antes × depois'}${o.fibra ? ` · Fibra ${esc(o.fibra)}` : ''}</div></div>
     <div class="s" style="text-align:right;font-size:9pt">Gerado em ${new Date().toLocaleString('pt-BR')}${analista?.nome ? `<br>por ${esc(analista.nome)}` : ''}</div></header>
   <p class="s"><b style="color:#163A6B">■ ${o.nomes[0]}</b>: ${esc(o.curva1)} &nbsp; <b style="color:#E07B00">■ ${o.nomes[1]}</b>: ${esc(o.curva2)} · ${o.modo === 'completa' ? 'curva lida por inteiro' : 'somente eventos do OTDR'}</p>
   <div class="ind">
     <div><span class="l">Comprimento ${o.nomes[0]}</span><b>${km(c.comprimento1Km)}</b></div><div><span class="l">Comprimento ${o.nomes[1]}</span><b>${km(c.comprimento2Km)}</b></div>
     <div><span class="l">Perda total ${o.nomes[0]}</span><b>${fmt(c.perdaTotal1Db)} dB</b></div>
-    <div><span class="l">Perda total ${o.nomes[1]}</span><b>${fmt(c.perdaTotal2Db)} dB</b><span class="l">${bi ? `média ${fmt((c.perdaTotal1Db + c.perdaTotal2Db) / 2)} dB` : `diferença ${fmt(c.perdaTotal2Db - c.perdaTotal1Db)} dB`}</span></div>
+    <div><span class="l">Perda total ${o.nomes[1]}</span><b>${fmt(c.perdaTotal2Db)} dB</b><span class="l">${bi ? `média ${fmt((c.perdaTotal1Db + c.perdaTotal2Db) / 2)} dB` : fb ? `diferença ${fmt(Math.abs(c.perdaTotal2Db - c.perdaTotal1Db))} dB` : `diferença ${fmt(c.perdaTotal2Db - c.perdaTotal1Db)} dB`}</span></div>
   </div>
   ${c.avisos.map((a) => `<div class="aviso" style="background:${COR[a.nivel]}1A;color:${a.nivel === 'ok' ? '#14532d' : COR[a.nivel]}">${esc(a.texto)}</div>`).join('')}
   <h2>Curvas sobrepostas</h2>${svg}
   <p class="l">dB relativos ao início de cada medição${bi ? '; B → A espelhada (OTDR no lado B, à direita)' : ''}.</p>
   <h2>Eventos</h2>
-  <table><tr><th>#</th><th>Distância (de A)</th><th>${o.nomes[0]}</th><th>${o.nomes[1]}</th><th>${bi ? 'Média (perda real)' : 'Diferença'}</th><th>Situação</th><th>O que fazer</th></tr>
+  <table><tr><th>#</th><th>Distância (de A)</th><th>${o.nomes[0]}</th><th>${o.nomes[1]}</th><th>${bi ? 'Média (perda real)' : fb ? 'Perda comum' : 'Diferença'}</th><th>Situação</th><th>O que fazer</th></tr>
   ${c.linhas.map((l, i) => `<tr><td>${i + 1}</td><td style="white-space:nowrap"><b>${km(l.km)}</b>${l.reflexivo ? '<span class="l">reflexivo</span>' : ''}</td>
     <td>${l.perda1 == null ? '—' : `${fmt(l.perda1, 3)} dB`}</td><td>${l.perda2 == null ? '—' : `${fmt(l.perda2, 3)} dB`}</td>
-    <td><b>${l.resultado == null ? '—' : `${!bi && l.resultado > 0 ? '+' : ''}${fmt(l.resultado, 3)} dB`}</b></td>
+    <td><b>${l.resultado == null ? '—' : `${c.tipo === 'antesDepois' && l.resultado > 0 ? '+' : ''}${fmt(l.resultado, 3)} dB`}</b></td>
     <td><span class="selo" style="background:${COR[l.nivel]}1F;color:${COR[l.nivel]}">${esc(l.situacao)}</span></td><td>${esc(l.texto)}</td></tr>`).join('')}
   </table>
-  <p class="s" style="font-size:8pt">${bi ? 'A perda real de cada emenda é a média dos dois sentidos. As distâncias do B → A foram espelhadas para contar a partir de A.' : 'Diferença = perda depois − perda antes. Piorou acima de 0,10 dB; acima de 0,30 dB é crítico.'}</p>
+  <p class="s" style="font-size:8pt">${bi ? 'A perda real de cada emenda é a média dos dois sentidos. As distâncias do B → A foram espelhadas para contar a partir de A.' : fb ? 'Perda comum = a menor perda das duas fibras no mesmo ponto. Acima de 0,15 dB nas duas é esforço no cabo (torção, esmagamento, curvatura, ferragem apertada) ou acomodação ruim na caixa; perda alta só numa fibra é fusão/acomodação daquela fibra.' : 'Diferença = perda depois − perda antes. Piorou acima de 0,10 dB; acima de 0,30 dB é crítico.'}</p>
   ${analista?.nome ? `<div style="display:flex;gap:24px;align-items:flex-end;margin-top:16px;break-inside:avoid">${[
     ['Analista', analista.nome], ['Cargo / função', analista.cargo], ['Empresa', analista.empresa], ['Registro', analista.registro],
   ].filter(([, v]) => v).map(([r, v]) => `<div><span class="l">${r}</span><b>${esc(v)}</b></div>`).join('')}
