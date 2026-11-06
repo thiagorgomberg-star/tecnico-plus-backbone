@@ -5,7 +5,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
 import { dataUrl } from './relatorioPdf';
-import { Comparacao, fimDaFibra, tracoParaComparar } from './comparaSor';
+import { Comparacao, deslocamentoParalelo, fimDaFibra, tracoParaComparar } from './comparaSor';
 import { analisarSor, ehFibraAtiva, km, lerDbm, Nivel, rotuloOnda, Sor, textoPotencia, tracoJanela } from './sor';
 
 const COR: Record<Nivel, string> = { ok: '#1E9E4A', atencao: '#D99A00', critico: '#D0453B' };
@@ -145,7 +145,11 @@ export async function compartilharComparativo(c: Comparacao, s1: Sor, s2: Sor,
   const analista = await AsyncStorage.getItem('analista-curva').then((t) => (t ? JSON.parse(t) as Partial<Analista> : null)).catch(() => null);
   const logo = await Asset.fromModule(require('../../assets/mascara/logo-multivale.png')).downloadAsync()
     .then((x) => (x.localUri ? dataUrl(x.localUri) : null)).catch(() => null);
-  const t1 = tracoParaComparar(s1), t2 = tracoParaComparar(s2, bi ? { comprimentoKm: fimDaFibra(s1) } : undefined);
+  const t1 = tracoParaComparar(s1), t2b = tracoParaComparar(s2, bi ? { comprimentoKm: fimDaFibra(s1) } : undefined);
+  // Mesmo sentido: a 2ª curva corre em paralelo, alguns dB abaixo, para não sobrepor.
+  const desloc = bi ? 0 : deslocamentoParalelo(t1, t2b);
+  const t2 = t2b.map((p) => ({ km: p.km, db: p.db + desloc }));
+  const dbEm = (t: { km: number; db: number }[], k: number) => (t.reduce((a, p) => (Math.abs(p.km - k) < Math.abs(a.km - k) ? p : a), t[0]) ?? { db: 0 }).db;
   const todos = [...t1, ...t2];
   const Lg = 960, Ag = 300, m = { e: 44, d: 10, t: 24, b: 22 };
   const maxKm = Math.max(...todos.map((p) => p.km), 1);
@@ -158,8 +162,10 @@ export async function compartilharComparativo(c: Comparacao, s1: Sor, s2: Sor,
   const svg = `<svg viewBox="0 0 ${Lg} ${Ag}" width="100%" style="background:#F8FAFC;border:1px solid #e5e7eb;border-radius:6px">
     ${Array.from({ length: Math.floor(maxKm / pk) + 1 }, (_, i) => i * pk).map((k) => `<line x1="${x(k)}" x2="${x(k)}" y1="${m.t}" y2="${Ag - m.b}" stroke="#E4E7EC"/><text x="${x(k)}" y="${Ag - 6}" font-size="10" fill="#667085" text-anchor="middle">${rotuloKm(k)}</text>`).join('')}
     <path d="${cam(t1)}" fill="none" stroke="#163A6B" stroke-width="1.3"/><path d="${cam(t2)}" fill="none" stroke="#E07B00" stroke-width="1.3"/>
-    ${c.linhas.map((l, i) => `<line x1="${x(l.km)}" x2="${x(l.km)}" y1="${m.t}" y2="${Ag - m.b}" stroke="${COR[l.nivel]}" stroke-dasharray="4 3"/>
-      <circle cx="${x(l.km)}" cy="${m.t - 12}" r="9" fill="${COR[l.nivel]}"/><text x="${x(l.km)}" y="${m.t - 8}" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">${i + 1}</text>`).join('')}
+    ${c.linhas.map((l, i) => `${l.perda1 != null ? `<circle cx="${x(l.km)}" cy="${y(dbEm(t1, l.km))}" r="3.5" fill="#fff" stroke="#163A6B" stroke-width="1.6"/>` : ''}
+      ${l.perda2 != null ? `<circle cx="${x(l.km)}" cy="${y(dbEm(t2, l.km))}" r="3.5" fill="#fff" stroke="#E07B00" stroke-width="1.6"/>` : ''}
+      ${l.nivel === 'ok' ? '' : `<line x1="${x(l.km)}" x2="${x(l.km)}" y1="${m.t}" y2="${Ag - m.b}" stroke="${COR[l.nivel]}" stroke-dasharray="4 3"/>
+      <circle cx="${x(l.km)}" cy="${m.t - 12}" r="9" fill="${COR[l.nivel]}"/><text x="${x(l.km)}" y="${m.t - 8}" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">${i + 1}</text>`}`).join('')}
   </svg>`;
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     @page { size: A4; margin: 12mm; } body { font-family: sans-serif; font-size: 10.5pt; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -183,7 +189,7 @@ export async function compartilharComparativo(c: Comparacao, s1: Sor, s2: Sor,
   ${(o.potencias ?? []).map((t, i) => (t ? `<div class="aviso" style="background:#EEF4FB;color:#163A6B"><b>${esc(o.nomes[i])}</b> · ${esc(t)}</div>` : '')).join('')}
   ${c.avisos.map((a) => `<div class="aviso" style="background:${COR[a.nivel]}1A;color:${a.nivel === 'ok' ? '#14532d' : COR[a.nivel]}">${esc(a.texto)}</div>`).join('')}
   <h2>Curvas sobrepostas</h2>${svg}
-  <p class="l">dB relativos ao início de cada medição${bi ? '; B → A espelhada (OTDR no lado B, à direita)' : ''}.</p>
+  <p class="l">dB relativos ao início de cada medição${bi ? '; B → A espelhada (OTDR no lado B, à direita)' : `; ${esc(o.nomes[1])} em paralelo, ${desloc} dB abaixo`}. ○ ponto em cada curva onde o evento aparece; número só nos eventos que pedem atenção.</p>
   <h2>Eventos</h2>
   <table><tr><th>#</th><th>Distância (de A)</th><th>${o.nomes[0]}</th><th>${o.nomes[1]}</th><th>${bi ? 'Média (perda real)' : fb ? 'Perda comum' : 'Diferença'}</th><th>Situação</th><th>O que fazer</th></tr>
   ${c.linhas.map((l, i) => `<tr><td>${i + 1}</td><td style="white-space:nowrap"><b>${km(l.km)}</b>${l.reflexivo ? '<span class="l">reflexivo</span>' : ''}</td>

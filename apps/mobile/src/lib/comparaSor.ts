@@ -169,7 +169,7 @@ export function compararFibras(f1: Sor, f2: Sor, nomes: [string, string] = ['Fib
         texto: `Só a ${qual} perde aqui (${dec(maior)} dB) e a outra está boa: fusão ruim ou fibra mal acomodada na bandeja (raio pequeno, presa na tampa). O cabo está bem neste ponto.`,
       };
       return {
-        km: k, perda1: x.perdaDb, perda2: y.perdaDb, resultado: comum, reflexivo, lidoDaCurva, nivel: 'ok', situacao: 'OK',
+        km: k, perda1: x.perdaDb, perda2: y.perdaDb, resultado: comum, reflexivo, lidoDaCurva, nivel: 'ok', situacao: 'Nas duas',
         texto: 'Evento nas duas fibras com perda baixa: emenda normal (caixa).',
       };
     }
@@ -188,6 +188,9 @@ export function compararFibras(f1: Sor, f2: Sor, nomes: [string, string] = ['Fib
     const curta = L1 < L2 ? nomes[0] : nomes[1];
     avisos.push({ nivel: 'critico', texto: `Os comprimentos não batem: ${nomes[0]} vai até ${km(L1)} e ${nomes[1]} até ${km(L2)}. A ${curta} pode estar rompida ou terminar antes (sangria/derivação); confira também se as duas foram medidas do mesmo ponto e com o mesmo IOR.` });
   } else avisos.push({ nivel: 'ok', texto: `As duas fibras têm o mesmo comprimento (${km(L1)} × ${km(L2)}).` });
+  const nasDuas = linhas.filter((l) => l.perda1 != null && l.perda2 != null).length;
+  const so1 = linhas.filter((l) => l.perda1 != null && l.perda2 == null).length, so2 = linhas.filter((l) => l.perda2 != null && l.perda1 == null).length;
+  avisos.push({ nivel: 'ok', texto: `${nasDuas} evento(s) nas duas fibras (pontos em comum), ${so1} só na ${nomes[0]} e ${so2} só na ${nomes[1]} (pontos isolados).` });
   const comuns = linhas.filter((l) => l.situacao === 'Comum às duas');
   if (comuns.length) avisos.push({ nivel: comuns.some((l) => l.nivel === 'critico') ? 'critico' : 'atencao', texto: `${comuns.length} ponto(s) de atenuação comum às duas fibras: ${comuns.map((l) => km(l.km)).join(', ')}. É ali que o cabo está sofrendo.` });
   else avisos.push({ nivel: 'ok', texto: 'Nenhum ponto de atenuação comum às duas fibras: o cabo não mostra esforço; perdas isoladas são de emenda.' });
@@ -228,13 +231,25 @@ export function mesmoSentido(a: Sor, b: Sor): boolean {
 
 // Traço para sobrepor no gráfico: em dB relativos ao início de cada medição (0 = nível a 0,5 km da ponta onde o OTDR estava);
 // o B → A é espelhado nas distâncias de A.
-export function tracoParaComparar(s: Sor, espelharEm?: { comprimentoKm: number }) {
+// janela: trecho em km contados de A (para o zoom num evento); sem ela, a fibra toda.
+export function tracoParaComparar(s: Sor, espelharEm?: { comprimentoKm: number } | null, janela?: { de: number; ate: number }) {
   const L = fimDaFibra(s) || 1;
-  const pontos = tracoJanela(s, 0, L * 1.03, 700);
-  if (!pontos.length) return [];
-  const ref = pontos.find((p) => p.km >= 0.5)?.db ?? pontos[0].db;
+  const base = tracoJanela(s, 0, L * 1.03, 700);
+  if (!base.length) return [];
+  const ref = base.find((p) => p.km >= 0.5)?.db ?? base[0].db;
+  const escala = espelharEm ? espelharEm.comprimentoKm / L : 1;
+  const de = janela ? (espelharEm ? L - janela.ate / escala : janela.de) : 0;
+  const ate = janela ? (espelharEm ? L - janela.de / escala : janela.ate) : L * 1.03;
+  const pontos = janela ? tracoJanela(s, Math.max(0, de), ate, 500) : base;
   if (!espelharEm) return pontos.map((p) => ({ km: p.km, db: p.db - ref }));
-  const escala = espelharEm.comprimentoKm / L;
   // O B → A começa em 0 dB no lado B (direita) e cai na direção de A.
   return pontos.filter((p) => p.km <= L).map((p) => ({ km: (L - p.km) * escala, db: p.db - ref })).reverse();
+}
+
+// No mesmo sentido as duas curvas caem juntas e se sobrepõem: a 2ª desce alguns dB para correr em paralelo.
+export function deslocamentoParalelo(t1: { db: number }[], t2: { db: number }[]) {
+  const dbs = [...t1, ...t2].map((p) => p.db).sort((a, b) => a - b);
+  if (!dbs.length) return 0;
+  const faixa = dbs[Math.floor(dbs.length * 0.98)] - dbs[Math.floor(dbs.length * 0.02)];
+  return -Math.max(1, Math.round(faixa * 0.25));
 }

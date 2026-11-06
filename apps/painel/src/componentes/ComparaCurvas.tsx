@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  Comparacao, compararAntesDepois, compararBidirecional, compararFibras, fimDaFibra, mesmoSentido, Momento, ROTULO_MOMENTO, ROTULO_SENTIDO, Sentido, tracoParaComparar,
+  Comparacao, compararAntesDepois, compararBidirecional, compararFibras, fimDaFibra, mesmoSentido, Momento, ROTULO_MOMENTO, ROTULO_SENTIDO, Sentido, deslocamentoParalelo, tracoParaComparar,
 } from "@/lib/comparaSor";
 import SimularCurvaKmz from "@/componentes/SimularCurvaKmz";
 import { pdfDoElemento } from "@/lib/pdfDoElemento";
@@ -93,6 +93,15 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipo, fibra, Object.keys(lidas).length, curvas.map((c) => `${c.chave}${c.sentido}${c.momento}`).join()]);
 
+  // Marcou as duas no mesmo sentido: não é bidirecional (o gráfico cruzaria em X). Vai para duas fibras ou antes × depois.
+  useEffect(() => {
+    const a = curvas.find((c) => c.chave === c1), b = curvas.find((c) => c.chave === c2);
+    if (tipo !== "bidirecional" || !a?.sentido || !b?.sentido || a.sentido !== b.sentido) return;
+    const mesmaFibra = a.fibra.trim() && a.fibra.trim() === b.fibra.trim();
+    setTipoBruto(mesmaFibra && a.momento && b.momento && a.momento !== b.momento ? "antesDepois" : "fibras");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipo, c1, c2, curvas.map((c) => `${c.chave}${c.sentido}${c.momento}${c.fibra}`).join()]);
+
   const s1 = c1 ? sor(c1) : null, s2 = c2 && c2 !== c1 ? sor(c2) : null;
   const curva = (k: string) => curvas.find((c) => c.chave === k);
   const nomeFibra = (k: string, n: number) => `Fibra ${curva(k)?.fibra.trim() || n}`;
@@ -123,6 +132,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
     return { sor: { ...s1, eventos }, nome: `Bidirecional ${curva(c1)?.nome ?? ""} × ${curva(c2)?.nome ?? ""}`, soEventos: true };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [comp]);
+  const [foco, setFoco] = useState<number | null>(null);
   const conteudo = useRef<HTMLDivElement>(null);
   const [gerando, setGerando] = useState(false);
   let analista: { nome?: string; cargo?: string; empresa?: string; registro?: string } = {};
@@ -264,7 +274,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
             </div>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
               <Indicador rotulo={`Comprimento ${nomes[0]}`} valor={km(comp.comprimento1Km)} />
-              <Indicador rotulo={`Comprimento ${nomes[1]}`} valor={km(comp.comprimento2Km)} alerta={comp.avisos.some((a) => a.nivel === "critico")} />
+              <Indicador rotulo={`Comprimento ${nomes[1]}`} valor={km(comp.comprimento2Km)} alerta={Math.abs(comp.comprimento1Km - comp.comprimento2Km) > Math.max(0.05, comp.comprimento1Km * 0.01)} />
               <Indicador rotulo={`Perda total ${nomes[0]}`} valor={`${fmt(comp.perdaTotal1Db)} dB`} />
               <Indicador rotulo={`Perda total ${nomes[1]}`} valor={`${fmt(comp.perdaTotal2Db)} dB`}
                 extra={tipo === "fibras" ? `diferença ${fmt(Math.abs(comp.perdaTotal2Db - comp.perdaTotal1Db))} dB` : tipo === "bidirecional" ? `média ${fmt((comp.perdaTotal1Db + comp.perdaTotal2Db) / 2)} dB` : `diferença ${fmt(comp.perdaTotal2Db - comp.perdaTotal1Db)} dB`} />
@@ -277,7 +287,14 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
             {comp.avisos.map((a, i) => (
               <p key={i} className="rounded-lg px-3 py-2" style={{ background: `${COR[a.nivel]}14`, color: a.nivel === "ok" ? "#14532d" : COR[a.nivel] }}>{a.texto}</p>
             ))}
-            <Sobreposto s1={s1} s2={s2} espelhar={tipo === "bidirecional"} nomes={nomes} linhas={comp} />
+            <Sobreposto s1={s1} s2={s2} espelhar={tipo === "bidirecional"} nomes={nomes} linhas={comp} selecionar={setFoco} />
+            {foco != null && comp.linhas[foco] ? (
+              <div className="grid gap-1 rounded-lg border-2 p-2" style={{ borderColor: COR[comp.linhas[foco].nivel] }}>
+                <div className="flex items-center gap-2 text-sm"><b>Zoom no evento {foco + 1} · {km(comp.linhas[foco].km)}</b> · {comp.linhas[foco].situacao}
+                  <button className="ml-auto rounded border border-gray-300 px-2 py-0.5 text-xs hover:bg-gray-50" onClick={() => setFoco(null)}>Fechar zoom</button></div>
+                <Sobreposto s1={s1} s2={s2} espelhar={tipo === "bidirecional"} nomes={nomes} linhas={comp} foco={comp.linhas[foco].km} selecionar={setFoco} />
+              </div>
+            ) : <p className="text-xs text-gray-500">Clique num evento do gráfico ou da tabela para ver o zoom.</p>}
             <table className="w-full text-left">
               <thead className="border-b border-gray-200 text-xs text-gray-500">
                 <tr>
@@ -287,7 +304,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
               </thead>
               <tbody>
                 {comp.linhas.map((l, i) => (
-                  <tr key={i} className="border-b border-gray-100 align-top">
+                  <tr key={i} onClick={() => setFoco(i)} className={`cursor-pointer border-b border-gray-100 align-top ${foco === i ? "bg-blue-50" : "hover:bg-gray-50"}`}>
                     <td className="p-2 font-mono">{i + 1}</td>
                     <td className="whitespace-nowrap py-2 font-semibold">{km(l.km)}{l.reflexivo ? <div className="text-[10px] font-normal text-gray-500">reflexivo</div> : null}</td>
                     <td className="whitespace-nowrap py-2">{l.perda1 == null ? "—" : `${fmt(l.perda1, 3)} dB`}</td>
@@ -333,49 +350,64 @@ function Indicador({ rotulo, valor, extra, alerta }: { rotulo: string; valor: st
 }
 
 // As duas curvas no mesmo gráfico, com os eventos comparados marcados pela situação.
-function Sobreposto({ s1, s2, espelhar, nomes, linhas }: { s1: Sor; s2: Sor; espelhar: boolean; nomes: string[]; linhas: Comparacao }) {
+// Bidirecional: B → A espelhada (cruza em X). Mesmo sentido: a 2ª corre em paralelo, alguns dB abaixo.
+// Cada evento tem um ponto na curva em que aparece (nas duas, só na 1 ou só na 2). Com foco, é o zoom do evento.
+function Sobreposto({ s1, s2, espelhar, nomes, linhas, foco, selecionar }: {
+  s1: Sor; s2: Sor; espelhar: boolean; nomes: string[]; linhas: Comparacao; foco?: number | null; selecionar?: (i: number) => void;
+}) {
   const L = 960, A = 300, m = { e: 48, d: 12, t: 22, b: 28 };
-  const t1 = tracoParaComparar(s1);
-  const t2 = tracoParaComparar(s2, espelhar ? { comprimentoKm: fimDaFibra(s1) } : undefined);
+  const janela = foco != null ? { de: Math.max(0, foco - 0.8), ate: foco + 0.8 } : undefined;
+  const t1 = tracoParaComparar(s1, null, janela);
+  const desloc = espelhar ? 0 : deslocamentoParalelo(tracoParaComparar(s1), tracoParaComparar(s2));
+  const t2 = tracoParaComparar(s2, espelhar ? { comprimentoKm: fimDaFibra(s1) } : null, janela).map((p) => ({ km: p.km, db: p.db + desloc }));
   const todos = [...t1, ...t2];
   if (!todos.length) return null;
-  const maxKm = Math.max(...todos.map((p) => p.km)) || 1;
+  const k0 = janela?.de ?? 0, k1 = janela?.ate ?? (Math.max(...todos.map((p) => p.km)) || 1);
   const dbs = todos.map((p) => p.db).sort((a, b) => a - b);
   // Corta os picos extremos (reflexões e ruído do fim) para a escala não esmagar a curva.
-  const minDb = dbs[Math.floor(dbs.length * 0.02)], maxDb = Math.max(1, dbs[Math.floor(dbs.length * 0.995)]);
-  const x = (k: number) => m.e + (k / maxKm) * (L - m.e - m.d);
+  const minDb = dbs[Math.floor(dbs.length * 0.02)], maxDb = janela ? dbs[dbs.length - 1] + 0.3 : Math.max(1, dbs[Math.floor(dbs.length * 0.995)]);
+  const x = (k: number) => m.e + ((k - k0) / (k1 - k0 || 1)) * (L - m.e - m.d);
   const y = (d: number) => m.t + ((maxDb - Math.min(maxDb, Math.max(minDb, d))) / (maxDb - minDb || 1)) * (A - m.t - m.b);
   const caminho = (t: { km: number; db: number }[]) => t.map((p, i) => `${i ? "L" : "M"}${x(p.km).toFixed(1)},${y(p.db).toFixed(1)}`).join("");
-  const passoKm = [0.5, 1, 2, 5, 10, 20, 50].find((v) => maxKm / v <= 10) ?? 100;
-  const passoDb = [1, 2, 5, 10, 20].find((v) => (maxDb - minDb) / v <= 6) ?? 50;
+  const dbEm = (t: { km: number; db: number }[], k: number) => (t.reduce((a, p) => (Math.abs(p.km - k) < Math.abs(a.km - k) ? p : a), t[0]) ?? { db: 0 }).db;
+  const passoKm = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50].find((v) => (k1 - k0) / v <= 10) ?? 100;
+  const passoDb = [0.5, 1, 2, 5, 10, 20].find((v) => (maxDb - minDb) / v <= 6) ?? 50;
+  const visiveis = linhas.linhas.map((l, i) => ({ l, i })).filter(({ l }) => l.km >= k0 && l.km <= k1);
   return (
     <div>
       <svg viewBox={`0 0 ${L} ${A}`} className="w-full rounded-lg border border-gray-200 bg-[#F8FAFC]">
-        {Array.from({ length: Math.floor(maxKm / passoKm) + 1 }, (_, i) => i * passoKm).map((k) => (
+        {Array.from({ length: Math.floor((k1 - k0) / passoKm) + 1 }, (_, i) => Math.ceil(k0 / passoKm) * passoKm + i * passoKm).filter((k) => k <= k1).map((k) => (
           <g key={`x${k}`}>
             <line x1={x(k)} x2={x(k)} y1={m.t} y2={A - m.b} stroke="#E4E7EC" />
-            <text x={x(k)} y={A - 10} fontSize="11" fill="#667085" textAnchor="middle">{k} km</text>
+            <text x={x(k)} y={A - 10} fontSize="11" fill="#667085" textAnchor="middle">{+k.toFixed(1)} km</text>
           </g>
         ))}
         {Array.from({ length: Math.floor((maxDb - minDb) / passoDb) + 1 }, (_, i) => Math.ceil(minDb / passoDb) * passoDb + i * passoDb).map((d) => (
           <g key={`y${d}`}>
             <line x1={m.e} x2={L - m.d} y1={y(d)} y2={y(d)} stroke="#E4E7EC" />
-            <text x={m.e - 6} y={y(d) + 4} fontSize="11" fill="#667085" textAnchor="end">{d} dB</text>
+            <text x={m.e - 6} y={y(d) + 4} fontSize="11" fill="#667085" textAnchor="end">{+d.toFixed(1)} dB</text>
           </g>
+        ))}
+        {visiveis.map(({ l, i }) => (
+          <line key={`v${i}`} x1={x(l.km)} x2={x(l.km)} y1={m.t} y2={A - m.b} stroke={COR[l.nivel]} strokeWidth="1" strokeDasharray="4 3" opacity={l.nivel === "ok" && !janela ? 0.35 : 1} />
         ))}
         <path d={caminho(t1)} fill="none" stroke={CORES_CURVA[0]} strokeWidth="1.5" />
         <path d={caminho(t2)} fill="none" stroke={CORES_CURVA[1]} strokeWidth="1.5" />
-        {linhas.linhas.map((l, i) => (
-          <g key={i}>
-            <line x1={x(l.km)} x2={x(l.km)} y1={m.t} y2={A - m.b} stroke={COR[l.nivel]} strokeWidth="1.2" strokeDasharray="4 3" />
-            <circle cx={x(l.km)} cy={m.t - 8} r="8" fill={COR[l.nivel]} />
-            <text x={x(l.km)} y={m.t - 4.5} fontSize="10" fontWeight="bold" fill="#fff" textAnchor="middle">{i + 1}</text>
+        {visiveis.map(({ l, i }) => (
+          <g key={i} className={selecionar ? "cursor-pointer" : ""} onClick={() => selecionar?.(i)}>
+            {l.perda1 != null ? <circle cx={x(l.km)} cy={y(dbEm(t1, l.km))} r="4" fill="#fff" stroke={CORES_CURVA[0]} strokeWidth="2" /> : null}
+            {l.perda2 != null ? <circle cx={x(l.km)} cy={y(dbEm(t2, l.km))} r="4" fill="#fff" stroke={CORES_CURVA[1]} strokeWidth="2" /> : null}
+            {l.nivel !== "ok" || janela ? (<>
+              <circle cx={x(l.km)} cy={m.t - 8} r="8" fill={COR[l.nivel]} />
+              <text x={x(l.km)} y={m.t - 4.5} fontSize="10" fontWeight="bold" fill="#fff" textAnchor="middle">{i + 1}</text>
+            </>) : null}
           </g>
         ))}
       </svg>
-      <div className="mt-1 flex gap-4 text-xs text-gray-600">
+      <div className="mt-1 flex flex-wrap gap-4 text-xs text-gray-600">
         <span><span style={{ color: CORES_CURVA[0] }}>━</span> {nomes[0]}</span>
-        <span><span style={{ color: CORES_CURVA[1] }}>━</span> {nomes[1]}{espelhar ? " (espelhada: OTDR no lado B, à direita)" : ""}</span>
+        <span><span style={{ color: CORES_CURVA[1] }}>━</span> {nomes[1]}{espelhar ? " (espelhada: OTDR no lado B, à direita)" : ` (em paralelo, ${desloc} dB abaixo)`}</span>
+        <span>○ ponto em cada curva onde o evento aparece</span>
         <span>dB relativos ao início de cada medição</span>
       </div>
     </div>

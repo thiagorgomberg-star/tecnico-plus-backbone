@@ -4,7 +4,7 @@ import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Tex
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
 import {
-  Comparacao, compararAntesDepois, compararBidirecional, compararFibras, fimDaFibra, mesmoSentido, Momento, ROTULO_MOMENTO, ROTULO_SENTIDO, Sentido, tracoParaComparar,
+  Comparacao, compararAntesDepois, compararBidirecional, compararFibras, fimDaFibra, mesmoSentido, Momento, ROTULO_MOMENTO, ROTULO_SENTIDO, Sentido, deslocamentoParalelo, tracoParaComparar,
 } from '../lib/comparaSor';
 import { cores, sombra } from '../lib/estilo';
 import { compartilharComparativo } from '../lib/relatorioCurva';
@@ -38,6 +38,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
   const [c1, setC1] = useState('');
   const [c2, setC2] = useState('');
   const [gerando, setGerando] = useState(false);
+  const [aberto, setAberto] = useState<number | null>(null);
 
   useEffect(() => {
     lista.forEach(async (c) => {
@@ -84,6 +85,15 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipo, fibra, Object.keys(lidas).length, lista.map((c) => `${c.chave}${c.sentido}${c.momento}`).join()]);
+
+  // Marcou as duas no mesmo sentido: não é bidirecional (o gráfico cruzaria em X). Vai para duas fibras ou antes × depois.
+  useEffect(() => {
+    const a = lista.find((c) => c.chave === c1), b = lista.find((c) => c.chave === c2);
+    if (tipo !== 'bidirecional' || !a?.sentido || !b?.sentido || a.sentido !== b.sentido) return;
+    const mesmaFibra = a.fibra.trim() && a.fibra.trim() === b.fibra.trim();
+    setTipoBruto(mesmaFibra && a.momento && b.momento && a.momento !== b.momento ? 'antesDepois' : 'fibras');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipo, c1, c2, lista.map((c) => `${c.chave}${c.sentido}${c.momento}${c.fibra}`).join()]);
 
   const s1 = c1 ? sor(c1) : null, s2 = c2 && c2 !== c1 ? sor(c2) : null;
   const curva = (k: string) => lista.find((c) => c.chave === k);
@@ -198,7 +208,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
             <>
               <View style={s.grade}>
                 <Indicador rotulo={`FIBRA ${nomes[0]}`} valor={km(comp.comprimento1Km)} />
-                <Indicador rotulo={`FIBRA ${nomes[1]}`} valor={km(comp.comprimento2Km)} alerta={comp.avisos.some((a) => a.nivel === 'critico')} />
+                <Indicador rotulo={`FIBRA ${nomes[1]}`} valor={km(comp.comprimento2Km)} alerta={Math.abs(comp.comprimento1Km - comp.comprimento2Km) > Math.max(0.05, comp.comprimento1Km * 0.01)} />
                 <Indicador rotulo={`PERDA ${nomes[0]}`} valor={`${fmt(comp.perdaTotal1Db)} dB`} />
                 <Indicador rotulo={`PERDA ${nomes[1]}`} valor={`${fmt(comp.perdaTotal2Db)} dB`}
                   extra={tipo === 'fibras' ? `diferença ${fmt(Math.abs(comp.perdaTotal2Db - comp.perdaTotal1Db))} dB` : tipo === 'bidirecional' ? `média ${fmt((comp.perdaTotal1Db + comp.perdaTotal2Db) / 2)} dB` : `diferença ${fmt(comp.perdaTotal2Db - comp.perdaTotal1Db)} dB`} />
@@ -213,11 +223,12 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
                 <Sobreposto s1={s1} s2={s2} espelhar={tipo === 'bidirecional'} comp={comp} largura={width - 56} />
                 <Text style={s.legenda}>
                   <Text style={{ color: CORES_CURVA[0] }}>━ </Text>{nomes[0]}   <Text style={{ color: CORES_CURVA[1] }}>━ </Text>{nomes[1]}
-                  {tipo === 'bidirecional' ? ' (espelhada, OTDR no lado B)' : ''}
+                  {tipo === 'bidirecional' ? ' (espelhada, OTDR no lado B)' : ' (em paralelo, mais abaixo)'}
+                  {'\n'}○ ponto em cada curva onde o evento aparece. Toque num evento abaixo para ver o zoom.
                 </Text>
               </View>
               {comp.linhas.map((l, i) => (
-                <View key={i} style={s.cartao}>
+                <Pressable key={i} style={[s.cartao, aberto === i && { borderWidth: 2, borderColor: COR[l.nivel] }]} onPress={() => setAberto(aberto === i ? null : i)}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                     <View style={[s.numero, { backgroundColor: COR[l.nivel] }]}><Text style={s.numeroTexto}>{i + 1}</Text></View>
                     <View style={{ flex: 1 }}>
@@ -234,7 +245,10 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
                     <View style={[s.selo, { backgroundColor: `${COR[l.nivel]}1F` }]}><Text style={[s.seloTexto, { color: COR[l.nivel] }]}>{l.situacao.toUpperCase()}</Text></View>
                   </View>
                   <Text style={s.texto}>{l.texto}</Text>
-                </View>
+                  {aberto === i ? (
+                    <Sobreposto s1={s1} s2={s2} espelhar={tipo === 'bidirecional'} comp={comp} largura={width - 56} foco={l.km} altura={200} />
+                  ) : <Text style={[s.sub, { color: cores.primaria, fontWeight: '700' }]}>Ver o evento na curva</Text>}
+                </Pressable>
               ))}
               <Text style={s.sub}>
                 {tipo === 'bidirecional' ? 'A perda real de cada emenda é a média dos dois sentidos. As distâncias do B → A foram espelhadas para contar a partir de A.'
@@ -272,39 +286,55 @@ function Indicador({ rotulo, valor, extra, alerta }: { rotulo: string; valor: st
   );
 }
 
-function Sobreposto({ s1, s2, espelhar, comp, largura }: { s1: Sor; s2: Sor; espelhar: boolean; comp: Comparacao; largura: number }) {
-  const L = largura, A = 230, m = { e: 34, d: 6, t: 20, b: 20 };
-  const t1 = tracoParaComparar(s1), t2 = tracoParaComparar(s2, espelhar ? { comprimentoKm: fimDaFibra(s1) } : undefined);
+// Curvas sobrepostas. Bidirecional: B → A espelhada (cruza em X). Mesmo sentido: a 2ª corre em paralelo, alguns dB abaixo.
+// Cada evento ganha um ponto na curva em que aparece (nas duas, só na 1 ou só na 2). Com foco, mostra o zoom do evento.
+function Sobreposto({ s1, s2, espelhar, comp, largura, foco, altura = 230 }: {
+  s1: Sor; s2: Sor; espelhar: boolean; comp: Comparacao; largura: number; foco?: number | null; altura?: number;
+}) {
+  const L = largura, A = altura, m = { e: 34, d: 6, t: 20, b: 20 };
+  const janela = foco != null ? { de: Math.max(0, foco - 0.6), ate: foco + 0.6 } : undefined;
+  const t1 = tracoParaComparar(s1, null, janela), t2b = tracoParaComparar(s2, espelhar ? { comprimentoKm: fimDaFibra(s1) } : null, janela);
+  const desloc = espelhar ? 0 : deslocamentoParalelo(tracoParaComparar(s1), tracoParaComparar(s2));
+  const t2 = t2b.map((p) => ({ km: p.km, db: p.db + desloc }));
   const todos = [...t1, ...t2];
   if (!todos.length) return null;
-  const maxKm = Math.max(...todos.map((p) => p.km)) || 1;
+  const k0 = janela?.de ?? 0, k1 = janela?.ate ?? (Math.max(...todos.map((p) => p.km)) || 1);
   const dbs = todos.map((p) => p.db).sort((a, b) => a - b);
-  const minDb = dbs[Math.floor(dbs.length * 0.02)], maxDb = Math.max(1, dbs[Math.floor(dbs.length * 0.995)]);
-  const x = (k: number) => m.e + (k / maxKm) * (L - m.e - m.d);
+  const minDb = dbs[Math.floor(dbs.length * 0.02)], maxDb = janela ? dbs[dbs.length - 1] + 0.3 : Math.max(1, dbs[Math.floor(dbs.length * 0.995)]);
+  const x = (k: number) => m.e + ((k - k0) / (k1 - k0 || 1)) * (L - m.e - m.d);
   const y = (d: number) => m.t + ((maxDb - Math.min(maxDb, Math.max(minDb, d))) / (maxDb - minDb || 1)) * (A - m.t - m.b);
   const caminho = (t: { km: number; db: number }[]) => t.map((p, i) => `${i ? 'L' : 'M'}${x(p.km).toFixed(1)},${y(p.db).toFixed(1)}`).join('');
-  const passoKm = [0.5, 1, 2, 5, 10, 20, 50].find((v) => maxKm / v <= 5) ?? 100;
-  const passoDb = [1, 2, 5, 10, 20].find((v) => (maxDb - minDb) / v <= 5) ?? 50;
+  const dbEm = (t: { km: number; db: number }[], k: number) => (t.reduce((a, p) => (Math.abs(p.km - k) < Math.abs(a.km - k) ? p : a), t[0]) ?? { db: 0 }).db;
+  const passoKm = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50].find((v) => (k1 - k0) / v <= 5) ?? 100;
+  const passoDb = [0.5, 1, 2, 5, 10, 20].find((v) => (maxDb - minDb) / v <= 5) ?? 50;
+  const linhas = comp.linhas.map((l, i) => ({ l, i })).filter(({ l }) => l.km >= k0 && l.km <= k1);
+  // Na curva toda só os que pedem atenção ganham número (os OK ficam só com o ponto), para não embolar.
+  const numerados = janela ? linhas : linhas.filter(({ l }) => l.nivel !== 'ok');
   return (
     <Svg width={L} height={A}>
-      {Array.from({ length: Math.floor(maxKm / passoKm) + 1 }, (_, i) => i * passoKm).map((k) => (
-        <SvgText key={`x${k}`} x={x(k)} y={A - 5} fontSize={9.5} fill="#667085" textAnchor="middle">{`${k} km`}</SvgText>
+      {Array.from({ length: Math.floor((k1 - k0) / passoKm) + 1 }, (_, i) => Math.ceil(k0 / passoKm) * passoKm + i * passoKm).filter((k) => k <= k1).map((k) => (
+        <SvgText key={`x${k}`} x={x(k)} y={A - 5} fontSize={9.5} fill="#667085" textAnchor="middle">{`${+k.toFixed(1)} km`}</SvgText>
       ))}
       {Array.from({ length: Math.floor((maxDb - minDb) / passoDb) + 1 }, (_, i) => Math.ceil(minDb / passoDb) * passoDb + i * passoDb).map((d) => (
         <Line key={`l${d}`} x1={m.e} x2={L - m.d} y1={y(d)} y2={y(d)} stroke="#E4E7EC" />
       ))}
       {Array.from({ length: Math.floor((maxDb - minDb) / passoDb) + 1 }, (_, i) => Math.ceil(minDb / passoDb) * passoDb + i * passoDb).map((d) => (
-        <SvgText key={`y${d}`} x={m.e - 4} y={y(d) + 3} fontSize={9.5} fill="#667085" textAnchor="end">{`${d}`}</SvgText>
+        <SvgText key={`y${d}`} x={m.e - 4} y={y(d) + 3} fontSize={9.5} fill="#667085" textAnchor="end">{`${+d.toFixed(1)}`}</SvgText>
+      ))}
+      {numerados.map(({ l, i }) => (
+        <Line key={`e${i}`} x1={x(l.km)} x2={x(l.km)} y1={m.t} y2={A - m.b} stroke={COR[l.nivel]} strokeWidth={1} strokeDasharray="3 3" />
       ))}
       <Path d={caminho(t1)} fill="none" stroke={CORES_CURVA[0]} strokeWidth={1.4} />
       <Path d={caminho(t2)} fill="none" stroke={CORES_CURVA[1]} strokeWidth={1.4} />
-      {comp.linhas.map((l, i) => (
-        <Line key={`e${i}`} x1={x(l.km)} x2={x(l.km)} y1={m.t} y2={A - m.b} stroke={COR[l.nivel]} strokeWidth={1} strokeDasharray="3 3" />
-      ))}
-      {comp.linhas.map((l, i) => <Circle key={`c${i}`} cx={x(l.km)} cy={m.t - 9} r={7.5} fill={COR[l.nivel]} />)}
-      {comp.linhas.map((l, i) => (
+      {linhas.map(({ l, i }) => [
+        l.perda1 != null ? <Circle key={`a${i}`} cx={x(l.km)} cy={y(dbEm(t1, l.km))} r={3.2} fill="#fff" stroke={CORES_CURVA[0]} strokeWidth={1.6} /> : null,
+        l.perda2 != null ? <Circle key={`b${i}`} cx={x(l.km)} cy={y(dbEm(t2, l.km))} r={3.2} fill="#fff" stroke={CORES_CURVA[1]} strokeWidth={1.6} /> : null,
+      ])}
+      {numerados.map(({ l, i }) => <Circle key={`c${i}`} cx={x(l.km)} cy={m.t - 9} r={7.5} fill={COR[l.nivel]} />)}
+      {numerados.map(({ l, i }) => (
         <SvgText key={`t${i}`} x={x(l.km)} y={m.t - 5.5} fontSize={9} fontWeight="bold" fill="#fff" textAnchor="middle">{`${i + 1}`}</SvgText>
       ))}
+      {desloc ? <SvgText x={L - m.d} y={A - m.b - 4} fontSize={9} fill={CORES_CURVA[1]} textAnchor="end">{`2ª curva ${desloc} dB (em paralelo)`}</SvgText> : null}
     </Svg>
   );
 }
