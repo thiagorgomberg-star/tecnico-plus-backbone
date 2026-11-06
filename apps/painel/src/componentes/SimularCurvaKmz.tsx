@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 
 import EscolherTrechoKmz from "@/componentes/EscolherTrechoKmz";
+import MapaEventosCurva from "@/componentes/MapaEventosCurva";
 import { fmtMetros, ReservasAvulsas, totalReservasAvulsas } from "@/lib/fusao";
-import { analisarSor, curvaCompleta, km as fmtKm, lerSor, Nivel, Sor, rotuloOnda } from "@/lib/sor";
+import { analisarSor, curvaCompleta, Diagnostico, km as fmtKm, lerSor, Nivel, Sor, rotuloOnda } from "@/lib/sor";
 import { supabase } from "@/lib/supabase";
-import { comprimento, eventosNoTracado, kmlEventosCurva, pontaDoTracado, TracadoSalvo } from "@/lib/tracado";
+import { comprimento, EventoNoTracado, eventosNoTracado, kmlEventosCurva, pontaDoTracado, TracadoSalvo } from "@/lib/tracado";
 
 type Rota = { id: string; trecho: string };
 type KmzSalvo = { id: string; rota_id: string; nome_arquivo: string; extensao_m: number | null; criado_em: string };
@@ -17,7 +18,8 @@ const numero = (t: string) => { const v = Number(t.replace(",", ".")); return t.
 
 // Simula onde ficam, no mapa, os eventos de uma curva do OTDR usando só a curva e o KMZ do trecho
 // (não depende das caixas mapeadas). Desconta excesso de fibra e as reservas técnicas (quantidade × metros).
-export default function SimularCurvaKmz() {
+// Também abre a partir da análise de uma curva (inicial): a curva já vem carregada.
+export default function SimularCurvaKmz({ inicial }: { inicial?: { sor: Sor; nome: string; soEventos?: boolean } } = {}) {
   const [rotas, setRotas] = useState<Rota[]>([]);
   const [kmzs, setKmzs] = useState<KmzSalvo[]>([]);
   const [curvas, setCurvas] = useState<CurvaGuardada[]>([]);
@@ -43,10 +45,10 @@ export default function SimularCurvaKmz() {
 
   // 1) Curva
   const [curvaChave, setCurvaChave] = useState("");
-  const [bruto, setBruto] = useState<Sor | null>(null);
-  const [nomeCurva, setNomeCurva] = useState("");
+  const [bruto, setBruto] = useState<Sor | null>(inicial?.sor ?? null);
+  const [nomeCurva, setNomeCurva] = useState(inicial?.nome ?? "");
   const [erroCurva, setErroCurva] = useState("");
-  const [modo, setModo] = useState<"completa" | "otdr">("completa");
+  const [modo, setModo] = useState<"completa" | "otdr">(inicial?.soEventos ? "otdr" : "completa");
   async function abrirCurva(dados: Blob | null, nome: string) {
     setBruto(null); setErroCurva("");
     if (!dados) return setErroCurva("Não foi possível baixar a curva.");
@@ -100,6 +102,18 @@ export default function SimularCurvaKmz() {
   const cam = useMemo(() => (tracado ? (ponta === "fim" ? [...tracado.caminho].reverse() : tracado.caminho) : []), [tracado, ponta]);
   const pontas = tracado && tracado.caminho.length >= 2 ? [pontaDoTracado(tracado.caminho, tracado.pontos, false), pontaDoTracado(tracado.caminho, tracado.pontos, true)] : null;
   const L = cam.length >= 2 ? comprimento(cam) : 0;
+  // Nomes do ponto A (ponta 1 do traçado) e B (ponta 2): do KMZ, senão do que o OTDR gravou na curva.
+  const [nomeA, setNomeA] = useState("");
+  const [nomeB, setNomeB] = useState("");
+  useEffect(() => {
+    if (!pontas) return;
+    setNomeA(pontas[0].nome ?? bruto?.localA ?? "");
+    setNomeB(pontas[1].nome ?? bruto?.localB ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tracado]);
+  const rotuloA = nomeA.trim() || "Ponto A", rotuloB = nomeB.trim() || "Ponto B";
+  const [selecionado, setSelecionado] = useState<number | null>(null);
+  const [abertas, setAbertas] = useState<Record<number, string>>({});
   const analise = useMemo(() => (sor ? analisarSor(sor) : null), [sor]);
   const resultado = useMemo(() => {
     if (!sor || !analise || cam.length < 2 || !tracado) return null;
@@ -113,7 +127,26 @@ export default function SimularCurvaKmz() {
     });
   }, [sor, analise, cam, L, tracado, excesso, reservas?.quantidade, reservas?.metros, reservas?.modo]);
 
-  const medicaoNome = pontas ? (pontas[ponta === "fim" ? 1 : 0].nome ?? (ponta === "fim" ? "Fim do traçado" : "Início do traçado")) : "";
+  const medicaoNome = ponta === "fim" ? rotuloB : rotuloA;
+  const trechoNome = (kmzId ? rotas.find((r) => r.id === kmzs.find((k) => k.id === kmzId)?.rota_id)?.trecho : rotas.find((r) => r.id === rotaId)?.trecho) || `${rotuloA} × ${rotuloB}`;
+
+  // Abre uma ocorrência no backlog no ponto simulado (o técnico mais perto é avisado se for alta).
+  async function abrirOcorrencia(d: Diagnostico, p: EventoNoTracado) {
+    const descricao = [
+      `Falha vista na curva OTDR ${nomeCurva}: ${d.tipo} a ${fmtKm(d.evento.distanciaKm)} na fibra, medida de ${medicaoNome} (${rotuloA} → ${rotuloB}).`,
+      `Perda ${d.evento.perdaDb.toFixed(3).replace(".", ",")} dB${d.evento.reflectanciaDb ? `, reflectância ${d.evento.reflectanciaDb.toFixed(1).replace(".", ",")} dB` : ""}. ${d.texto}`,
+      `Ponto simulado no KMZ: ${fmtMetros(p.metrosCabo)} de cabo a partir de ${medicaoNome}${p.perto ? `, perto de ${p.perto.nome}` : ""}${reservas ? `, descontadas ${reservas.quantidade} reserva(s) de ${reservas.metros} m` : ""}${numero(excesso) ? ` e ${excesso}% de excesso` : ""}. Confirmar no local (a posição tem a margem do traçado e das sobras).`,
+    ].join("\n");
+    if (!confirm(`Abrir ocorrência no backlog neste ponto?\n\n${descricao}`)) return;
+    const id = crypto.randomUUID();
+    const { error } = await supabase.rpc("informar_evento", {
+      p_id: id, p_categoria: "Falha na fibra (curva OTDR)", p_gravidade: d.nivel === "critico" ? "alta" : "media", p_descricao: descricao,
+      p_via: trechoNome, p_lat: p.ponto.lat, p_lng: p.ponto.lng, p_precisao: null, p_endereco: p.perto?.nome ?? null, p_quando: new Date().toISOString(),
+    });
+    if (error) return alert(`Não foi possível abrir a ocorrência: ${error.message}`);
+    const { data } = await supabase.from("ordens_servico").select("numero").eq("id", id).single();
+    setAbertas((a) => ({ ...a, [d.evento.numero]: data?.numero ? `O.S. #${data.numero}` : "aberta" }));
+  }
   function baixarKml() {
     if (!resultado || !pontas) return;
     const m = pontas[ponta === "fim" ? 1 : 0];
@@ -185,10 +218,16 @@ export default function SimularCurvaKmz() {
 
       {tracado && pontas ? (
         <div className="flex flex-wrap items-end gap-2 border-t border-gray-100 p-4">
-          <label className="grid gap-1 text-xs text-gray-500">3 · OTDR ligado em
+          <label className="grid gap-1 text-xs text-gray-500">3 · Ponto A (ponta 1 do traçado)
+            <input className={`${campo} w-44`} placeholder="Ex.: DGO Taubaté" value={nomeA} onChange={(e) => setNomeA(e.target.value)} />
+          </label>
+          <label className="grid gap-1 text-xs text-gray-500">Ponto B (ponta 2)
+            <input className={`${campo} w-44`} placeholder="Ex.: DGO Campos" value={nomeB} onChange={(e) => setNomeB(e.target.value)} />
+          </label>
+          <label className="grid gap-1 text-xs text-gray-500">OTDR ligado em
             <select className={campo} value={ponta} onChange={(e) => setPonta(e.target.value as "inicio" | "fim")}>
-              <option value="inicio">{pontas[0].nome ?? "Início do traçado"} (ponta 1)</option>
-              <option value="fim">{pontas[1].nome ?? "Fim do traçado"} (ponta 2)</option>
+              <option value="inicio">A · {rotuloA} (curva A → B)</option>
+              <option value="fim">B · {rotuloB} (curva B → A)</option>
             </select>
           </label>
           <label className="grid gap-1 text-xs text-gray-500">Reservas técnicas (quantidade)
@@ -218,13 +257,21 @@ export default function SimularCurvaKmz() {
             <b>{resultado.length} evento(s) no mapa, medidos de {medicaoNome}</b>
             <button className="ml-auto rounded-lg border border-blue-700 px-3 py-1.5 font-semibold text-blue-700 hover:bg-blue-50" onClick={baixarKml}>Baixar KML (todos os eventos)</button>
           </div>
+          <div className="mb-3">
+            <MapaEventosCurva caminho={tracado!.caminho} medidoEm={ponta === "fim" ? "B" : "A"}
+              pontaA={{ ...pontas[0], nome: rotuloA }} pontaB={{ ...pontas[1], nome: rotuloB }}
+              eventos={resultado.map(({ d, p }) => ({ id: d.evento.numero, nivel: d.nivel, ponto: p.ponto,
+                titulo: `${d.evento.numero} · ${d.tipo} · ${fmtKm(d.evento.distanciaKm)} da fibra, ${fmtMetros(p.metrosCabo)} de cabo desde ${medicaoNome}`, texto: d.texto }))}
+              selecionado={selecionado} selecionar={setSelecionado} />
+          </div>
           <table className="w-full text-left">
             <thead className="text-xs text-gray-500">
               <tr><th className="py-1">#</th><th>Na fibra (OTDR)</th><th>No cabo</th><th>Tipo</th><th>Perda</th><th>Situação</th><th>Onde</th><th /></tr>
             </thead>
             <tbody>
               {resultado.map(({ d, p }) => (
-                <tr key={d.evento.numero} className="border-t border-gray-100 align-top">
+                <tr key={d.evento.numero} onClick={() => setSelecionado(d.evento.numero)}
+                  className={`cursor-pointer border-t border-gray-100 align-top ${selecionado === d.evento.numero ? "bg-blue-50" : "hover:bg-gray-50"}`}>
                   <td className="py-1.5 font-mono">{d.evento.numero}</td>
                   <td className="whitespace-nowrap">{fmtKm(d.evento.distanciaKm)}</td>
                   <td className="whitespace-nowrap">{fmtMetros(p.metrosCabo)}</td>
@@ -236,13 +283,18 @@ export default function SimularCurvaKmz() {
                     {p.perto ? `Perto de ${p.perto.nome} (${Math.round(p.perto.dist)} m). ` : ""}
                     {p.ponto.lat.toFixed(6)}, {p.ponto.lng.toFixed(6)}
                   </td>
-                  <td><a className="text-xs font-semibold text-blue-700 hover:underline" target="_blank" rel="noreferrer" href={`https://www.google.com/maps/search/?api=1&query=${p.ponto.lat},${p.ponto.lng}`}>Mapa</a></td>
+                  <td className="whitespace-nowrap text-xs">
+                    <a className="font-semibold text-blue-700 hover:underline" target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} href={`https://www.google.com/maps/search/?api=1&query=${p.ponto.lat},${p.ponto.lng}`}>Google Maps</a>
+                    {d.nivel !== "ok" ? (abertas[d.evento.numero]
+                      ? <div className="mt-1 font-semibold text-green-700">Ocorrência {abertas[d.evento.numero]}</div>
+                      : <button className="mt-1 block rounded border border-red-300 px-2 py-0.5 font-semibold text-red-700 hover:bg-red-50" onClick={(e) => { e.stopPropagation(); abrirOcorrencia(d, p); }}>Abrir ocorrência</button>) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
           <p className="mt-2 text-xs text-gray-500">
-            Metros de cabo = distância do OTDR sem o excesso de fibra e sem as reservas técnicas{reservas?.modo === "distribuidas" ? " (espalhadas: desconto proporcional ao longo do trecho)" : reservas ? " (todas antes: desconto inteiro)" : ""}. O ponto anda pelo traçado do KMZ a partir da ponta escolhida.
+            Metros de cabo = distância do OTDR sem o excesso de fibra e sem as reservas técnicas{reservas?.modo === "distribuidas" ? " (espalhadas: desconto proporcional ao longo do trecho)" : reservas ? " (todas antes: desconto inteiro)" : ""}. O ponto anda pelo traçado do KMZ a partir da ponta escolhida. "Abrir ocorrência" cria a O.S. no backlog com o ponto marcado no mapa, para o técnico tratar a falha.
           </p>
         </div>
       ) : null}

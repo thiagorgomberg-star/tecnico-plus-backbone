@@ -57,6 +57,21 @@ export function rotuloOnda(s: Pick<Sor, 'comprimentoOndaNm' | 'ondaRealNm'>, com
 }
 export const ehFibraAtiva = (s: Pick<Sor, 'comprimentoOndaNm'>) => s.comprimentoOndaNm >= 1600;
 
+// Potência digitada pelo técnico (opcional; o .SOR não traz). Texto para o relatório, com a perda medida TX − RX.
+export type Potencia = { txDbm?: number | null; rxDbm?: number | null };
+export const lerDbm = (t: string) => { const v = Number(t.replace(',', '.').trim()); return t.trim() && Number.isFinite(v) ? v : null; };
+export function textoPotencia(p: Potencia | null | undefined, perdaOtdrDb?: number | null) {
+  if (!p || (p.txDbm == null && p.rxDbm == null)) return '';
+  const f = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const partes = [p.txDbm != null ? `TX ${f(p.txDbm)} dBm` : '', p.rxDbm != null ? `RX ${f(p.rxDbm)} dBm` : ''].filter(Boolean);
+  if (p.txDbm != null && p.rxDbm != null) {
+    const medida = p.txDbm - p.rxDbm;
+    partes.push(`perda medida ${f(medida)} dB`);
+    if (perdaOtdrDb && Math.abs(medida - perdaOtdrDb) > 1) partes.push(`${f(Math.abs(medida - perdaOtdrDb))} dB ${medida > perdaOtdrDb ? 'acima' : 'abaixo'} da perda do OTDR (${f(perdaOtdrDb)} dB): conferir cordões e conectores das pontas`);
+  }
+  return `Potência: ${partes.join(' · ')}`;
+}
+
 class Leitor {
   private v: DataView;
   private bytes: Uint8Array;

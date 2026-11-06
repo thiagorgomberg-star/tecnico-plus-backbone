@@ -15,7 +15,7 @@ import { lerSor } from '../lib/sor';
 // Curvas que o técnico analisa no próprio celular: não vão para o servidor nem para nenhuma rota.
 // Ficam guardadas até o técnico apagar pela lixeira (com dupla confirmação).
 // fibra/sentido/momento marcam a curva para o comparativo (A → B × B → A ou antes × depois).
-type Guardada = { arquivo: string; nome: string; em: string; fibra?: string; sentido?: Sentido | ''; momento?: Momento };
+type Guardada = { arquivo: string; nome: string; em: string; fibra?: string; sentido?: Sentido | ''; momento?: Momento; tx?: string; rx?: string };
 const CHAVE = 'minhas-curvas';
 const pasta = () => new Directory(Paths.document, 'minhas-curvas');
 
@@ -27,11 +27,11 @@ export default function AnalisarCurva({ voltar }: { voltar: () => void }) {
   const [marcadas, setMarcadas] = useState<string[]>([]);
   const [comparando, setComparando] = useState(false);
   const paraComparar: CurvaMarcada[] = lista.filter((g) => marcadas.includes(g.arquivo)).map((g) => ({
-    chave: g.arquivo, nome: g.nome, uri: new File(pasta(), g.arquivo).uri, fibra: g.fibra ?? '', sentido: g.sentido ?? '', momento: g.momento ?? '',
+    chave: g.arquivo, nome: g.nome, uri: new File(pasta(), g.arquivo).uri, fibra: g.fibra ?? '', sentido: g.sentido ?? '', momento: g.momento ?? '', tx: g.tx ?? '', rx: g.rx ?? '',
   }));
   const listaAtual = useRef(lista);
   listaAtual.current = lista;
-  function marcar(chave: string, m: Partial<Pick<CurvaMarcada, 'fibra' | 'sentido' | 'momento'>>) {
+  function marcar(chave: string, m: Partial<Pick<CurvaMarcada, 'fibra' | 'sentido' | 'momento' | 'tx' | 'rx'>>) {
     salvar(listaAtual.current.map((g) => (g.arquivo === chave ? { ...g, ...m } : g)));
   }
 

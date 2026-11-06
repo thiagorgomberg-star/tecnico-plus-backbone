@@ -6,7 +6,7 @@ import * as Sharing from 'expo-sharing';
 
 import { dataUrl } from './relatorioPdf';
 import { Comparacao, fimDaFibra, tracoParaComparar } from './comparaSor';
-import { analisarSor, ehFibraAtiva, km, Nivel, rotuloOnda, Sor, tracoJanela } from './sor';
+import { analisarSor, ehFibraAtiva, km, lerDbm, Nivel, rotuloOnda, Sor, textoPotencia, tracoJanela } from './sor';
 
 const COR: Record<Nivel, string> = { ok: '#1E9E4A', atencao: '#D99A00', critico: '#D0453B' };
 const ROTULO: Record<Nivel, string> = { ok: 'OK', atencao: 'Atenção', critico: 'Crítico' };
@@ -40,12 +40,13 @@ function svgTraco(s: Sor, niveis: Nivel[], ini: number, fim: number, L: number, 
   </svg>`;
 }
 
-export type Analista = { nome: string; cargo: string; empresa: string; registro: string; observacoes: string };
+export type Analista = { nome: string; cargo: string; empresa: string; registro: string; observacoes: string; tx?: string; rx?: string };
 
 // Relatório em PDF da análise de uma curva OTDR, gerado no celular (funciona sem internet) e compartilhado.
 export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm: number | null, trecho?: string | null,
   analista?: Analista | null, modo: 'completa' | 'otdr' = 'otdr') {
   const a = analisarSor(s, extensaoKm);
+  const potencia = textoPotencia({ txDbm: lerDbm(analista?.tx ?? ''), rxDbm: lerDbm(analista?.rx ?? '') }, a.perdaTotalDb);
   const niveis = a.diagnosticos.map((d) => d.nivel);
   const total = Math.max(s.traco.at(-1)?.km ?? 0, ...s.eventos.map((e) => e.distanciaKm)) || 1;
   const fimFibra = s.eventos.find((e) => e.fimDeFibra)?.distanciaKm ?? total;
@@ -101,6 +102,7 @@ export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm:
     ['Pulso', `${s.pulsoNs} ns`], ['Índice de refração (IOR)', s.indiceRefracao.toFixed(4)], ['Resolução', `${fmt(s.resolucaoM)} m`],
     ['Cabo', s.cabo], ['Fibra', s.fibra], ['Medida em', s.data?.toLocaleString('pt-BR')], ['Série do OTDR', s.serie], ['Operador', s.operador],
   ].filter(([, v]) => v).map(([r, v]) => `<div><span class="l">${r}</span><b>${esc(v)}</b></div>`).join('')}</div>
+  ${potencia ? `<div style="background:#EEF4FB;color:#163A6B;border-radius:6px;padding:6px 10px;margin:6px 0">${esc(potencia)}</div>` : ''}
   <h2>Curva</h2>
   ${svgTraco(s, niveis, 0, fimVista, 960, 300)}
   ${detalhes ? `<h2>Detalhe dos eventos que pedem ação</h2><div class="det">${detalhes}</div>` : ''}
@@ -138,7 +140,7 @@ export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm:
 
 // PDF do comparativo de duas curvas (A → B × B → A, antes × depois ou duas fibras do mesmo cabo), gerado no celular.
 export async function compartilharComparativo(c: Comparacao, s1: Sor, s2: Sor,
-  o: { nomes: string[]; curva1: string; curva2: string; fibra: string; modo: 'completa' | 'otdr' }) {
+  o: { nomes: string[]; curva1: string; curva2: string; fibra: string; modo: 'completa' | 'otdr'; potencias?: string[] }) {
   const bi = c.tipo === 'bidirecional', fb = c.tipo === 'fibras';
   const analista = await AsyncStorage.getItem('analista-curva').then((t) => (t ? JSON.parse(t) as Partial<Analista> : null)).catch(() => null);
   const logo = await Asset.fromModule(require('../../assets/mascara/logo-multivale.png')).downloadAsync()
@@ -178,6 +180,7 @@ export async function compartilharComparativo(c: Comparacao, s1: Sor, s2: Sor,
     <div><span class="l">Perda total ${o.nomes[0]}</span><b>${fmt(c.perdaTotal1Db)} dB</b></div>
     <div><span class="l">Perda total ${o.nomes[1]}</span><b>${fmt(c.perdaTotal2Db)} dB</b><span class="l">${bi ? `média ${fmt((c.perdaTotal1Db + c.perdaTotal2Db) / 2)} dB` : fb ? `diferença ${fmt(Math.abs(c.perdaTotal2Db - c.perdaTotal1Db))} dB` : `diferença ${fmt(c.perdaTotal2Db - c.perdaTotal1Db)} dB`}</span></div>
   </div>
+  ${(o.potencias ?? []).map((t, i) => (t ? `<div class="aviso" style="background:#EEF4FB;color:#163A6B"><b>${esc(o.nomes[i])}</b> · ${esc(t)}</div>` : '')).join('')}
   ${c.avisos.map((a) => `<div class="aviso" style="background:${COR[a.nivel]}1A;color:${a.nivel === 'ok' ? '#14532d' : COR[a.nivel]}">${esc(a.texto)}</div>`).join('')}
   <h2>Curvas sobrepostas</h2>${svg}
   <p class="l">dB relativos ao início de cada medição${bi ? '; B → A espelhada (OTDR no lado B, à direita)' : ''}.</p>

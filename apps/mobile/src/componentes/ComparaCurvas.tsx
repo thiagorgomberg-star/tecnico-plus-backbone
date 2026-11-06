@@ -8,11 +8,11 @@ import {
 } from '../lib/comparaSor';
 import { cores, sombra } from '../lib/estilo';
 import { compartilharComparativo } from '../lib/relatorioCurva';
-import { curvaCompleta, km, lerSor, Nivel, Sor, rotuloOnda } from '../lib/sor';
+import { curvaCompleta, km, lerDbm, lerSor, Nivel, rotuloOnda, Sor, textoPotencia } from '../lib/sor';
 import Icone from './Icone';
 import MargemInferior from './MargemInferior';
 
-export type CurvaMarcada = { chave: string; nome: string; uri: string; fibra: string; sentido: Sentido | ''; momento: Momento };
+export type CurvaMarcada = { chave: string; nome: string; uri: string; fibra: string; sentido: Sentido | ''; momento: Momento; tx?: string; rx?: string };
 type Tipo = 'bidirecional' | 'antesDepois' | 'fibras';
 
 const COR: Record<Nivel, string> = { ok: '#1E9E4A', atencao: '#D99A00', critico: '#D0453B' };
@@ -22,7 +22,7 @@ const fmt = (n: number | null, casas = 2) => (n == null ? '—' : n.toLocaleStri
 // Comparativo no celular (offline): A → B × B → A, antes × depois da mesma fibra, ou duas fibras do mesmo cabo no mesmo sentido.
 export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar }: {
   curvas: CurvaMarcada[] | null;
-  aoMudar: (chave: string, m: Partial<Pick<CurvaMarcada, 'fibra' | 'sentido' | 'momento'>>) => void;
+  aoMudar: (chave: string, m: Partial<Pick<CurvaMarcada, 'fibra' | 'sentido' | 'momento' | 'tx' | 'rx'>>) => void;
   analisarSozinha: (c: CurvaMarcada) => void;
   fechar: () => void;
 }) {
@@ -80,11 +80,15 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
     [c1, c2, tipo, modo, lidas[c1], lidas[c2]],
   );
 
+  const potencias = [c1, c2].map((k, i) => {
+    const c = curva(k);
+    return c && comp ? textoPotencia({ txDbm: lerDbm(c.tx ?? ''), rxDbm: lerDbm(c.rx ?? '') }, i ? comp.perdaTotal2Db : comp.perdaTotal1Db) : '';
+  });
   async function pdf() {
     if (!comp || !s1 || !s2) return;
     setGerando(true);
     try {
-      await compartilharComparativo(comp, s1, s2, { nomes, curva1: curva(c1)?.nome ?? '', curva2: curva(c2)?.nome ?? '', fibra: tipo === 'fibras' ? '' : fibra || curva(c1)?.fibra || '', modo });
+      await compartilharComparativo(comp, s1, s2, { nomes, curva1: curva(c1)?.nome ?? '', curva2: curva(c2)?.nome ?? '', fibra: tipo === 'fibras' ? '' : fibra || curva(c1)?.fibra || '', modo, potencias });
     } catch (e) { Alert.alert('Não foi possível gerar o PDF', (e as Error).message); } finally { setGerando(false); }
   }
 
@@ -133,6 +137,16 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
                 <Text style={s.rotulo}>Momento</Text>
                 <Chips valores={['antes', 'depois'] as Momento[]} rotulo={(v) => ROTULO_MOMENTO[v]} atual={c.momento}
                   escolher={(v) => aoMudar(c.chave, { momento: c.momento === v ? '' : v })} />
+                <View style={s.linhaCampos}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.rotulo}>Potência TX dBm (opcional)</Text>
+                    <TextInput style={s.campo} value={c.tx ?? ''} onChangeText={(v) => aoMudar(c.chave, { tx: v })} keyboardType="numbers-and-punctuation" placeholder="Ex.: 3,5" placeholderTextColor={cores.apagado} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.rotulo}>Potência RX dBm (opcional)</Text>
+                    <TextInput style={s.campo} value={c.rx ?? ''} onChangeText={(v) => aoMudar(c.chave, { rx: v })} keyboardType="numbers-and-punctuation" placeholder="Ex.: -18,2" placeholderTextColor={cores.apagado} />
+                  </View>
+                </View>
               </View>
             );
           })}
@@ -168,6 +182,9 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
                 <Indicador rotulo={`PERDA ${nomes[1]}`} valor={`${fmt(comp.perdaTotal2Db)} dB`}
                   extra={tipo === 'fibras' ? `diferença ${fmt(Math.abs(comp.perdaTotal2Db - comp.perdaTotal1Db))} dB` : tipo === 'bidirecional' ? `média ${fmt((comp.perdaTotal1Db + comp.perdaTotal2Db) / 2)} dB` : `diferença ${fmt(comp.perdaTotal2Db - comp.perdaTotal1Db)} dB`} />
               </View>
+              {potencias.map((t, i) => (t ? (
+                <Text key={`p${i}`} style={[s.aviso, { backgroundColor: '#EEF4FB', color: '#163A6B' }]}>{nomes[i]} · {t}</Text>
+              ) : null))}
               {comp.avisos.map((a, i) => (
                 <Text key={i} style={[s.aviso, { backgroundColor: `${COR[a.nivel]}1A`, color: a.nivel === 'ok' ? '#14532d' : COR[a.nivel] }]}>{a.texto}</Text>
               ))}

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import AnaliseSor from "@/componentes/AnaliseSor";
 import ComparaCurvas, { CurvaParaComparar } from "@/componentes/ComparaCurvas";
-import { nomeDaCurva } from "@/lib/sor";
+import { lerDbm, nomeDaCurva } from "@/lib/sor";
 import { supabase } from "@/lib/supabase";
 
 type Rota = { id: string; trecho: string; regiao: string; extensao_km?: number | null };
@@ -14,6 +14,7 @@ type Analisada = {
   id: string; nome_arquivo: string; caminho_arquivo: string; rota_id: string | null; comprimento_km: number | null;
   perda_total_db: number | null; criticos: number | null; atencao: number | null; criado_em: string;
   fibra: string | null; sentido: "AB" | "BA" | null; momento: "antes" | "depois" | null;
+  potencia_tx_dbm: number | null; potencia_rx_dbm: number | null;
 };
 
 // Ferramenta do supervisor (igual ao "Analisar curva OTDR" do app): abre um .SOR do computador
@@ -32,12 +33,15 @@ export default function AnalisarCurva() {
   const daAnalisada = (c: Analisada): CurvaParaComparar => ({
     chave: `a:${c.id}`, nome: c.nome_arquivo, bucket: "curvas", caminho: c.caminho_arquivo, salvaId: c.id,
     fibra: c.fibra ?? "", sentido: c.sentido ?? "", momento: c.momento ?? "",
+    tx: c.potencia_tx_dbm != null ? String(c.potencia_tx_dbm).replace(".", ",") : "", rx: c.potencia_rx_dbm != null ? String(c.potencia_rx_dbm).replace(".", ",") : "",
   });
-  function mudarCurva(chave: string, m: Partial<Pick<CurvaParaComparar, "fibra" | "sentido" | "momento">>) {
+  function mudarCurva(chave: string, m: Partial<Pick<CurvaParaComparar, "fibra" | "sentido" | "momento" | "tx" | "rx">>) {
     setSelecao((l) => l.map((c) => (c.chave === chave ? { ...c, ...m } : c)));
     const c = selecao.find((x) => x.chave === chave);
     if (c?.salvaId) {
-      const dados: Record<string, string | null> = {};
+      const dados: Record<string, string | number | null> = {};
+      if (m.tx !== undefined) dados.potencia_tx_dbm = lerDbm(m.tx);
+      if (m.rx !== undefined) dados.potencia_rx_dbm = lerDbm(m.rx);
       if (m.fibra !== undefined) dados.fibra = m.fibra.trim() || null;
       if (m.sentido !== undefined) dados.sentido = m.sentido || null;
       if (m.momento !== undefined) dados.momento = m.momento || null;

@@ -72,13 +72,13 @@ export default function AnaliseSor({ curva, extensaoKm, trecho, fechar }: {
   async function pedirAnalista() {
     const salvo = await AsyncStorage.getItem('analista-curva').then((t) => (t ? JSON.parse(t) as Analista : null)).catch(() => null);
     const perfil = salvo ? null : await AsyncStorage.getItem('meu-perfil').then((t) => (t ? JSON.parse(t) as { nome?: string; cargo?: string } : null)).catch(() => null);
-    setAnalista({ nome: '', cargo: '', empresa: 'Multivale Engenharia', registro: '', ...(perfil ? { nome: perfil.nome ?? '', cargo: perfil.cargo ?? '' } : {}), ...salvo, observacoes: '' });
+    setAnalista({ nome: '', cargo: '', empresa: 'Multivale Engenharia', registro: '', ...(perfil ? { nome: perfil.nome ?? '', cargo: perfil.cargo ?? '' } : {}), ...salvo, observacoes: '', tx: '', rx: '' });
   }
   async function exportar() {
     if (!sor || !curva || !analista) return;
     const dados = analista;
     setAnalista(null);
-    const { observacoes: _o, ...lembrar } = dados;
+    const { observacoes: _o, tx: _t, rx: _r, ...lembrar } = dados;
     AsyncStorage.setItem('analista-curva', JSON.stringify(lembrar)).catch(() => {});
     setGerando(true);
     try {
@@ -189,10 +189,11 @@ export default function AnaliseSor({ curva, extensaoKm, trecho, fechar }: {
             <Text style={s.info}>Saem no PDF, no campo de responsável pela análise.</Text>
             {analista ? ([
               ['nome', 'Nome do analista'], ['cargo', 'Cargo / função'], ['empresa', 'Empresa'], ['registro', 'Registro (CREA, matrícula...)'], ['observacoes', 'Observações / parecer'],
+              ['tx', 'Potência TX (dBm, opcional)'], ['rx', 'Potência RX (dBm, opcional)'],
             ] as [keyof Analista, string][]).map(([k, rotulo]) => (
               <View key={k}>
                 <Text style={s.formRotulo}>{rotulo}</Text>
-                <TextInput style={[s.formCampo, k === 'observacoes' && { minHeight: 80, textAlignVertical: 'top' }]} value={analista[k]} multiline={k === 'observacoes'}
+                <TextInput style={[s.formCampo, k === 'observacoes' && { minHeight: 80, textAlignVertical: 'top' }]} value={analista[k] ?? ''} multiline={k === 'observacoes'} keyboardType={k === 'tx' || k === 'rx' ? 'numbers-and-punctuation' : 'default'}
                   onChangeText={(v) => setAnalista({ ...analista, [k]: v })} placeholderTextColor={cores.apagado} />
               </View>
             )) : null}

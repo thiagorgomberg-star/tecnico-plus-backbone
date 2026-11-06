@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { pdfDoElemento } from "@/lib/pdfDoElemento";
-import { analisarSor, curvaCompleta, km, lerSor, Nivel, Sor, rotuloOnda, ehFibraAtiva } from "@/lib/sor";
+import SimularCurvaKmz from "@/componentes/SimularCurvaKmz";
+import { analisarSor, curvaCompleta, km, lerSor, Nivel, Sor, rotuloOnda, ehFibraAtiva, lerDbm, textoPotencia } from "@/lib/sor";
 import { supabase } from "@/lib/supabase";
 
 const COR: Record<Nivel, string> = { ok: "#1E9E4A", atencao: "#D99A00", critico: "#D0453B" };
@@ -26,6 +27,10 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
   const sor = useMemo(() => (bruto && modo === "completa" ? curvaCompleta(bruto) : bruto), [bruto, modo]);
   // Dados de quem assina a análise: pedidos antes do PDF/impressão e lembrados neste navegador.
   const [analista, setAnalista] = useState<Analista | null>(null);
+  const [noMapa, setNoMapa] = useState(false);
+  // Potência opcional, digitada (o .SOR não traz).
+  const [tx, setTx] = useState("");
+  const [rx, setRx] = useState("");
   const [pedindo, setPedindo] = useState<Acao | null>(null);
   function pedir(acao: Acao) {
     let salvo: Partial<Analista> = {};
@@ -108,8 +113,17 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
           </button>
           <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50" disabled={!analise || gerando} onClick={() => pedir("baixar")}>Baixar PDF</button>
           <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={() => pedir("imprimir")}>Imprimir</button>
+          <button className="rounded-lg border border-blue-700 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50" disabled={!bruto} onClick={() => setNoMapa(true)}>Localizar no mapa (KMZ)</button>
           <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={fechar}>Fechar</button>
         </div>
+        {noMapa && bruto ? (
+          <div className="fixed inset-0 z-[55] flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={() => setNoMapa(false)}>
+            <div className="w-full max-w-6xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-end pb-2"><button className="rounded-lg bg-white px-3 py-1.5 text-sm shadow hover:bg-gray-50" onClick={() => setNoMapa(false)}>Voltar à análise</button></div>
+              <SimularCurvaKmz inicial={{ sor: bruto, nome }} />
+            </div>
+          </div>
+        ) : null}
 
         {bruto ? (
           <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 px-4 py-2 text-sm">
@@ -122,6 +136,12 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
               {modo === "completa" ? `${sor?.eventos.filter((e) => e.detectado).length ?? 0} evento(s) encontrados na leitura do traço, além dos ${bruto.eventos.length} salvos pelo OTDR.`
                 : "Só os eventos que o OTDR salvou no arquivo."}
             </span>
+            <label className="ml-auto flex items-center gap-1 text-xs text-gray-600">Potência TX (dBm, opcional)
+              <input className="w-20 rounded-lg border border-gray-300 px-2 py-1" inputMode="decimal" placeholder="Ex.: 3,5" value={tx} onChange={(e) => setTx(e.target.value)} />
+            </label>
+            <label className="flex items-center gap-1 text-xs text-gray-600">RX (dBm, opcional)
+              <input className="w-20 rounded-lg border border-gray-300 px-2 py-1" inputMode="decimal" placeholder="Ex.: -18,2" value={rx} onChange={(e) => setRx(e.target.value)} />
+            </label>
           </div>
         ) : null}
         {pedindo && analista ? (
@@ -172,6 +192,9 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
               {sor.localA || sor.localB ? ` · ${sor.localA || "?"} → ${sor.localB || "?"}` : ""}
               {sor.data ? ` · medida em ${sor.data.toLocaleString("pt-BR")}` : ""}
             </p>
+            {textoPotencia({ txDbm: lerDbm(tx), rxDbm: lerDbm(rx) }, analise.perdaTotalDb) ? (
+              <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-[#163A6B]">{textoPotencia({ txDbm: lerDbm(tx), rxDbm: lerDbm(rx) }, analise.perdaTotalDb)}</p>
+            ) : null}
 
             {sor.traco.length ? <Traco sor={sor} niveis={analise.diagnosticos.map((d) => d.nivel)} selecionado={selecionado} selecionar={setSelecionado} /> : null}
 

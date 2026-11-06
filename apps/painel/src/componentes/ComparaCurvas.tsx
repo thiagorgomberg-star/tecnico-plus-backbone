@@ -5,13 +5,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Comparacao, compararAntesDepois, compararBidirecional, compararFibras, fimDaFibra, Momento, ROTULO_MOMENTO, ROTULO_SENTIDO, Sentido, tracoParaComparar,
 } from "@/lib/comparaSor";
+import SimularCurvaKmz from "@/componentes/SimularCurvaKmz";
 import { pdfDoElemento } from "@/lib/pdfDoElemento";
-import { curvaCompleta, km, lerSor, Nivel, Sor, rotuloOnda } from "@/lib/sor";
+import { curvaCompleta, EventoSor, km, lerDbm, lerSor, Nivel, rotuloOnda, Sor, textoPotencia } from "@/lib/sor";
 import { supabase } from "@/lib/supabase";
 
 export type CurvaParaComparar = {
   chave: string; nome: string; bucket?: string; caminho?: string; arquivo?: File; salvaId?: string;
   fibra: string; sentido: Sentido | ""; momento: Momento;
+  tx?: string; rx?: string; // potência em dBm, opcional (digitada)
 };
 type Tipo = "bidirecional" | "antesDepois" | "fibras";
 
@@ -24,7 +26,7 @@ const fmt = (n: number | null, casas = 2) => (n == null ? "—" : n.toLocaleStri
 // Cada curva é marcada com a fibra, o sentido e o momento, e a lista pode ser filtrada pela fibra.
 export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar }: {
   curvas: CurvaParaComparar[];
-  aoMudar: (chave: string, mudanca: Partial<Pick<CurvaParaComparar, "fibra" | "sentido" | "momento">>) => void;
+  aoMudar: (chave: string, mudanca: Partial<Pick<CurvaParaComparar, "fibra" | "sentido" | "momento" | "tx" | "rx">>) => void;
   analisarSozinha: (c: CurvaParaComparar) => void;
   fechar: () => void;
 }) {
@@ -90,6 +92,19 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
   const mesmaFibra = tipo === "fibras" && c1 && c2 && curva(c1)?.fibra && curva(c1)!.fibra.trim() === curva(c2)?.fibra.trim();
   const fibraDiferente = tipo !== "fibras" && c1 && c2 && curva(c1)?.fibra && curva(c2)?.fibra && curva(c1)!.fibra.trim() !== curva(c2)!.fibra.trim();
 
+  // No mapa: no bidirecional vão os eventos com a perda média (distâncias contadas de A); nos outros, a curva 1.
+  const [noMapa, setNoMapa] = useState(false);
+  const paraMapa = useMemo(() => {
+    if (!s1 || !comp) return null;
+    if (comp.tipo !== "bidirecional") return { sor: s1, nome: curva(c1)?.nome ?? "curva" };
+    const eventos: EventoSor[] = comp.linhas.map((l, i) => ({
+      numero: i + 1, distanciaKm: l.km, perdaDb: l.resultado ?? l.perda1 ?? l.perda2 ?? 0, reflectanciaDb: 0, inclinacaoDbKm: 0,
+      reflexivo: l.reflexivo, fimDeFibra: false, manual: false, codigo: "", comentario: "", detectado: l.lidoDaCurva,
+    }));
+    eventos.push({ numero: eventos.length + 1, distanciaKm: comp.comprimento1Km, perdaDb: 0, reflectanciaDb: 0, inclinacaoDbKm: 0, reflexivo: true, fimDeFibra: true, manual: false, codigo: "", comentario: "" });
+    return { sor: { ...s1, eventos }, nome: `Bidirecional ${curva(c1)?.nome ?? ""} × ${curva(c2)?.nome ?? ""}`, soEventos: true };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comp]);
   const conteudo = useRef<HTMLDivElement>(null);
   const [gerando, setGerando] = useState(false);
   let analista: { nome?: string; cargo?: string; empresa?: string; registro?: string } = {};
@@ -119,13 +134,23 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
           <button className="rounded-lg bg-[#163A6B] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50" disabled={!comp || gerando} onClick={baixarPdf}>
             {gerando ? "Gerando PDF..." : "Baixar PDF"}
           </button>
+          <button className="rounded-lg border border-blue-700 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50" disabled={!paraMapa} onClick={() => setNoMapa(true)}>Localizar no mapa (KMZ)</button>
           <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={fechar}>Fechar</button>
         </div>
+        {noMapa && paraMapa ? (
+          <div className="fixed inset-0 z-[55] flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={() => setNoMapa(false)}>
+            <div className="w-full max-w-6xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-end pb-2"><button className="rounded-lg bg-white px-3 py-1.5 text-sm shadow hover:bg-gray-50" onClick={() => setNoMapa(false)}>Voltar ao comparativo</button></div>
+              {comp?.tipo === "bidirecional" ? <p className="mb-2 rounded-lg bg-white px-3 py-2 text-xs text-gray-600">Eventos com a perda média dos dois sentidos, contados a partir de A: escolha o OTDR ligado em A.</p> : null}
+              <SimularCurvaKmz inicial={paraMapa} />
+            </div>
+          </div>
+        ) : null}
 
         <div className="grid gap-3 border-b border-gray-200 p-4">
           <table className="w-full text-left text-sm">
             <thead className="text-xs text-gray-500">
-              <tr><th className="py-1">Curva</th><th>Fibra</th><th>Sentido</th><th>Momento</th><th>Comprimento</th><th /></tr>
+              <tr><th className="py-1">Curva</th><th>Fibra</th><th>Sentido</th><th>Momento</th><th>TX dBm (opcional)</th><th>RX dBm (opcional)</th><th>Comprimento</th><th /></tr>
             </thead>
             <tbody>
               {curvas.map((c) => {
@@ -149,6 +174,8 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
                         <option value="">—</option><option value="antes">Antes</option><option value="depois">Depois</option>
                       </select>
                     </td>
+                    <td><input aria-label={`Potência TX de ${c.nome}`} className={`${campo} w-20`} inputMode="decimal" placeholder="Ex.: 3,5" value={c.tx ?? ""} onChange={(e) => aoMudar(c.chave, { tx: e.target.value })} /></td>
+                    <td><input aria-label={`Potência RX de ${c.nome}`} className={`${campo} w-20`} inputMode="decimal" placeholder="Ex.: -18,2" value={c.rx ?? ""} onChange={(e) => aoMudar(c.chave, { rx: e.target.value })} /></td>
                     <td className="whitespace-nowrap">{s && typeof s !== "string" ? km(fimDaFibra(s)) : "—"}</td>
                     <td className="text-right"><button className="rounded-lg border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={() => analisarSozinha(c)}>Analisar só esta</button></td>
                   </tr>
@@ -224,6 +251,10 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
                 extra={tipo === "fibras" ? `diferença ${fmt(Math.abs(comp.perdaTotal2Db - comp.perdaTotal1Db))} dB` : tipo === "bidirecional" ? `média ${fmt((comp.perdaTotal1Db + comp.perdaTotal2Db) / 2)} dB` : `diferença ${fmt(comp.perdaTotal2Db - comp.perdaTotal1Db)} dB`} />
               <Indicador rotulo="Eventos" valor={`${comp.linhas.length}`} extra={`${comp.criticos} crítico(s) · ${comp.atencao} atenção`} alerta={comp.criticos > 0} />
             </div>
+            {[c1, c2].map((k, i) => {
+              const c = curva(k), t = c ? textoPotencia({ txDbm: lerDbm(c.tx ?? ""), rxDbm: lerDbm(c.rx ?? "") }, i ? comp.perdaTotal2Db : comp.perdaTotal1Db) : "";
+              return t ? <p key={k} className="rounded-lg bg-blue-50 px-3 py-2 text-[#163A6B]"><b style={{ color: CORES_CURVA[i] }}>{nomes[i]}</b> · {t}</p> : null;
+            })}
             {comp.avisos.map((a, i) => (
               <p key={i} className="rounded-lg px-3 py-2" style={{ background: `${COR[a.nivel]}14`, color: a.nivel === "ok" ? "#14532d" : COR[a.nivel] }}>{a.texto}</p>
             ))}
