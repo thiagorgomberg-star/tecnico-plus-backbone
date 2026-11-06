@@ -218,7 +218,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
 
   // Foto da galeria: entra com a máscara e a data gravada na foto, sem localização.
   async function daGaleria() {
-    const opcoes: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], allowsMultipleSelection: !unica, exif: true, quality: 1 };
+    const opcoes: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], allowsMultipleSelection: !unica, exif: true, quality: 0.9 };
     let r: ImagePicker.ImagePickerResult;
     try {
       r = await ImagePicker.launchImageLibraryAsync(opcoes);
@@ -303,6 +303,25 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
         timerBalao.current = setTimeout(() => setBalao(null), 7000);
       }
   }
+
+  // Foto que o celular não consegue abrir (formato da galeria, arquivo corrompido) não pode travar a fila:
+  // avisa, registra e segue para a próxima. Sem resposta em 20 s também conta como falha.
+  const carregou = useRef<string | null>(null);
+  function descartarAtual(erro: string) {
+    if (!atual) return;
+    registrarErro(new Error(`Máscara não carregou a foto: ${erro}`));
+    Alert.alert('Foto não aceita', `Não foi possível abrir esta foto (${erro}). Tente outra ou tire pela câmera.`);
+    alterarCruas((l) => l.filter((f) => f.uri !== atual.uri));
+    try { new File(atual.uri).delete(); } catch { /* já removida */ }
+    setFila((f) => f.slice(1));
+  }
+  useEffect(() => {
+    if (!atual) return;
+    const uri = atual.uri;
+    const t = setTimeout(() => { if (carregou.current !== uri) descartarAtual('demorou demais para abrir'); }, 20000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [atual?.uri]);
 
   // Chamado quando a máscara terminou de desenhar a foto: grava a imagem final e põe na fila.
   async function salvarComMascara() {
@@ -475,7 +494,8 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
       {/* Desenhada fora da tela só para gerar a imagem final com a máscara. */}
       {dados && (
         <View style={{ position: 'absolute', left: -10000, top: 0 }} pointerEvents="none">
-          <MascaraFoto key={dados.uri} ref={mascara} dados={dados} aoCarregar={() => setTimeout(salvarComMascara, 400)} />
+          <MascaraFoto key={dados.uri} ref={mascara} dados={dados} aoCarregar={() => { carregou.current = dados.uri; setTimeout(salvarComMascara, 400); }}
+            aoFalhar={(erro) => descartarAtual(erro)} />
         </View>
       )}
     </View>

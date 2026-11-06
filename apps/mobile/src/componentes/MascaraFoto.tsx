@@ -23,9 +23,9 @@ export type DadosMascara = {
 };
 
 export type RefMascara = ComponentRef<typeof View>;
-type Props = { dados: DadosMascara; aoCarregar?: () => void; ref?: Ref<RefMascara> };
+type Props = { dados: DadosMascara; aoCarregar?: () => void; aoFalhar?: (erro: string) => void; ref?: Ref<RefMascara> };
 
-export default function MascaraFoto({ dados, aoCarregar, ref }: Props) {
+export default function MascaraFoto({ dados, aoCarregar, aoFalhar, ref }: Props) {
   const s = LARGURA_MASCARA / REF;
   const alturaFoto = (LARGURA_MASCARA * dados.alturaFoto) / dados.larguraFoto;
   const alturaBarra = alturaFoto * 0.15;
@@ -34,7 +34,8 @@ export default function MascaraFoto({ dados, aoCarregar, ref }: Props) {
     <View ref={ref} collapsable={false} style={{ width: LARGURA_MASCARA, backgroundColor: '#fff' }}>
       <View style={{ width: LARGURA_MASCARA, height: alturaFoto }}>
         {/* fadeDuration 0: no Android a imagem entra com fade de 300 ms; capturada no meio dele, a foto sai esbranquiçada. */}
-        <Image source={{ uri: dados.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" fadeDuration={0} onLoad={aoCarregar} />
+        <Image source={{ uri: dados.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" fadeDuration={0} onLoad={aoCarregar}
+          onError={(e) => aoFalhar?.(String(e.nativeEvent?.error ?? 'imagem não abriu'))} />
         <View style={{ position: 'absolute', left: 18 * s, bottom: 16 * s }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={[estilos.sombra, { color: '#fff', fontSize: 100 * s, fontFamily: 'RobotoCondensed_400Regular' }]}>
