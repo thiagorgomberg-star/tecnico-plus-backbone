@@ -248,7 +248,9 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
           ({ width, height } = await new Promise<{ width: number; height: number }>((ok, falha) =>
             Image.getSize(copia.uri, (w, h) => ok({ width: w, height: h }), falha)));
         }
-        await registrar({ uri: copia.uri, width, height }, { tiradaEm: data, posicao: null, endereco: null });
+        // Antes/depois só são aceitos na horizontal: foto em pé entra inteira num quadro deitado 4:3.
+        const emPe = height >= width;
+        await registrar({ uri: copia.uri, width: emPe ? 4000 : width, height: emPe ? 3000 : height, conter: emPe }, { tiradaEm: data, posicao: null, endereco: null });
       }
     } catch (e) {
       registrarErro(e);
@@ -258,7 +260,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
     }
   }
 
-  async function registrar(foto: { uri: string; width: number; height: number },
+  async function registrar(foto: { uri: string; width: number; height: number; conter?: boolean },
     origem?: { tiradaEm: Date | null; posicao: { latitude: number; longitude: number } | null; endereco?: string | null }) {
       // Foto da galeria nunca recebe a posição de agora: só a gravada nela (se tiver).
       const pos = origem ? origem.posicao : posicao.current;
@@ -267,6 +269,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
         uri: foto.uri,
         larguraFoto: foto.width,
         alturaFoto: foto.height,
+        conter: foto.conter,
         latitude: pos?.latitude ?? null,
         longitude: pos?.longitude ?? null,
         endereco: origem?.endereco !== undefined ? origem.endereco : endereco.current?.texto ?? null,

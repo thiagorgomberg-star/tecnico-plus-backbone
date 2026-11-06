@@ -12,6 +12,8 @@ export type DadosMascara = {
   uri: string;
   larguraFoto: number;
   alturaFoto: number;
+  // Foto em pé (da galeria) vai inteira dentro de um quadro deitado 4:3, com fundo escuro: antes/depois têm de sair na horizontal.
+  conter?: boolean;
   tiradaEm: Date;
   latitude: number | null;
   longitude: number | null;
@@ -32,9 +34,9 @@ export default function MascaraFoto({ dados, aoCarregar, aoFalhar, ref }: Props)
 
   return (
     <View ref={ref} collapsable={false} style={{ width: LARGURA_MASCARA, backgroundColor: '#fff' }}>
-      <View style={{ width: LARGURA_MASCARA, height: alturaFoto }}>
+      <View style={{ width: LARGURA_MASCARA, height: alturaFoto, backgroundColor: dados.conter ? '#111' : undefined }}>
         {/* fadeDuration 0: no Android a imagem entra com fade de 300 ms; capturada no meio dele, a foto sai esbranquiçada. */}
-        <Image source={{ uri: dados.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" fadeDuration={0} onLoad={aoCarregar}
+        <Image source={{ uri: dados.uri }} style={StyleSheet.absoluteFill} resizeMode={dados.conter ? 'contain' : 'cover'} fadeDuration={0} onLoad={aoCarregar}
           onError={(e) => aoFalhar?.(String(e.nativeEvent?.error ?? 'imagem não abriu'))} />
         <View style={{ position: 'absolute', left: 18 * s, bottom: 16 * s }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
