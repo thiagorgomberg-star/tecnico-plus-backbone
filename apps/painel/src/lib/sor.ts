@@ -41,6 +41,12 @@ export type Sor = {
   niveis: Float32Array; // todos os pontos do traço em dB, um a cada `resolucaoM`, para o zoom
 };
 
+const JANELAS = [850, 1300, 1310, 1383, 1410, 1490, 1550, 1610, 1625, 1650];
+function ondaNominal(nm: number) {
+  const j = JANELAS.reduce((m, x) => (Math.abs(x - nm) < Math.abs(m - nm) ? x : m));
+  return Math.abs(j - nm) <= 15 ? j : Math.round(nm);
+}
+
 class Leitor {
   private v: DataView;
   private bytes: Uint8Array;
@@ -108,7 +114,7 @@ export function lerSor(dados: ArrayBuffer | Uint8Array): Sor {
       s.fibra = l.texto();
       if (v2) l.u16(); // tipo de fibra
       const onda = l.u16();
-      if (onda) s.comprimentoOndaNm = onda;
+      if (onda) s.comprimentoOndaNm = ondaNominal(onda);
       s.localA = l.texto();
       s.localB = l.texto();
       l.texto(); // código do cabo
@@ -132,8 +138,10 @@ export function lerSor(dados: ArrayBuffer | Uint8Array): Sor {
   const quando = l.u32();
   s.data = quando ? new Date(quando * 1000) : null;
   l.fixo(2); // unidade
+  // FxdParams traz a onda real do laser (ex.: 1618,2 nm); o relatório usa a nominal (1625), que vem no GenParams.
+  // Sem a nominal, arredonda para a janela mais próxima.
   const onda = l.u16() / 10;
-  if (onda) s.comprimentoOndaNm = onda;
+  if (onda && !s.comprimentoOndaNm) s.comprimentoOndaNm = ondaNominal(onda);
   l.i32();
   if (v2) l.i32();
   const nPulsos = Math.min(l.u16(), 10);
