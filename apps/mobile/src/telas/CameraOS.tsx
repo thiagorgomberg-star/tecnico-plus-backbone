@@ -14,6 +14,7 @@ import MascaraFoto, { DadosMascara, RefMascara } from '../componentes/MascaraFot
 import { compartilharFoto } from '../lib/compartilharFoto';
 import { minhaEquipe, MinhaEquipe } from '../lib/equipe';
 import { caminhoFotoOs, enfileirar, legendarFoto } from '../lib/fila';
+import { registrarErro } from '../lib/erros';
 import { cores } from '../lib/estilo';
 import { enderecoDe } from '../lib/localizacao';
 import { referenciasLocais } from '../lib/referencia';
@@ -217,7 +218,20 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
 
   // Foto da galeria: entra com a máscara e a data gravada na foto, sem localização.
   async function daGaleria() {
-    const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: !unica, exif: true, quality: 1 });
+    const opcoes: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], allowsMultipleSelection: !unica, exif: true, quality: 1 };
+    let r: ImagePicker.ImagePickerResult;
+    try {
+      r = await ImagePicker.launchImageLibraryAsync(opcoes);
+    } catch (e) {
+      // Alguns Android (10/11) recusam ler o EXIF da galeria sem permissão extra: tenta de novo sem o EXIF (fica sem a data da foto).
+      registrarErro(e);
+      try {
+        r = await ImagePicker.launchImageLibraryAsync({ ...opcoes, exif: false });
+      } catch (e2) {
+        registrarErro(e2);
+        return Alert.alert('Não foi possível abrir a galeria', String(e2));
+      }
+    }
     if (r.canceled) return;
     setTirando(true);
     try {
@@ -228,9 +242,16 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
         // A cópia vai para o cache: registrar() move o arquivo, e o original da galeria não pode sumir.
         const copia = new File(Paths.cache, `galeria-${randomUUID()}.jpg`);
         new File(a.uri).copy(copia);
-        await registrar({ uri: copia.uri, width: a.width, height: a.height }, { tiradaEm: data, posicao: null, endereco: null });
+        // Algumas galerias não informam o tamanho; sem ele a máscara não consegue montar a foto.
+        let { width, height } = a;
+        if (!width || !height) {
+          ({ width, height } = await new Promise<{ width: number; height: number }>((ok, falha) =>
+            Image.getSize(copia.uri, (w, h) => ok({ width: w, height: h }), falha)));
+        }
+        await registrar({ uri: copia.uri, width, height }, { tiradaEm: data, posicao: null, endereco: null });
       }
     } catch (e) {
+      registrarErro(e);
       Alert.alert('Erro ao trazer da galeria', String(e));
     } finally {
       setTirando(false);
@@ -326,6 +347,7 @@ export default function CameraOS({ osId, fotosJaFeitas, minimo, tipoInicial, usu
         setMiniaturas((m) => [destino.uri, ...m]);
       }
     } catch (e) {
+      registrarErro(e);
       Alert.alert('Erro ao salvar a foto', String(e));
     } finally {
       setFila((f) => f.slice(1));
