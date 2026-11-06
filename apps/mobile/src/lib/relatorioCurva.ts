@@ -5,6 +5,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
 import { dataUrl } from './relatorioPdf';
+import { Comparacao, fimDaFibra, tracoParaComparar } from './comparaSor';
 import { analisarSor, km, Nivel, Sor, tracoJanela } from './sor';
 
 const COR: Record<Nivel, string> = { ok: '#1E9E4A', atencao: '#D99A00', critico: '#D0453B' };
@@ -133,4 +134,70 @@ export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm:
   if (destino.exists) destino.delete();
   new File(uri).move(destino);
   await Sharing.shareAsync(destino.uri, { mimeType: 'application/pdf', dialogTitle: 'Análise da curva OTDR', UTI: 'com.adobe.pdf' });
+}
+
+// PDF do comparativo de duas curvas (A → B × B → A ou antes × depois), gerado no celular.
+export async function compartilharComparativo(c: Comparacao, s1: Sor, s2: Sor,
+  o: { nomes: string[]; curva1: string; curva2: string; fibra: string; modo: 'completa' | 'otdr' }) {
+  const bi = c.tipo === 'bidirecional';
+  const analista = await AsyncStorage.getItem('analista-curva').then((t) => (t ? JSON.parse(t) as Partial<Analista> : null)).catch(() => null);
+  const logo = await Asset.fromModule(require('../../assets/mascara/logo-multivale.png')).downloadAsync()
+    .then((x) => (x.localUri ? dataUrl(x.localUri) : null)).catch(() => null);
+  const t1 = tracoParaComparar(s1), t2 = tracoParaComparar(s2, bi ? { comprimentoKm: fimDaFibra(s1) } : undefined);
+  const todos = [...t1, ...t2];
+  const Lg = 960, Ag = 300, m = { e: 44, d: 10, t: 24, b: 22 };
+  const maxKm = Math.max(...todos.map((p) => p.km), 1);
+  const dbs = todos.map((p) => p.db).sort((a, b) => a - b);
+  const minDb = dbs[Math.floor(dbs.length * 0.02)] ?? -1, maxDb = Math.max(1, dbs[Math.floor(dbs.length * 0.995)] ?? 1);
+  const x = (k: number) => m.e + (k / maxKm) * (Lg - m.e - m.d);
+  const y = (d: number) => m.t + ((maxDb - Math.min(maxDb, Math.max(minDb, d))) / (maxDb - minDb || 1)) * (Ag - m.t - m.b);
+  const cam = (t: { km: number; db: number }[]) => t.map((p, i) => `${i ? 'L' : 'M'}${x(p.km).toFixed(1)},${y(p.db).toFixed(1)}`).join('');
+  const pk = passoEixo(maxKm, 10);
+  const svg = `<svg viewBox="0 0 ${Lg} ${Ag}" width="100%" style="background:#F8FAFC;border:1px solid #e5e7eb;border-radius:6px">
+    ${Array.from({ length: Math.floor(maxKm / pk) + 1 }, (_, i) => i * pk).map((k) => `<line x1="${x(k)}" x2="${x(k)}" y1="${m.t}" y2="${Ag - m.b}" stroke="#E4E7EC"/><text x="${x(k)}" y="${Ag - 6}" font-size="10" fill="#667085" text-anchor="middle">${rotuloKm(k)}</text>`).join('')}
+    <path d="${cam(t1)}" fill="none" stroke="#163A6B" stroke-width="1.3"/><path d="${cam(t2)}" fill="none" stroke="#E07B00" stroke-width="1.3"/>
+    ${c.linhas.map((l, i) => `<line x1="${x(l.km)}" x2="${x(l.km)}" y1="${m.t}" y2="${Ag - m.b}" stroke="${COR[l.nivel]}" stroke-dasharray="4 3"/>
+      <circle cx="${x(l.km)}" cy="${m.t - 12}" r="9" fill="${COR[l.nivel]}"/><text x="${x(l.km)}" y="${m.t - 8}" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">${i + 1}</text>`).join('')}
+  </svg>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+    @page { size: A4; margin: 12mm; } body { font-family: sans-serif; font-size: 10.5pt; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    header { display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #ccc; padding-bottom: 10px; } header img { height: 44px; } header h1 { margin: 0; font-size: 16pt; }
+    h2 { color: #0572CE; border-bottom: 2px solid #0572CE; font-size: 10pt; text-transform: uppercase; margin: 16px 0 6px; padding-bottom: 2px; }
+    .s { color: #6b7280; } .l { color: #6b7280; font-size: 8.5pt; display: block; }
+    .ind { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; } .ind div { border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px; } .ind b { display: block; font-size: 13pt; }
+    table { width: 100%; border-collapse: collapse; font-size: 9pt; } td, th { padding: 4px 3px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
+    th { color: #6b7280; font-weight: normal; font-size: 8.5pt; } tr { break-inside: avoid; } .selo { border-radius: 10px; padding: 1px 7px; font-weight: bold; font-size: 8.5pt; white-space: nowrap; }
+    .aviso { border-radius: 6px; padding: 6px 10px; margin: 4px 0; }
+  </style></head><body>
+  <header>${logo ? `<img src="${logo}">` : ''}<div style="flex:1"><h1>Comparativo de curvas OTDR</h1>
+    <div class="s">${bi ? 'Bidirecional (A → B × B → A)' : 'Antes × depois'}${o.fibra ? ` · Fibra ${esc(o.fibra)}` : ''}</div></div>
+    <div class="s" style="text-align:right;font-size:9pt">Gerado em ${new Date().toLocaleString('pt-BR')}${analista?.nome ? `<br>por ${esc(analista.nome)}` : ''}</div></header>
+  <p class="s"><b style="color:#163A6B">■ ${o.nomes[0]}</b>: ${esc(o.curva1)} &nbsp; <b style="color:#E07B00">■ ${o.nomes[1]}</b>: ${esc(o.curva2)} · ${o.modo === 'completa' ? 'curva lida por inteiro' : 'somente eventos do OTDR'}</p>
+  <div class="ind">
+    <div><span class="l">Comprimento ${o.nomes[0]}</span><b>${km(c.comprimento1Km)}</b></div><div><span class="l">Comprimento ${o.nomes[1]}</span><b>${km(c.comprimento2Km)}</b></div>
+    <div><span class="l">Perda total ${o.nomes[0]}</span><b>${fmt(c.perdaTotal1Db)} dB</b></div>
+    <div><span class="l">Perda total ${o.nomes[1]}</span><b>${fmt(c.perdaTotal2Db)} dB</b><span class="l">${bi ? `média ${fmt((c.perdaTotal1Db + c.perdaTotal2Db) / 2)} dB` : `diferença ${fmt(c.perdaTotal2Db - c.perdaTotal1Db)} dB`}</span></div>
+  </div>
+  ${c.avisos.map((a) => `<div class="aviso" style="background:${COR[a.nivel]}1A;color:${a.nivel === 'ok' ? '#14532d' : COR[a.nivel]}">${esc(a.texto)}</div>`).join('')}
+  <h2>Curvas sobrepostas</h2>${svg}
+  <p class="l">dB relativos ao início de cada medição${bi ? '; B → A espelhada (OTDR no lado B, à direita)' : ''}.</p>
+  <h2>Eventos</h2>
+  <table><tr><th>#</th><th>Distância (de A)</th><th>${o.nomes[0]}</th><th>${o.nomes[1]}</th><th>${bi ? 'Média (perda real)' : 'Diferença'}</th><th>Situação</th><th>O que fazer</th></tr>
+  ${c.linhas.map((l, i) => `<tr><td>${i + 1}</td><td style="white-space:nowrap"><b>${km(l.km)}</b>${l.reflexivo ? '<span class="l">reflexivo</span>' : ''}</td>
+    <td>${l.perda1 == null ? '—' : `${fmt(l.perda1, 3)} dB`}</td><td>${l.perda2 == null ? '—' : `${fmt(l.perda2, 3)} dB`}</td>
+    <td><b>${l.resultado == null ? '—' : `${!bi && l.resultado > 0 ? '+' : ''}${fmt(l.resultado, 3)} dB`}</b></td>
+    <td><span class="selo" style="background:${COR[l.nivel]}1F;color:${COR[l.nivel]}">${esc(l.situacao)}</span></td><td>${esc(l.texto)}</td></tr>`).join('')}
+  </table>
+  <p class="s" style="font-size:8pt">${bi ? 'A perda real de cada emenda é a média dos dois sentidos. As distâncias do B → A foram espelhadas para contar a partir de A.' : 'Diferença = perda depois − perda antes. Piorou acima de 0,10 dB; acima de 0,30 dB é crítico.'}</p>
+  ${analista?.nome ? `<div style="display:flex;gap:24px;align-items:flex-end;margin-top:16px;break-inside:avoid">${[
+    ['Analista', analista.nome], ['Cargo / função', analista.cargo], ['Empresa', analista.empresa], ['Registro', analista.registro],
+  ].filter(([, v]) => v).map(([r, v]) => `<div><span class="l">${r}</span><b>${esc(v)}</b></div>`).join('')}
+    <div style="margin-left:auto;width:220px;text-align:center;border-top:1px solid #333;padding-top:3px;font-size:8.5pt">Assinatura</div></div>` : ''}
+  <p class="s" style="font-size:8pt;margin-top:12px;border-top:1px solid #ccc;padding-top:4px">Multivale Engenharia · Backbone · gerado pelo Técnico Plus</p>
+  </body></html>`;
+  const { uri } = await Print.printToFileAsync({ html });
+  const destino = new File(Paths.cache, `comparativo${o.fibra ? `-fibra-${o.fibra.replace(/[\\/:*?"<>|]+/g, '_')}` : ''}.pdf`);
+  if (destino.exists) destino.delete();
+  new File(uri).move(destino);
+  await Sharing.shareAsync(destino.uri, { mimeType: 'application/pdf', dialogTitle: 'Comparativo de curvas OTDR', UTI: 'com.adobe.pdf' });
 }

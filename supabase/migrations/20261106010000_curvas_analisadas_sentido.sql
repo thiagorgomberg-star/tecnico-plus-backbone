@@ -1,0 +1,1 @@
+alter table public.curvas_analisadas add column if not exists fibra text, add column if not exists sentido text check (sentido in ('AB','BA')), add column if not exists momento text check (momento in ('antes','depois'));
