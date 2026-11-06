@@ -206,6 +206,26 @@ export function compararFibras(f1: Sor, f2: Sor, nomes: [string, string] = ['Fib
   return resumir({ tipo: 'fibras', comprimento1Km: L1, comprimento2Km: L2, perdaTotal1Db: perdaTotal(f1), perdaTotal2Db: perdaTotal(f2), linhas, avisos });
 }
 
+// As duas curvas foram medidas do mesmo lado? Compara quantos eventos batem na mesma distância com e sem espelhar
+// e quão parecido é o traço (o espelhado cruza em X quando o sentido é o mesmo).
+export function mesmoSentido(a: Sor, b: Sor): boolean {
+  const L1 = fimDaFibra(a), L2 = fimDaFibra(b);
+  if (!L1 || !L2) return false;
+  const tol = tolerancia(a, b), ea = meio(a).map((e) => ({ km: e.distanciaKm, e }));
+  const conta = (bb: { km: number; e: EventoSor }[]) => parear(ea, bb, tol).filter((p) => p.x && p.y).length;
+  const direto = conta(meio(b).map((e) => ({ km: e.distanciaKm, e })));
+  const espelhado = conta(meio(b).map((e) => ({ km: (L2 - e.distanciaKm) * (L1 / L2), e })));
+  if (direto !== espelhado) return direto > espelhado;
+  // Empate: pelo traço. No mesmo sentido os dois caem juntos (diferença pequena); espelhado, um sobe e o outro desce.
+  const t1 = tracoParaComparar(a), t2 = tracoParaComparar(b), t2e = tracoParaComparar(b, { comprimentoKm: L1 });
+  const dif = (u: { km: number; db: number }[]) => {
+    let soma = 0, n = 0;
+    for (const p of t1) { if (p.km < 0.5 || p.km > L1 * 0.9) continue; const q = u.find((x) => x.km >= p.km); if (q) { soma += Math.abs(q.db - p.db); n++; } }
+    return n ? soma / n : Infinity;
+  };
+  return dif(t2) <= dif(t2e);
+}
+
 // Traço para sobrepor no gráfico: em dB relativos ao início de cada medição (0 = nível a 0,5 km da ponta onde o OTDR estava);
 // o B → A é espelhado nas distâncias de A.
 export function tracoParaComparar(s: Sor, espelharEm?: { comprimentoKm: number }) {

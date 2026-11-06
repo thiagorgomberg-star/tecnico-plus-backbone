@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  Comparacao, compararAntesDepois, compararBidirecional, compararFibras, fimDaFibra, Momento, ROTULO_MOMENTO, ROTULO_SENTIDO, Sentido, tracoParaComparar,
+  Comparacao, compararAntesDepois, compararBidirecional, compararFibras, fimDaFibra, mesmoSentido, Momento, ROTULO_MOMENTO, ROTULO_SENTIDO, Sentido, tracoParaComparar,
 } from "@/lib/comparaSor";
 import SimularCurvaKmz from "@/componentes/SimularCurvaKmz";
 import { pdfDoElemento } from "@/lib/pdfDoElemento";
@@ -33,7 +33,10 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
   const [lidas, setLidas] = useState<Record<string, Sor | string>>({});
   const [modo, setModo] = useState<"completa" | "otdr">("completa");
   const [fibra, setFibra] = useState("");
-  const [tipo, setTipo] = useState<Tipo>("bidirecional");
+  const [tipo, setTipoBruto] = useState<Tipo>("bidirecional");
+  // O tipo é sugerido pelas curvas (sentidos marcados ou, sem marca, pelo traço) até a pessoa escolher.
+  const tipoEscolhido = useRef(false);
+  const setTipo = (t: Tipo) => { tipoEscolhido.current = true; setTipoBruto(t); };
   const [c1, setC1] = useState("");
   const [c2, setC2] = useState("");
 
@@ -57,6 +60,19 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
   const sor = (chave: string) => { const s = lidas[chave]; return s && typeof s !== "string" ? (modo === "completa" ? curvaCompleta(s) : s) : null; };
 
   // Sugere o par conforme o tipo: A→B com B→A, ou antes com depois no mesmo sentido.
+  useEffect(() => {
+    if (tipoEscolhido.current) return;
+    const v = curvas.filter((c) => typeof lidas[c.chave] === "object");
+    if (v.length < 2) return;
+    const [a, b] = v, sa = lidas[a.chave] as Sor, sb = lidas[b.chave] as Sor;
+    const marcados = a.sentido && b.sentido;
+    const igual = marcados ? a.sentido === b.sentido : mesmoSentido(sa, sb);
+    if (!igual) return setTipoBruto("bidirecional");
+    const fibrasDiferentes = a.fibra.trim() && b.fibra.trim() && a.fibra.trim() !== b.fibra.trim();
+    setTipoBruto(fibrasDiferentes || (!a.momento && !b.momento && !(a.fibra.trim() && a.fibra.trim() === b.fibra.trim())) ? "fibras" : "antesDepois");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Object.keys(lidas).length, curvas.map((c) => `${c.chave}${c.sentido}${c.momento}${c.fibra}`).join()]);
+
   useEffect(() => {
     const ok = (c: CurvaParaComparar) => typeof lidas[c.chave] === "object";
     const v = visiveis.filter(ok);
@@ -82,6 +98,8 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
   const nomeFibra = (k: string, n: number) => `Fibra ${curva(k)?.fibra.trim() || n}`;
   const nomes: [string, string] = tipo === "bidirecional" ? ["A → B", "B → A"] : tipo === "fibras"
     ? (() => { const a = nomeFibra(c1, 1), b = nomeFibra(c2, 2); return a === b ? ["Fibra 1", "Fibra 2"] : [a, b]; })() : ["Antes", "Depois"];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const pareceMesmo = useMemo(() => !!(s1 && s2 && mesmoSentido(s1, s2)), [c1, c2, modo, lidas[c1], lidas[c2]]);
   const comp: Comparacao | null = useMemo(
     () => (s1 && s2 ? (tipo === "bidirecional" ? compararBidirecional(s1, s2) : tipo === "fibras" ? compararFibras(s1, s2, nomes) : compararAntesDepois(s1, s2)) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -223,6 +241,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
               </div>
             </div>
           </div>
+          {tipo === "bidirecional" && !sentidoErrado && pareceMesmo ? <p className="text-sm text-amber-700">As duas curvas parecem medidas do mesmo lado (o gráfico cruza em X). Se for o caso, escolha "Duas fibras do mesmo cabo" ou "Antes × depois".</p> : null}
           {sentidoErrado ? <p className="text-sm text-amber-700">As duas curvas estão marcadas no mesmo sentido; para o bidirecional use uma A → B e uma B → A.</p> : null}
           {sentidoDiferente ? <p className="text-sm text-amber-700">As duas curvas estão marcadas em sentidos diferentes; aqui as duas precisam ser medidas do mesmo lado.</p> : null}
           {mesmaFibra ? <p className="text-sm text-amber-700">As duas curvas são da mesma fibra; escolha duas fibras diferentes do mesmo cabo.</p> : null}

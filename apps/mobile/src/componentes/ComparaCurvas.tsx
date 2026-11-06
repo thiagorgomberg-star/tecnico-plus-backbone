@@ -1,10 +1,10 @@
 import { File } from 'expo-file-system';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
 import {
-  Comparacao, compararAntesDepois, compararBidirecional, compararFibras, fimDaFibra, Momento, ROTULO_MOMENTO, ROTULO_SENTIDO, Sentido, tracoParaComparar,
+  Comparacao, compararAntesDepois, compararBidirecional, compararFibras, fimDaFibra, mesmoSentido, Momento, ROTULO_MOMENTO, ROTULO_SENTIDO, Sentido, tracoParaComparar,
 } from '../lib/comparaSor';
 import { cores, sombra } from '../lib/estilo';
 import { compartilharComparativo } from '../lib/relatorioCurva';
@@ -31,7 +31,10 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
   const [lidas, setLidas] = useState<Record<string, Sor | string>>({});
   const [modo, setModo] = useState<'completa' | 'otdr'>('completa');
   const [fibra, setFibra] = useState('');
-  const [tipo, setTipo] = useState<Tipo>('bidirecional');
+  const [tipo, setTipoBruto] = useState<Tipo>('bidirecional');
+  // O tipo é sugerido pelas curvas (sentidos marcados ou, sem marca, pelo traço) até a pessoa escolher.
+  const tipoEscolhido = useRef(false);
+  const setTipo = (t: Tipo) => { tipoEscolhido.current = true; setTipoBruto(t); };
   const [c1, setC1] = useState('');
   const [c2, setC2] = useState('');
   const [gerando, setGerando] = useState(false);
@@ -50,6 +53,19 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
   const fibras = [...new Set(lista.map((c) => c.fibra.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
   const visiveis = lista.filter((c) => (tipo === 'fibras' || !fibra || c.fibra.trim() === fibra) && typeof lidas[c.chave] === 'object');
   const sor = (k: string) => { const s = lidas[k]; return s && typeof s !== 'string' ? (modo === 'completa' ? curvaCompleta(s) : s) : null; };
+
+  useEffect(() => {
+    if (tipoEscolhido.current) return;
+    const v = lista.filter((c) => typeof lidas[c.chave] === 'object');
+    if (v.length < 2) return;
+    const [a, b] = v, sa = lidas[a.chave] as Sor, sb = lidas[b.chave] as Sor;
+    const marcados = a.sentido && b.sentido;
+    const igual = marcados ? a.sentido === b.sentido : mesmoSentido(sa, sb);
+    if (!igual) return setTipoBruto('bidirecional');
+    const fibrasDiferentes = a.fibra.trim() && b.fibra.trim() && a.fibra.trim() !== b.fibra.trim();
+    setTipoBruto(fibrasDiferentes || (!a.momento && !b.momento && !(a.fibra.trim() && a.fibra.trim() === b.fibra.trim())) ? 'fibras' : 'antesDepois');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Object.keys(lidas).length, lista.map((c) => `${c.chave}${c.sentido}${c.momento}${c.fibra}`).join()]);
 
   useEffect(() => {
     if (tipo === 'bidirecional') {
@@ -74,6 +90,8 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
   const nomeFibra = (k: string, n: number) => `Fibra ${curva(k)?.fibra.trim() || n}`;
   const nomes: [string, string] = tipo === 'bidirecional' ? ['A → B', 'B → A'] : tipo === 'fibras'
     ? (() => { const a = nomeFibra(c1, 1), b = nomeFibra(c2, 2); return a === b ? ['Fibra 1', 'Fibra 2'] : [a, b]; })() : ['Antes', 'Depois'];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const pareceMesmo = useMemo(() => !!(s1 && s2 && mesmoSentido(s1, s2)), [c1, c2, modo, lidas[c1], lidas[c2]]);
   const comp: Comparacao | null = useMemo(
     () => (s1 && s2 ? (tipo === 'bidirecional' ? compararBidirecional(s1, s2) : tipo === 'fibras' ? compararFibras(s1, s2, nomes) : compararAntesDepois(s1, s2)) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -171,6 +189,9 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
             <Chips valores={['otdr', 'completa'] as const} rotulo={(v) => (v === 'otdr' ? 'Somente do OTDR' : 'Ler a curva toda')} atual={modo} escolher={setModo} />
           </View>
 
+          {tipo === 'bidirecional' && pareceMesmo ? (
+            <Text style={[s.aviso, { backgroundColor: '#D99A001A', color: '#D99A00' }]}>As duas curvas parecem medidas do mesmo lado (o gráfico cruza em X). Se for o caso, escolha "2 fibras do cabo" ou "Antes × depois".</Text>
+          ) : null}
           {!comp || !s1 || !s2 ? (
             <Text style={s.sub}>{lista.length < 2 ? 'Marque pelo menos duas curvas.' : 'Escolha as duas curvas para comparar.'}</Text>
           ) : (
