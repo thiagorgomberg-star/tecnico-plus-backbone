@@ -2,11 +2,12 @@
 // único e o local do rompimento é posto sobre ele, em vez da linha reta entre as caixas.
 import JSZip from 'jszip';
 
-import { distanciaMetros, LanceCabo, Rompimento } from './fusao';
+import { CaixaRede, descontarReservas, distanciaMetros, LanceCabo, MarcaNoCaminho, refinarPorMarcas, ReservasAvulsas, Rompimento } from './fusao';
 
 export type Coord = { lat: number; lng: number };
 export type PontoKml = Coord & { nome: string };
-export type Tracado = { linhas: Coord[][]; pontos: PontoKml[] };
+// nomesLinhas: nome de cada linha com as pastas do KMZ ("Pasta / Subpasta / Nome"), para escolher o trecho num KMZ geral.
+export type Tracado = { linhas: Coord[][]; pontos: PontoKml[]; nomesLinhas?: string[] };
 
 const entidades = (t: string) => t.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
 const coords = (t: string): Coord[] => t.trim().split(/\s+/).map((c) => c.split(',').map(Number))
@@ -14,19 +15,27 @@ const coords = (t: string): Coord[] => t.trim().split(/\s+/).map((c) => c.split(
 
 export function lerKml(texto: string): Tracado {
   const linhas: Coord[][] = [];
+  const nomesLinhas: string[] = [];
   const pontos: PontoKml[] = [];
-  for (const m of texto.matchAll(/<Placemark[\s>][\s\S]*?<\/Placemark>/g)) {
+  const pastas: string[] = [];
+  for (const m of texto.matchAll(/<Folder[\s>]|<\/Folder>|<Placemark[\s>][\s\S]*?<\/Placemark>/g)) {
     const p = m[0];
+    if (p.startsWith('<Folder')) {
+      const depois = texto.slice(m.index! + p.length, m.index! + p.length + 400);
+      pastas.push(entidades(depois.match(/^\s*(?:<[^>]*>\s*)*?<name>([\s\S]*?)<\/name>/)?.[1] ?? ''));
+      continue;
+    }
+    if (p === '</Folder>') { pastas.pop(); continue; }
     const nome = entidades(p.match(/<name>([\s\S]*?)<\/name>/)?.[1] ?? '');
     for (const l of p.matchAll(/<LineString[\s>][\s\S]*?<coordinates>([\s\S]*?)<\/coordinates>/g)) {
       const c = coords(l[1]);
-      if (c.length >= 2) linhas.push(c);
+      if (c.length >= 2) { linhas.push(c); nomesLinhas.push([...pastas.filter(Boolean), nome || 'Linha sem nome'].join(' / ')); }
     }
     const pt = p.match(/<Point[\s>][\s\S]*?<coordinates>([\s\S]*?)<\/coordinates>/);
     if (pt) { const c = coords(pt[1])[0]; if (c) pontos.push({ ...c, nome }); }
   }
   // gx:Track / coordenadas soltas de outros formatos ficam de fora: o traçado do backbone vem em LineString.
-  return { linhas, pontos };
+  return { linhas, pontos, nomesLinhas };
 }
 
 function utf8(b: Uint8Array) {
@@ -48,6 +57,7 @@ export async function lerKmz(bytes: Uint8Array): Promise<Tracado> {
   for (const outro of kmls.filter((f) => f !== doc)) {
     const x = lerKml(await outro.async('string'));
     t.linhas.push(...x.linhas);
+    t.nomesLinhas?.push(...(x.nomesLinhas ?? []));
     t.pontos.push(...x.pontos);
   }
   return t;
@@ -209,8 +219,13 @@ export function simplificar(cam: Coord[], tol = 3): Coord[] {
 
 // O que fica guardado da rota: o caminho do cabo já encadeado e simplificado, e os pontos com nome.
 export type TracadoSalvo = { caminho: Coord[]; pontos: PontoKml[] };
-export function prepararTracado(t: Tracado): TracadoSalvo {
-  return { caminho: simplificar(encadear(t.linhas)), pontos: t.pontos.map((p) => ({ nome: p.nome.slice(0, 60), lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6) })) };
+// escolhidas: índices das linhas do trecho (KMZ geral com várias rotas); sem elas, usa todas.
+// Com escolha, só ficam os pontos perto do trecho (até 500 m).
+export function prepararTracado(t: Tracado, escolhidas?: number[]): TracadoSalvo {
+  const linhas = escolhidas?.length ? escolhidas.map((i) => t.linhas[i]).filter(Boolean) : t.linhas;
+  const caminho = simplificar(encadear(linhas));
+  const pontos = escolhidas?.length && caminho.length >= 2 ? t.pontos.filter((p) => projetar(caminho, p).dist <= 500) : t.pontos;
+  return { caminho, pontos: pontos.map((p) => ({ nome: p.nome.slice(0, 60), lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6) })) };
 }
 
 // Ponto com marca de metragem pertence ao cabo deste lance? Com traçado: até 300 m dele; sem: perto da reta entre as caixas.
@@ -219,4 +234,58 @@ export function pertoDoLance(cam: Coord[] | null, de: Coord, para: Coord) {
   const reta = [de, para];
   const limite = Math.max(500, distanciaMetros(de, para) * 0.3);
   return (p: Coord) => projetar(reta, p).dist <= limite;
+}
+
+// Onde marcar um evento: marcas de metragem da vistoria (mais preciso) > traçado do KMZ > linha reta entre as caixas.
+export function pontoDoEvento(r: Rompimento, lances: LanceCabo[], cam: Coord[] | null, medicao: CaixaRede, marcas: MarcaNoCaminho[]) {
+  const noTracado = cam ? rompimentoNoTracado(r, lances, cam, medicao) : null;
+  const refino = r.tipo === 'lance' && marcas.length && r.lance.de.latitude != null && r.lance.para.latitude != null
+    ? refinarPorMarcas(r, marcas, pertoDoLance(cam, { lat: r.lance.de.latitude, lng: r.lance.de.longitude! }, { lat: r.lance.para.latitude, lng: r.lance.para.longitude! }))
+    : null;
+  const ponto: Coord | null = refino ? { lat: refino.lat, lng: refino.lng } : noTracado ? { lat: noTracado.lat, lng: noTracado.lng }
+    : r.tipo !== 'sem_medida' && r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null;
+  return { ponto, noTracado, refino };
+}
+
+// KML com todos os eventos de uma curva do OTDR marcados na rede (cor pela situação) e o ponto de medição.
+export type EventoNoMapa = { nome: string; desc: string; nivel: 'ok' | 'atencao' | 'critico'; ponto: Coord };
+export function kmlEventosCurva(nome: string, medicao: PontoKml | null, eventos: EventoNoMapa[]) {
+  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const c = (p: Coord) => `${p.lng.toFixed(7)},${p.lat.toFixed(7)},0`;
+  const estilo = (id: string, cor: string, icone: string, escala = 1.2) =>
+    `<Style id="${id}"><IconStyle><color>${cor}</color><scale>${escala}</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/${icone}.png</href></Icon></IconStyle></Style>`;
+  const marca = (n: string, d: string, e: string, p: Coord) =>
+    `<Placemark><name>${esc(n)}</name><description>${esc(d)}</description><styleUrl>#${e}</styleUrl><Point><coordinates>${c(p)}</coordinates></Point></Placemark>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${esc(nome)}</name>`
+    + estilo('critico', 'ff0000ff', 'caution', 1.4) + estilo('atencao', 'ff00a5ff', 'caution') + estilo('ok', 'ff00b000', 'placemark_circle')
+    + estilo('m', 'ffff7f00', 'triangle')
+    + (medicao ? marca(`Medição OTDR: ${medicao.nome}`, 'Ponto onde o OTDR foi ligado', 'm', medicao) : '')
+    + eventos.map((e) => marca(e.nome, e.desc, e.nivel, e.ponto)).join('')
+    + `</Document></kml>`;
+}
+
+// Eventos de uma curva do OTDR postos direto sobre o traçado do KMZ (sem precisar das caixas mapeadas):
+// a medição é numa ponta do traçado; a distância da fibra vira metros de cabo descontando o excesso de fibra
+// e as reservas técnicas (quantidade × metros) e anda pelo traçado.
+export type EventoNoTracado = { distanciaKm: number; metrosCabo: number; s: number; ponto: Coord; alemM: number; perto: { nome: string; dist: number } | null };
+export function eventosNoTracado(cam: Coord[], pontos: PontoKml[], distanciasKm: number[], o: { excessoPct?: number; reservas?: ReservasAvulsas | null }) {
+  const L = comprimento(cam);
+  return distanciasKm.map((d): EventoNoTracado => {
+    const semExcesso = d / (1 + (o.excessoPct ?? 0) / 100);
+    const metrosCabo = descontarReservas(semExcesso, L, o.reservas ?? null) * 1000;
+    const s = Math.min(metrosCabo, L);
+    const ponto = pontoEm(cam, s);
+    const perto = pontos.reduce<{ nome: string; dist: number } | null>((m, p) => {
+      const dist = distanciaMetros(p, ponto);
+      return dist <= 300 && (!m || dist < m.dist) ? { nome: p.nome, dist } : m;
+    }, null);
+    return { distanciaKm: d, metrosCabo, s, ponto, alemM: Math.max(0, metrosCabo - L), perto };
+  });
+}
+
+// Ponto do KMZ mais perto de uma ponta do traçado (para dizer "DGO X" em vez de "início da linha").
+export function pontaDoTracado(cam: Coord[], pontos: PontoKml[], fim: boolean) {
+  const p = fim ? cam[cam.length - 1] : cam[0];
+  const perto = pontos.map((x) => ({ nome: x.nome, dist: distanciaMetros(x, p) })).sort((a, b) => a.dist - b.dist)[0];
+  return { ...p, nome: perto && perto.dist <= 500 ? perto.nome : null };
 }

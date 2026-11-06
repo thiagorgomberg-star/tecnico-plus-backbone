@@ -694,6 +694,19 @@ export function localizarRompimento(lances: LanceCabo[], distanciaKm: number, ex
   return { tipo: 'alem', ultima, metrosDepois: resta - reservaFinal, lat: null, lng: null };
 }
 
+// Reservas técnicas que não estão cadastradas nas caixas: quantidade × metros de cada. O OTDR mede essa fibra
+// enrolada, mas ela não anda no mapa. "distribuidas": espalhadas ao longo do enlace (desconta na proporção);
+// "antes": todas entre a medição e o evento (desconta tudo).
+export type ReservasAvulsas = { quantidade: number; metros: number; modo: 'distribuidas' | 'antes' };
+export const totalReservasAvulsas = (r: ReservasAvulsas | null) => (r ? Math.max(0, r.quantidade) * Math.max(0, r.metros) : 0);
+export function descontarReservas(distanciaKm: number, enlaceM: number, r: ReservasAvulsas | null) {
+  const extra = totalReservasAvulsas(r);
+  if (!extra || !r) return distanciaKm;
+  const d = distanciaKm * 1000;
+  if (r.modo === 'antes' || !(enlaceM > 0)) return Math.max(0, d - extra) / 1000;
+  return (d * enlaceM) / (enlaceM + extra) / 1000;
+}
+
 export const fmtMetros = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(2).replace('.', ',')} km` : `${Math.round(m)} m`);
 const fmtMarca = (m: number) => `${m.toLocaleString('pt-BR')} m`;
 

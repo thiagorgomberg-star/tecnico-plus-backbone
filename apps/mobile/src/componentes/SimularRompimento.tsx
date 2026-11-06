@@ -6,7 +6,7 @@ import RolarComTeclado from './RolarComTeclado';
 
 import { cores } from '../lib/estilo';
 import {
-  CaixaRede, MarcaNoCaminho, refinarPorMarcas, descreverRompimento, fmtMetros, kmlRompimento, lancesDoEnlace, localizarRompimento, rotuloPonto, sentidoPadrao,
+  CaixaRede, descontarReservas, MarcaNoCaminho, refinarPorMarcas, ReservasAvulsas, totalReservasAvulsas, descreverRompimento, fmtMetros, kmlRompimento, lancesDoEnlace, localizarRompimento, rotuloPonto, sentidoPadrao,
 } from '../lib/fusao';
 import { kmlRompimentoTracado, pertoDoLance, rompimentoNoTracado, TracadoSalvo, trechoEntre } from '../lib/tracado';
 import Icone from './Icone';
@@ -26,6 +26,11 @@ export default function SimularRompimento({ aberto, fechar, caixas, medicao, tra
   const [km, setKm] = useState('');
   const [excesso, setExcesso] = useState('');
   const [sentido, setSentido] = useState<'frente' | 'tras'>(sentidoPadrao(medicao));
+  // Reservas técnicas que não estão cadastradas nas caixas: quantidade × metros de cada.
+  const [qtdReservas, setQtdReservas] = useState('');
+  const [metrosReserva, setMetrosReserva] = useState('');
+  const [modoReserva, setModoReserva] = useState<ReservasAvulsas['modo']>('distribuidas');
+  const reservas: ReservasAvulsas | null = numero(qtdReservas) && numero(metrosReserva) ? { quantidade: numero(qtdReservas)!, metros: numero(metrosReserva)!, modo: modoReserva } : null;
   useEffect(() => { if (aberto) setSentido(sentidoPadrao(medicao)); }, [aberto, medicao.id]);
 
   const lances = useMemo(() => {
@@ -34,7 +39,8 @@ export default function SimularRompimento({ aberto, fechar, caixas, medicao, tra
   }, [caixas, medicao.id, fibra, sentido]);
   const total = lances.reduce((s, l) => s + l.reservaDe + (l.metros ?? 0), 0);
   const distancia = numero(km);
-  const r = distancia != null ? localizarRompimento(lances, distancia, numero(excesso) ?? 0) : null;
+  const distanciaCabo = distancia != null ? descontarReservas(distancia, total, reservas) : null;
+  const r = distanciaCabo != null ? localizarRompimento(lances, distanciaCabo, numero(excesso) ?? 0) : null;
   // Com o KMZ da rota o ponto segue o traçado do cabo; sem ele (ou caixa longe do traçado), linha reta entre as caixas.
   const noTracado = r && tracado ? rompimentoNoTracado(r, lances, tracado.caminho, medicao) : null;
   // Postes da vistoria com marca de metragem no lance: o ponto fica entre os dois que cercam a marca (o mais preciso).
@@ -96,6 +102,24 @@ export default function SimularRompimento({ aberto, fechar, caixas, medicao, tra
             </View>
             <Text style={s.rotulo}>Excesso de fibra do cabo (%, opcional)</Text>
             <TextInput style={s.campo} keyboardType="decimal-pad" value={excesso} onChangeText={setExcesso} placeholder="0 (a distância do OTDR = metros de cabo)" placeholderTextColor={cores.apagado} />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.rotulo}>Reservas técnicas (qtd.)</Text>
+                <TextInput style={s.campo} keyboardType="number-pad" value={qtdReservas} onChangeText={setQtdReservas} placeholder="Ex.: 4" placeholderTextColor={cores.apagado} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.rotulo}>Metros de cada reserva</Text>
+                <TextInput style={s.campo} keyboardType="decimal-pad" value={metrosReserva} onChangeText={setMetrosReserva} placeholder="Ex.: 50" placeholderTextColor={cores.apagado} />
+              </View>
+            </View>
+            <Text style={s.rotulo}>Onde estão essas reservas?</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+              {([['distribuidas', 'Espalhadas pelo enlace'], ['antes', 'Todas antes do evento']] as const).map(([v, t]) => (
+                <Pressable key={v} style={[s.opcao, modoReserva === v && s.opcaoAtiva]} onPress={() => setModoReserva(v)}>
+                  <Text style={[s.opcaoTexto, modoReserva === v && { color: '#fff' }]}>{t}</Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
 
           <Text style={s.secao}>CAMINHO DA FIBRA {lances.length ? `· ${fmtMetros(total)}` : ''}</Text>
@@ -116,7 +140,7 @@ export default function SimularRompimento({ aberto, fechar, caixas, medicao, tra
             <View style={[s.resultado, r.tipo === 'sem_medida' && { borderColor: cores.alerta }]}>
               <Text style={s.resultadoTitulo}>{r.tipo === 'sem_medida' ? 'Falta dado para calcular' : 'Possível rompimento'}</Text>
               <Text style={s.resultadoTexto}>{descreverRompimento(r)}</Text>
-              <Text style={s.suave}>Medido em {medicao.identificacao}, fibra {fibra}, {km} km{numero(excesso) ? `, excesso ${excesso}%` : ''}.</Text>
+              <Text style={s.suave}>Medido em {medicao.identificacao}, fibra {fibra}, {km} km{numero(excesso) ? `, excesso ${excesso}%` : ''}{reservas ? `, ${reservas.quantidade} reserva(s) × ${reservas.metros} m (${fmtMetros(totalReservasAvulsas(reservas))} descontados: ${fmtMetros((distanciaCabo ?? 0) * 1000)} de cabo)` : ''}.</Text>
               {r.tipo !== 'sem_medida' ? (
                 <Text style={[s.suave, { marginTop: 4, color: refino || noTracado ? cores.sucesso : cores.alerta }]}>
                   {refino ? (refino.naReserva ? `Na reserva anotada em ${refino.naReserva} (marcas de metragem da vistoria).` : `Entre ${refino.entre[0]} e ${refino.entre[1]}, pelas marcas de metragem da vistoria.`) : noTracado ? `Posição sobre o traçado do KMZ${nomeTracado ? ` (${nomeTracado})` : ''}.` : tracado ? 'Caixas longe do traçado do KMZ: posição em linha reta entre as caixas.' : 'Sem KMZ: posição em linha reta entre as caixas.'}
