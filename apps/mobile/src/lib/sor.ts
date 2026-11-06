@@ -382,7 +382,7 @@ export function analisarSor(s: Sor, extensaoRotaKm?: number | null) {
         : 'Emenda dentro do esperado.';
     return { evento: e, tipo: e.perdaDb > 0.5 ? 'Perda / curvatura' : 'Emenda', nivel, texto: texto + lanceAlto };
   });
-  const perdaTotal = s.perdaTotalDb ?? s.eventos.reduce((t, e) => t + Math.max(0, e.perdaDb), 0);
+  const perdaTotal = s.perdaTotalDb || s.eventos.reduce((t, e) => t + Math.max(0, e.perdaDb), 0);
   return {
     comprimentoKm,
     perdaTotalDb: perdaTotal,
@@ -395,3 +395,16 @@ export function analisarSor(s: Sor, extensaoRotaKm?: number | null) {
 
 const dec = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const km = (n: number) => (n < 1 ? `${Math.round(n * 1000)} m` : `${n.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} km`);
+
+// O celular (Android) às vezes entrega o .SOR sem extensão ("Documento", "file"...): o arquivo vale pelo conteúdo.
+// Devolve o nome com ".sor" se o conteúdo for uma curva, ou null se não for.
+export function nomeDaCurva(nome: string, dados: ArrayBuffer | Uint8Array): string | null {
+  try {
+    const s = lerSor(dados);
+    if (/\.sor$/i.test(nome)) return nome;
+    const base = [s.cabo, s.fibra && `F${s.fibra}`, s.comprimentoOndaNm && `${s.comprimentoOndaNm}nm`].filter(Boolean).join("_") || nome || "curva";
+    return `${base.replace(/[\\/:*?"<>|]+/g, "_")}.sor`;
+  } catch {
+    return null;
+  }
+}

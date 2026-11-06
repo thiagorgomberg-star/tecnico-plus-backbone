@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import AnaliseSor from "@/componentes/AnaliseSor";
 import { excluirComConfirmacao } from "@/lib/excluir";
+import { nomeDaCurva } from "@/lib/sor";
 import { supabase } from "@/lib/supabase";
 
 type Rota = { id: string; trecho: string; descricao: string | null; link_kmz: string; ativo: boolean; regiao: string; extensao_km?: number | null };
@@ -182,7 +183,12 @@ function TrechoCurvas({ rota, curvas, alternar, recarregar }: { rota: Rota; curv
     if (!arquivos?.length) return;
     setEnviando(true);
     const { data: sessao } = await supabase.auth.getSession();
-    for (const arquivo of Array.from(arquivos)) {
+    for (const original of Array.from(arquivos)) {
+      // Curva sem extensão (comum no Android) é reconhecida pelo conteúdo e ganha ".sor" no nome.
+      const ehDoc = /^image\//.test(original.type) || /\.(pdf|jpe?g|png|webp|heic)$/i.test(original.name) || original.type === "application/pdf";
+      const nomeSor = ehDoc ? null : nomeDaCurva(original.name, new Uint8Array(await original.arrayBuffer()));
+      if (!ehDoc && !nomeSor) { alert(`${original.name}: não é curva .SOR, PDF nem imagem.`); continue; }
+      const arquivo = nomeSor && nomeSor !== original.name ? new File([original], nomeSor, { type: "application/octet-stream" }) : original;
       const nomeSeguro = arquivo.name.normalize("NFD").replace(/[^\w.-]+/g, "_");
       const caminho = `${rota.id}/${data}_${crypto.randomUUID().slice(0, 8)}_${nomeSeguro}`;
       const { error: erroUp } = await supabase.storage.from("curvas").upload(caminho, arquivo, { contentType: arquivo.type || "application/octet-stream" });
@@ -256,7 +262,7 @@ function TrechoCurvas({ rota, curvas, alternar, recarregar }: { rota: Rota; curv
             </label>
             <label className={`cursor-pointer rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800 ${enviando ? "opacity-50" : ""}`}>
               {enviando ? "Enviando..." : "Enviar curvas (.SOR ou PDF)"}
-              <input type="file" multiple accept=".sor,.SOR,.pdf,application/pdf,image/*" className="hidden" disabled={enviando} onChange={(e) => { enviar(e.target.files); e.target.value = ""; }} />
+              <input type="file" multiple className="hidden" disabled={enviando} onChange={(e) => { enviar(e.target.files); e.target.value = ""; }} />
             </label>
           </div>
           {curvas.length === 0 ? (

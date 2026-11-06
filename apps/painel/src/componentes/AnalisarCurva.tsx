@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import AnaliseSor from "@/componentes/AnaliseSor";
 import ComparaCurvas, { CurvaParaComparar } from "@/componentes/ComparaCurvas";
+import { nomeDaCurva } from "@/lib/sor";
 import { supabase } from "@/lib/supabase";
 
 type Rota = { id: string; trecho: string; regiao: string; extensao_km?: number | null };
@@ -58,7 +59,8 @@ export default function AnalisarCurva() {
 
   // A curva aberta do computador fica guardada (mesmo nome e tamanho não duplica) para abrir e compartilhar depois.
   async function guardar(arquivo: File): Promise<Analisada | null> {
-    const { data: existente } = await supabase.from("curvas_analisadas").select("*").eq("nome_arquivo", arquivo.name).eq("tamanho_bytes", arquivo.size).maybeSingle();
+    const { data: iguais } = await supabase.from("curvas_analisadas").select("*").eq("nome_arquivo", arquivo.name).eq("tamanho_bytes", arquivo.size).limit(1);
+    const existente = iguais?.[0];
     if (existente) return existente as Analisada;
     const id = crypto.randomUUID();
     const caminho = `analises/${id}-${arquivo.name.replace(/[^\w.\- ]/g, "_")}`;
@@ -70,7 +72,15 @@ export default function AnalisarCurva() {
     return data as Analisada;
   }
   async function abrirArquivo(lista: FileList | null) {
-    const arquivos = Array.from(lista ?? []);
+    // Aceita qualquer arquivo e confere pelo conteúdo: no Android o seletor esconde ou renomeia os .SOR.
+    const arquivos: File[] = [];
+    const recusados: string[] = [];
+    for (const f of Array.from(lista ?? [])) {
+      const nome = nomeDaCurva(f.name, new Uint8Array(await f.arrayBuffer()));
+      if (!nome) recusados.push(f.name);
+      else arquivos.push(nome === f.name ? f : new File([f], nome, { type: "application/octet-stream" }));
+    }
+    if (recusados.length) alert(`Não é uma curva .SOR do OTDR: ${recusados.join(", ")}`);
     if (!arquivos.length) return;
     if (arquivos.length === 1) {
       const arquivo = arquivos[0];
@@ -116,7 +126,7 @@ export default function AnalisarCurva() {
           </label>
           <label className="grid gap-1 text-sm">
             <span className="font-medium text-gray-700">Arquivo(s) .SOR do computador (vários abrem o comparativo)</span>
-            <input type="file" multiple accept=".sor,.SOR" className="rounded-lg border border-gray-300 p-1.5" onChange={(e) => { abrirArquivo(e.target.files); e.target.value = ""; }} />
+            <input type="file" multiple className="rounded-lg border border-gray-300 p-1.5" onChange={(e) => { abrirArquivo(e.target.files); e.target.value = ""; }} />
           </label>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg bg-[#163A6B]/5 p-3 text-sm">

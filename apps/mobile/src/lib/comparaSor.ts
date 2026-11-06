@@ -37,7 +37,7 @@ const dec = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2,
 const pulsoKm = (s: Sor) => (0.2042 * (s.pulsoNs || 100)) / 1000 / 2;
 const tolerancia = (a: Sor, b: Sor) => Math.min(1, Math.max(0.1, pulsoKm(a) + pulsoKm(b)));
 export const fimDaFibra = (s: Sor) => (s.eventos.find((e) => e.fimDeFibra) ?? s.eventos[s.eventos.length - 1])?.distanciaKm ?? 0;
-const perdaTotal = (s: Sor) => s.perdaTotalDb ?? s.eventos.reduce((t, e) => t + Math.max(0, e.perdaDb), 0);
+const perdaTotal = (s: Sor) => s.perdaTotalDb || s.eventos.reduce((t, e) => t + Math.max(0, e.perdaDb), 0);
 // Eventos do meio da fibra (sem o conector do OTDR e sem o fim).
 const meio = (s: Sor) => s.eventos.filter((e, i) => !e.fimDeFibra && !(i === 0 && e.distanciaKm < 0.05));
 
