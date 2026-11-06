@@ -99,7 +99,8 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
     setGerando(true);
     try {
       const blob = await pdfDoElemento(conteudo.current);
-      const nome = `comparativo-${fibra ? `fibra-${fibra}-` : ""}${new Date().toISOString().slice(0, 10)}.pdf`;
+      const rot = tipo === "fibras" ? `fibras-${nomes.map((n) => n.replace(/\D+/g, "")).join("x")}-` : tipo === "bidirecional" ? "AxB-BxA-" : "antes-depois-";
+      const nome = `comparativo-${rot}${fibra || (tipo !== "fibras" && curva(c1)?.fibra) ? `fibra-${fibra || curva(c1)?.fibra}-` : ""}${new Date().toISOString().slice(0, 10)}.pdf`;
       const url = URL.createObjectURL(blob);
       Object.assign(document.createElement("a"), { href: url, download: nome }).click();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
@@ -210,7 +211,8 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
                 Comparativo {tipo === "bidirecional" ? "bidirecional (A → B × B → A)" : tipo === "fibras" ? `de duas fibras do mesmo cabo (${nomes[0]} × ${nomes[1]})` : "antes × depois"}{tipo !== "fibras" && (fibra || curva(c1)?.fibra) ? ` · fibra ${fibra || curva(c1)?.fibra}` : ""}
               </div>
               <div className="text-xs text-gray-500">
-                <span style={{ color: CORES_CURVA[0] }}>■</span> {nomes[0]}: {curva(c1)?.nome} · <span style={{ color: CORES_CURVA[1] }}>■</span> {nomes[1]}: {curva(c2)?.nome}
+                <span style={{ color: CORES_CURVA[0] }}>■</span> {nomes[0]}: {curva(c1)?.nome}{tipo !== "fibras" && curva(c1)?.fibra ? ` (fibra ${curva(c1)!.fibra})` : ""} · {rotuloOnda(s1)}
+                {" "}· <span style={{ color: CORES_CURVA[1] }}>■</span> {nomes[1]}: {curva(c2)?.nome}{tipo !== "fibras" && curva(c2)?.fibra ? ` (fibra ${curva(c2)!.fibra})` : ""} · {rotuloOnda(s2)}
                 {" "}· {modo === "completa" ? "curva lida por inteiro" : "somente eventos do OTDR"} · gerado em {new Date().toLocaleString("pt-BR")}
               </div>
             </div>

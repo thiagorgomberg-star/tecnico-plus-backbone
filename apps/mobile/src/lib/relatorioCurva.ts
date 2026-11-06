@@ -172,7 +172,7 @@ export async function compartilharComparativo(c: Comparacao, s1: Sor, s2: Sor,
   <header>${logo ? `<img src="${logo}">` : ''}<div style="flex:1"><h1>Comparativo de curvas OTDR</h1>
     <div class="s">${bi ? 'Bidirecional (A → B × B → A)' : fb ? `Duas fibras do mesmo cabo (${esc(o.nomes[0])} × ${esc(o.nomes[1])})` : 'Antes × depois'}${o.fibra ? ` · Fibra ${esc(o.fibra)}` : ''}</div></div>
     <div class="s" style="text-align:right;font-size:9pt">Gerado em ${new Date().toLocaleString('pt-BR')}${analista?.nome ? `<br>por ${esc(analista.nome)}` : ''}</div></header>
-  <p class="s"><b style="color:#163A6B">■ ${o.nomes[0]}</b>: ${esc(o.curva1)} &nbsp; <b style="color:#E07B00">■ ${o.nomes[1]}</b>: ${esc(o.curva2)} · ${o.modo === 'completa' ? 'curva lida por inteiro' : 'somente eventos do OTDR'}</p>
+  <p class="s"><b style="color:#163A6B">■ ${o.nomes[0]}</b>: ${esc(o.curva1)} (${rotuloOnda(s1)}) &nbsp; <b style="color:#E07B00">■ ${o.nomes[1]}</b>: ${esc(o.curva2)} (${rotuloOnda(s2)}) · ${o.modo === 'completa' ? 'curva lida por inteiro' : 'somente eventos do OTDR'}</p>
   <div class="ind">
     <div><span class="l">Comprimento ${o.nomes[0]}</span><b>${km(c.comprimento1Km)}</b></div><div><span class="l">Comprimento ${o.nomes[1]}</span><b>${km(c.comprimento2Km)}</b></div>
     <div><span class="l">Perda total ${o.nomes[0]}</span><b>${fmt(c.perdaTotal1Db)} dB</b></div>
