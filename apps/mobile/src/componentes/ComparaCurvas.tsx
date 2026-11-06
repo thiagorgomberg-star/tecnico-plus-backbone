@@ -8,7 +8,7 @@ import {
 } from '../lib/comparaSor';
 import { cores, sombra } from '../lib/estilo';
 import { compartilharComparativo } from '../lib/relatorioCurva';
-import { curvaCompleta, km, lerSor, Nivel, Sor } from '../lib/sor';
+import { curvaCompleta, km, lerSor, Nivel, Sor, rotuloOnda } from '../lib/sor';
 import Icone from './Icone';
 import MargemInferior from './MargemInferior';
 
@@ -114,7 +114,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
                   <View style={{ flex: 1 }}>
                     <Text style={s.nome} numberOfLines={1}>{c.nome}</Text>
                     <Text style={s.sub}>
-                      {typeof l === 'string' ? l : l ? `${l.comprimentoOndaNm} nm · ${km(fimDaFibra(l))}${l.data ? ` · ${l.data.toLocaleDateString('pt-BR')}` : ''}` : 'lendo...'}
+                      {typeof l === 'string' ? l : l ? `${rotuloOnda(l)} · ${km(fimDaFibra(l))}${l.data ? ` · ${l.data.toLocaleDateString('pt-BR')}` : ''}` : 'lendo...'}
                     </Text>
                   </View>
                   <Pressable hitSlop={8} onPress={() => analisarSozinha(c)}><Text style={s.link}>Analisar só esta</Text></Pressable>

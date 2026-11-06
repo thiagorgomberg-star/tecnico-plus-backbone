@@ -6,7 +6,7 @@ import {
   Comparacao, compararAntesDepois, compararBidirecional, compararFibras, fimDaFibra, Momento, ROTULO_MOMENTO, ROTULO_SENTIDO, Sentido, tracoParaComparar,
 } from "@/lib/comparaSor";
 import { pdfDoElemento } from "@/lib/pdfDoElemento";
-import { curvaCompleta, km, lerSor, Nivel, Sor } from "@/lib/sor";
+import { curvaCompleta, km, lerSor, Nivel, Sor, rotuloOnda } from "@/lib/sor";
 import { supabase } from "@/lib/supabase";
 
 export type CurvaParaComparar = {
@@ -134,7 +134,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
                     <td className="py-1.5 pr-2">
                       <div className="font-medium">{c.nome}</div>
                       {typeof s === "string" ? <div className="text-xs text-red-700">{s}</div>
-                        : s ? <div className="text-xs text-gray-500">{s.comprimentoOndaNm} nm · pulso {s.pulsoNs} ns{s.data ? ` · ${s.data.toLocaleDateString("pt-BR")}` : ""}</div>
+                        : s ? <div className="text-xs text-gray-500">{rotuloOnda(s)} · pulso {s.pulsoNs} ns{s.data ? ` · ${s.data.toLocaleDateString("pt-BR")}` : ""}</div>
                           : <div className="text-xs text-gray-400">lendo...</div>}
                     </td>
                     <td><input aria-label={`Fibra de ${c.nome}`} className={`${campo} w-20`} value={c.fibra} onChange={(e) => aoMudar(c.chave, { fibra: e.target.value })} /></td>

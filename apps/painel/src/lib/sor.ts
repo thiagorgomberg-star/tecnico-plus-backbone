@@ -29,7 +29,8 @@ export type Sor = {
   operador: string;
   comentario: string;
   data: Date | null;
-  comprimentoOndaNm: number;
+  comprimentoOndaNm: number; // nominal (1310, 1550, 1625...), usada nos limites
+  ondaRealNm: number; // onda real do laser gravada pelo OTDR (ex.: 1618,2), 0 se não veio
   pulsoNs: number;
   indiceRefracao: number;
   resolucaoM: number;
@@ -46,6 +47,15 @@ function ondaNominal(nm: number) {
   const j = JANELAS.reduce((m, x) => (Math.abs(x - nm) < Math.abs(m - nm) ? x : m));
   return Math.abs(j - nm) <= 15 ? j : Math.round(nm);
 }
+
+// "1618,2 nm (nominal 1625 nm)" quando a onda real difere da nominal. 1625/1650 nm é medição em fibra ativa (com tráfego).
+export function rotuloOnda(s: Pick<Sor, 'comprimentoOndaNm' | 'ondaRealNm'>, comAtiva = true) {
+  const n = s.comprimentoOndaNm, r = s.ondaRealNm;
+  if (!n && !r) return '—';
+  const real = r && Math.abs(r - n) >= 0.05 ? `${r.toLocaleString('pt-BR', { maximumFractionDigits: 1, useGrouping: false })} nm (nominal ${n} nm)` : `${n || r} nm`;
+  return real + (comAtiva && ehFibraAtiva(s) ? ' · fibra ativa' : '');
+}
+export const ehFibraAtiva = (s: Pick<Sor, 'comprimentoOndaNm'>) => s.comprimentoOndaNm >= 1600;
 
 class Leitor {
   private v: DataView;
@@ -103,7 +113,7 @@ export function lerSor(dados: ArrayBuffer | Uint8Array): Sor {
 
   const s: Sor = {
     versao: v2 ? 2 : 1, equipamento: '', fabricante: '', serie: '', cabo: '', fibra: '', localA: '', localB: '', operador: '',
-    comentario: '', data: null, comprimentoOndaNm: 0, pulsoNs: 0, indiceRefracao: 1.4682, resolucaoM: 0, alcanceKm: 0,
+    comentario: '', data: null, comprimentoOndaNm: 0, ondaRealNm: 0, pulsoNs: 0, indiceRefracao: 1.4682, resolucaoM: 0, alcanceKm: 0,
     eventos: [], perdaTotalDb: null, orlDb: null, traco: [], niveis: new Float32Array(0),
   };
 
@@ -141,6 +151,7 @@ export function lerSor(dados: ArrayBuffer | Uint8Array): Sor {
   // FxdParams traz a onda real do laser (ex.: 1618,2 nm); o relatório usa a nominal (1625), que vem no GenParams.
   // Sem a nominal, arredonda para a janela mais próxima.
   const onda = l.u16() / 10;
+  if (onda) s.ondaRealNm = onda;
   if (onda && !s.comprimentoOndaNm) s.comprimentoOndaNm = ondaNominal(onda);
   l.i32();
   if (v2) l.i32();

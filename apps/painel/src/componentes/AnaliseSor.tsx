@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { pdfDoElemento } from "@/lib/pdfDoElemento";
-import { analisarSor, curvaCompleta, km, lerSor, Nivel, Sor } from "@/lib/sor";
+import { analisarSor, curvaCompleta, km, lerSor, Nivel, Sor, rotuloOnda, ehFibraAtiva } from "@/lib/sor";
 import { supabase } from "@/lib/supabase";
 
 const COR: Record<Nivel, string> = { ok: "#1E9E4A", atencao: "#D99A00", critico: "#D0453B" };
@@ -166,7 +166,7 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
             </div>
 
             <p className="text-xs text-gray-500">
-              {[sor.fabricante, sor.equipamento].filter(Boolean).join(" ")} · {sor.comprimentoOndaNm} nm · pulso {sor.pulsoNs} ns ·
+              {[sor.fabricante, sor.equipamento].filter(Boolean).join(" ")} · {rotuloOnda(sor)} · pulso {sor.pulsoNs} ns ·
               IOR {sor.indiceRefracao.toFixed(4)} · resolução {fmt(sor.resolucaoM)} m
               {sor.cabo ? ` · cabo ${sor.cabo}` : ""}{sor.fibra ? ` · fibra ${sor.fibra}` : ""}
               {sor.localA || sor.localB ? ` · ${sor.localA || "?"} → ${sor.localB || "?"}` : ""}
@@ -199,7 +199,7 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
             </table>
             <p className="text-xs text-gray-500">
               Limites usados: fusão até 0,30 dB, perda sem reflexão acima de 0,50 dB é crítica, conector até 0,75 dB, reflexão acima de -35 dB,
-              lance acima de {sor.comprimentoOndaNm >= 1500 ? "0,30" : "0,45"} dB/km. A distância é a da fibra (inclui sobras), não a do mapa.
+              lance acima de {sor.comprimentoOndaNm >= 1500 ? "0,30" : "0,45"} dB/km. A distância é a da fibra (inclui sobras), não a do mapa.{ehFibraAtiva(sor) ? ` Medição em ${sor.comprimentoOndaNm} nm: feita com a fibra ativa (em tráfego), com filtro no OTDR.` : ""}
               {modo === "completa" ? " Curva lida por inteiro: os eventos marcados \"lido da curva\" foram encontrados na leitura do traço." : " Somente os eventos salvos pelo OTDR."}
             </p>
             {analista && (analista.nome || analista.observacoes) ? (

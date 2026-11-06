@@ -6,7 +6,7 @@ import * as Sharing from 'expo-sharing';
 
 import { dataUrl } from './relatorioPdf';
 import { Comparacao, fimDaFibra, tracoParaComparar } from './comparaSor';
-import { analisarSor, km, Nivel, Sor, tracoJanela } from './sor';
+import { analisarSor, ehFibraAtiva, km, Nivel, rotuloOnda, Sor, tracoJanela } from './sor';
 
 const COR: Record<Nivel, string> = { ok: '#1E9E4A', atencao: '#D99A00', critico: '#D0453B' };
 const ROTULO: Record<Nivel, string> = { ok: 'OK', atencao: 'Atenção', critico: 'Crítico' };
@@ -97,7 +97,7 @@ export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm:
     <div class="seta">→<span>${km(a.comprimentoKm)}</span></div><div style="text-align:right"><span class="l">FIM (B)</span><b>${esc(s.localB || '—')}</b></div></div>` : ''}
   <h2>Medição</h2>
   <div class="info">${[
-    ['OTDR', [s.fabricante, s.equipamento].filter(Boolean).join(' ')], ['Comprimento de onda', `${s.comprimentoOndaNm} nm`],
+    ['OTDR', [s.fabricante, s.equipamento].filter(Boolean).join(' ')], ['Comprimento de onda', rotuloOnda(s)],
     ['Pulso', `${s.pulsoNs} ns`], ['Índice de refração (IOR)', s.indiceRefracao.toFixed(4)], ['Resolução', `${fmt(s.resolucaoM)} m`],
     ['Cabo', s.cabo], ['Fibra', s.fibra], ['Medida em', s.data?.toLocaleString('pt-BR')], ['Série do OTDR', s.serie], ['Operador', s.operador],
   ].filter(([, v]) => v).map(([r, v]) => `<div><span class="l">${r}</span><b>${esc(v)}</b></div>`).join('')}</div>
@@ -115,7 +115,7 @@ export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm:
     <td><span class="selo" style="background:${COR[d.nivel]}1F;color:${COR[d.nivel]}">${ROTULO[d.nivel]}</span></td><td>${esc(d.texto)}</td></tr>`).join('')}
   </table>
   <p class="s" style="font-size:8pt">Limites usados: fusão até 0,30 dB; perda sem reflexão acima de 0,50 dB é crítica; conector até 0,75 dB; reflexão acima de -35 dB;
-    lance acima de ${s.comprimentoOndaNm >= 1500 ? '0,30' : '0,45'} dB/km. A distância é a da fibra (inclui sobras técnicas), não a do mapa.</p>
+    lance acima de ${s.comprimentoOndaNm >= 1500 ? '0,30' : '0,45'} dB/km. A distância é a da fibra (inclui sobras técnicas), não a do mapa.${ehFibraAtiva(s) ? ' Medição em ' + s.comprimentoOndaNm + ' nm: feita com a fibra ativa (em tráfego), com filtro no OTDR.' : ''}</p>
   ${analista && (analista.nome || analista.observacoes) ? `<h2>Responsável pela análise</h2>
   ${analista.observacoes ? `<p style="white-space:pre-wrap;margin:0 0 10px"><b>Parecer:</b> ${esc(analista.observacoes)}</p>` : ''}
   <div style="display:flex;gap:24px;align-items:flex-end;break-inside:avoid">

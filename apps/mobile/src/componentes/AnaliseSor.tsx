@@ -8,7 +8,7 @@ import {
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
 import { cores, sombra } from '../lib/estilo';
-import { analisarSor, curvaCompleta, km, lerSor, Nivel, Sor, tracoJanela } from '../lib/sor';
+import { analisarSor, curvaCompleta, km, lerSor, Nivel, Sor, tracoJanela, rotuloOnda } from '../lib/sor';
 import { Analista, compartilharAnaliseCurva } from '../lib/relatorioCurva';
 import { supabase } from '../lib/supabase';
 import Icone from './Icone';
@@ -145,7 +145,7 @@ export default function AnaliseSor({ curva, extensaoKm, trecho, fechar }: {
             ) : null}
             <View style={s.grade}>
               {([
-                ['OTDR', [sor.fabricante, sor.equipamento].filter(Boolean).join(' ')], ['ONDA', `${sor.comprimentoOndaNm} nm`],
+                ['OTDR', [sor.fabricante, sor.equipamento].filter(Boolean).join(' ')], ['ONDA', rotuloOnda(sor)],
                 ['PULSO', `${sor.pulsoNs} ns`], ['IOR', sor.indiceRefracao.toFixed(4)], ['RESOLUÇÃO', `${fmt(sor.resolucaoM)} m`],
                 ['CABO', sor.cabo], ['FIBRA', sor.fibra], ['MEDIDA EM', sor.data?.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })],
               ] as [string, string | undefined][]).filter(([, v]) => v).map(([r, v]) => (

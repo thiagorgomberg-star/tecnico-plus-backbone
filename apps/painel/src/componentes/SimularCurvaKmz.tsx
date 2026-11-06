@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import EscolherTrechoKmz from "@/componentes/EscolherTrechoKmz";
 import { fmtMetros, ReservasAvulsas, totalReservasAvulsas } from "@/lib/fusao";
-import { analisarSor, curvaCompleta, km as fmtKm, lerSor, Nivel, Sor } from "@/lib/sor";
+import { analisarSor, curvaCompleta, km as fmtKm, lerSor, Nivel, Sor, rotuloOnda } from "@/lib/sor";
 import { supabase } from "@/lib/supabase";
 import { comprimento, eventosNoTracado, kmlEventosCurva, pontaDoTracado, TracadoSalvo } from "@/lib/tracado";
 
@@ -154,7 +154,7 @@ export default function SimularCurvaKmz() {
                 <button key={m} onClick={() => setModo(m)}
                   className={`rounded-lg border px-2 py-1 ${modo === m ? "border-[#163A6B] bg-[#163A6B] text-white" : "border-gray-300 hover:bg-gray-50"}`}>{t}</button>
               ))}
-              <span className="text-gray-500">{nomeCurva} · {bruto.comprimentoOndaNm} nm · {sor?.eventos.length} eventos{bruto.localA || bruto.localB ? ` · ${bruto.localA || "?"} → ${bruto.localB || "?"}` : ""}</span>
+              <span className="text-gray-500">{nomeCurva} · {rotuloOnda(bruto)} · {sor?.eventos.length} eventos{bruto.localA || bruto.localB ? ` · ${bruto.localA || "?"} → ${bruto.localB || "?"}` : ""}</span>
             </div>
           ) : null}
         </div>
