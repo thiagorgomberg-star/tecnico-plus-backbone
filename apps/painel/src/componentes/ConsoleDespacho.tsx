@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DetalheOS from "@/componentes/DetalheOS";
 import FichaCampo from "@/componentes/FichaCampo";
 import { abrirInfoNoMapa, alvoDoPonto } from "@/lib/aoVivo";
+import { LinhaRede, linhasDoKmz } from "@/lib/backbone";
 import { atualizarGeocarAgora } from "@/lib/geocar";
 import { supabase } from "@/lib/supabase";
 import { OrdemServico, rotuloStatus, StatusOS, Tecnico } from "@/lib/tipos";
@@ -69,6 +70,28 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
   // Técnicos de apoio de cada O.S. (a O.S. aparece também na linha deles).
   const [apoios, setApoios] = useState<{ os_id: string; tecnico_id: string }[]>([]);
   const [mapaPronto, setMapaPronto] = useState(false);
+  // Rede do backbone (KMZ geral) desenhada no mapa, para ver onde as O.S. de backlog estão sendo abertas.
+  const [rede, setRede] = useState<{ linhas: LinhaRede[]; nome_arquivo: string | null; atualizado_em: string } | null>(null);
+  const [verRede, setVerRede] = useState(true);
+  const [enviandoRede, setEnviandoRede] = useState(false);
+  useEffect(() => {
+    try { setVerRede(localStorage.getItem("console-ver-rede") !== "0"); } catch { /* opcional */ }
+    supabase.from("rede_backbone").select("linhas, nome_arquivo, atualizado_em").eq("id", 1).maybeSingle()
+      .then(({ data }) => { if (data) setRede(data as typeof rede); });
+  }, []);
+  async function enviarRede(arquivo: File) {
+    setEnviandoRede(true);
+    try {
+      const linhas = await linhasDoKmz(arquivo);
+      if (!linhas.length) throw new Error("Não achei linhas de cabo neste arquivo.");
+      const { data: u } = await supabase.auth.getUser();
+      const dados = { id: 1, linhas, nome_arquivo: arquivo.name, atualizado_em: new Date().toISOString(), atualizado_por: u.user?.id ?? null };
+      const { error } = await supabase.from("rede_backbone").upsert(dados);
+      if (error) throw error;
+      setRede(dados);
+      setVerRede(true);
+    } catch (e) { alert(`Não foi possível carregar o KMZ: ${(e as Error).message}`); } finally { setEnviandoRede(false); }
+  }
 
   const inicioDia = useMemo(() => new Date(`${dia}T00:00:00`), [dia]);
   const fimDia = useMemo(() => new Date(inicioDia.getTime() + 86400000), [inicioDia]);
@@ -249,6 +272,15 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
       });
       m.addControl(new NavigationControl({ showCompass: false }), "top-right");
       m.on("load", () => {
+        m.addSource("rede", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        m.addLayer({ id: "rede", type: "line", source: "rede", layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": "#E07B00", "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1.5, 12, 3.5], "line-opacity": 0.85 } });
+        m.on("click", "rede", (e) => {
+          const p = e.features?.[0]?.properties as { nome?: string; km?: string } | undefined;
+          if (p?.nome) new Popup({ closeButton: true }).setLngLat(e.lngLat).setHTML(`<div style="font-size:12px"><b>Backbone</b><br>${p.nome.replace(/</g, "&lt;")}<br>${p.km} km</div>`).addTo(m);
+        });
+        m.on("mouseenter", "rede", () => { m.getCanvas().style.cursor = "pointer"; });
+        m.on("mouseleave", "rede", () => { m.getCanvas().style.cursor = ""; });
         m.addSource("os", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         m.addSource("tecnicos", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         m.addLayer({ id: "os", type: "circle", source: "os",
@@ -279,6 +311,18 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
     });
     return () => { cancelado = true; mapa.current?.remove(); mapa.current = null; };
   }, []);
+
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !mapaPronto) return;
+    (m.getSource("rede") as GeoJSONSource).setData({
+      type: "FeatureCollection",
+      features: (rede?.linhas ?? []).map((l) => ({ type: "Feature", geometry: { type: "LineString", coordinates: l.c },
+        properties: { nome: l.nome, km: (l.m / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) } })),
+    });
+    m.setLayoutProperty("rede", "visibility", verRede ? "visible" : "none");
+    try { localStorage.setItem("console-ver-rede", verRede ? "1" : "0"); } catch { /* opcional */ }
+  }, [rede, verRede, mapaPronto]);
 
   const enquadrado = useRef(false);
   useEffect(() => {
@@ -367,6 +411,16 @@ export default function ConsoleDespacho({ tecnicos }: { tecnicos: Tecnico[] }) {
               className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60">
               {atualizando ? "Atualizando..." : "↻ Atualizar"}
             </button>
+            <button onClick={() => setVerRede((v) => !v)} aria-pressed={verRede} disabled={!rede}
+              title={rede ? `${rede.nome_arquivo ?? "KMZ"} · ${rede.linhas.length} linhas · atualizado em ${new Date(rede.atualizado_em).toLocaleDateString("pt-BR")}` : "Carregue o KMZ do backbone"}
+              className={`rounded-lg border px-3 py-1.5 text-sm shadow-sm disabled:opacity-60 ${verRede && rede ? "border-[#E07B00] bg-[#E07B00] text-white" : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"}`}>
+              ━ Backbone
+            </button>
+            <label className={`cursor-pointer rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm hover:bg-gray-50 ${enviandoRede ? "opacity-60" : ""}`}
+              title="Carregar ou trocar o KMZ geral do backbone (todas as rotas)">
+              {enviandoRede ? "Carregando KMZ..." : rede ? "Trocar KMZ" : "Carregar KMZ do backbone"}
+              <input type="file" accept=".kmz,.kml" className="hidden" disabled={enviandoRede} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) enviarRede(f); }} />
+            </label>
             {atualizadoEm && <span className="rounded bg-white/90 px-2 py-0.5 text-xs text-gray-600">às {atualizadoEm.toLocaleTimeString("pt-BR")}</span>}
           </div>
           {fonte === "veiculo" && ehHoje && carros.length === 0 && (
