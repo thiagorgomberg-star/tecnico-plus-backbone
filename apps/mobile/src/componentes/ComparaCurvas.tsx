@@ -5,6 +5,7 @@ import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
 import {
   Comparacao, compararAntesDepois, compararBidirecional, compararFibras, fimDaFibra, mesmoSentido, Momento, ROTULO_MOMENTO, ROTULO_SENTIDO, Sentido, deslocamentoParalelo, tracoParaComparar,
+  corDaLinha, destacaLinha,
 } from '../lib/comparaSor';
 import { cores, sombra } from '../lib/estilo';
 import { compartilharComparativo } from '../lib/relatorioCurva';
@@ -228,9 +229,9 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
                 </Text>
               </View>
               {comp.linhas.map((l, i) => (
-                <Pressable key={i} style={[s.cartao, aberto === i && { borderWidth: 2, borderColor: COR[l.nivel] }]} onPress={() => setAberto(aberto === i ? null : i)}>
+                <Pressable key={i} style={[s.cartao, aberto === i && { borderWidth: 2, borderColor: corDaLinha(comp.tipo, l) }]} onPress={() => setAberto(aberto === i ? null : i)}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <View style={[s.numero, { backgroundColor: COR[l.nivel] }]}><Text style={s.numeroTexto}>{i + 1}</Text></View>
+                    <View style={[s.numero, { backgroundColor: corDaLinha(comp.tipo, l) }]}><Text style={s.numeroTexto}>{i + 1}</Text></View>
                     <View style={{ flex: 1 }}>
                       <Text style={s.nome}>{km(l.km)} de A{l.reflexivo ? ' · reflexivo' : ''}</Text>
                       <Text style={s.sub}>
@@ -242,7 +243,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
                         </Text>
                       ) : null}
                     </View>
-                    <View style={[s.selo, { backgroundColor: `${COR[l.nivel]}1F` }]}><Text style={[s.seloTexto, { color: COR[l.nivel] }]}>{l.situacao.toUpperCase()}</Text></View>
+                    <View style={[s.selo, { backgroundColor: `${corDaLinha(comp.tipo, l)}1F` }]}><Text style={[s.seloTexto, { color: corDaLinha(comp.tipo, l) }]}>{l.situacao.toUpperCase()}</Text></View>
                   </View>
                   <Text style={s.texto}>{l.texto}</Text>
                   {aberto === i ? (
@@ -309,7 +310,7 @@ function Sobreposto({ s1, s2, espelhar, comp, largura, foco, altura = 230 }: {
   const passoDb = [0.5, 1, 2, 5, 10, 20].find((v) => (maxDb - minDb) / v <= 5) ?? 50;
   const linhas = comp.linhas.map((l, i) => ({ l, i })).filter(({ l }) => l.km >= k0 && l.km <= k1);
   // Na curva toda só os que pedem atenção ganham número (os OK ficam só com o ponto), para não embolar.
-  const numerados = janela ? linhas : linhas.filter(({ l }) => l.nivel !== 'ok');
+  const numerados = janela ? linhas : linhas.filter(({ l }) => destacaLinha(comp.tipo, l));
   return (
     <Svg width={L} height={A}>
       {Array.from({ length: Math.floor((k1 - k0) / passoKm) + 1 }, (_, i) => Math.ceil(k0 / passoKm) * passoKm + i * passoKm).filter((k) => k <= k1).map((k) => (
@@ -322,7 +323,7 @@ function Sobreposto({ s1, s2, espelhar, comp, largura, foco, altura = 230 }: {
         <SvgText key={`y${d}`} x={m.e - 4} y={y(d) + 3} fontSize={9.5} fill="#667085" textAnchor="end">{`${+d.toFixed(1)}`}</SvgText>
       ))}
       {numerados.map(({ l, i }) => (
-        <Line key={`e${i}`} x1={x(l.km)} x2={x(l.km)} y1={m.t} y2={A - m.b} stroke={COR[l.nivel]} strokeWidth={1} strokeDasharray="3 3" />
+        <Line key={`e${i}`} x1={x(l.km)} x2={x(l.km)} y1={m.t} y2={A - m.b} stroke={corDaLinha(comp.tipo, l)} strokeWidth={1} strokeDasharray="3 3" />
       ))}
       <Path d={caminho(t1)} fill="none" stroke={CORES_CURVA[0]} strokeWidth={1.4} />
       <Path d={caminho(t2)} fill="none" stroke={CORES_CURVA[1]} strokeWidth={1.4} />
@@ -330,7 +331,7 @@ function Sobreposto({ s1, s2, espelhar, comp, largura, foco, altura = 230 }: {
         l.perda1 != null ? <Circle key={`a${i}`} cx={x(l.km)} cy={y(dbEm(t1, l.km))} r={3.2} fill="#fff" stroke={CORES_CURVA[0]} strokeWidth={1.6} /> : null,
         l.perda2 != null ? <Circle key={`b${i}`} cx={x(l.km)} cy={y(dbEm(t2, l.km))} r={3.2} fill="#fff" stroke={CORES_CURVA[1]} strokeWidth={1.6} /> : null,
       ])}
-      {numerados.map(({ l, i }) => <Circle key={`c${i}`} cx={x(l.km)} cy={m.t - 9} r={7.5} fill={COR[l.nivel]} />)}
+      {numerados.map(({ l, i }) => <Circle key={`c${i}`} cx={x(l.km)} cy={m.t - 9} r={7.5} fill={corDaLinha(comp.tipo, l)} />)}
       {numerados.map(({ l, i }) => (
         <SvgText key={`t${i}`} x={x(l.km)} y={m.t - 5.5} fontSize={9} fontWeight="bold" fill="#fff" textAnchor="middle">{`${i + 1}`}</SvgText>
       ))}

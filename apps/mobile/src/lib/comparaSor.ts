@@ -34,6 +34,21 @@ export type Comparacao = {
   atencao: number;
 };
 
+// Cores só de exibição. No antes × depois a cor segue a situação (melhorou verde, igual azul, piorou vermelho);
+// nos outros tipos segue o nível (ok verde, atenção amarelo, crítico vermelho). O nível não muda, então as contagens continuam iguais.
+export const COR_NIVEL: Record<Nivel, string> = { ok: '#1E9E4A', atencao: '#D99A00', critico: '#D0453B' };
+export const COR_IGUAL = '#0572CE';
+export function corDaLinha(tipo: Comparacao['tipo'], l: LinhaComparada): string {
+  if (tipo === 'antesDepois') {
+    if (l.situacao === 'Melhorou' || l.situacao === 'Sumiu') return COR_NIVEL.ok;
+    if (l.situacao === 'Igual') return COR_IGUAL;
+    return COR_NIVEL.critico; // Piorou e Novo
+  }
+  return COR_NIVEL[l.nivel];
+}
+// Ganha número no gráfico da curva toda: o que pede atenção e, no antes × depois, tudo o que mudou.
+export const destacaLinha = (tipo: Comparacao['tipo'], l: LinhaComparada) => l.nivel !== 'ok' || (tipo === 'antesDepois' && l.situacao !== 'Igual');
+
 const dec = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pulsoKm = (s: Sor) => (0.2042 * (s.pulsoNs || 100)) / 1000 / 2;
 const tolerancia = (a: Sor, b: Sor) => Math.min(1, Math.max(0.1, pulsoKm(a) + pulsoKm(b)));

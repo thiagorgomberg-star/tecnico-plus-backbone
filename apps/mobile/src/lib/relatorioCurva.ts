@@ -5,7 +5,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
 import { dataUrl } from './relatorioPdf';
-import { Comparacao, deslocamentoParalelo, fimDaFibra, tracoParaComparar } from './comparaSor';
+import { Comparacao, corDaLinha, destacaLinha, deslocamentoParalelo, fimDaFibra, tracoParaComparar } from './comparaSor';
 import { analisarSor, ehFibraAtiva, km, lerDbm, Nivel, rotuloOnda, Sor, textoPotencia, tracoJanela } from './sor';
 
 const COR: Record<Nivel, string> = { ok: '#1E9E4A', atencao: '#D99A00', critico: '#D0453B' };
@@ -164,8 +164,8 @@ export async function compartilharComparativo(c: Comparacao, s1: Sor, s2: Sor,
     <path d="${cam(t1)}" fill="none" stroke="#163A6B" stroke-width="1.3"/><path d="${cam(t2)}" fill="none" stroke="#E07B00" stroke-width="1.3"/>
     ${c.linhas.map((l, i) => `${l.perda1 != null ? `<circle cx="${x(l.km)}" cy="${y(dbEm(t1, l.km))}" r="3.5" fill="#fff" stroke="#163A6B" stroke-width="1.6"/>` : ''}
       ${l.perda2 != null ? `<circle cx="${x(l.km)}" cy="${y(dbEm(t2, l.km))}" r="3.5" fill="#fff" stroke="#E07B00" stroke-width="1.6"/>` : ''}
-      ${l.nivel === 'ok' ? '' : `<line x1="${x(l.km)}" x2="${x(l.km)}" y1="${m.t}" y2="${Ag - m.b}" stroke="${COR[l.nivel]}" stroke-dasharray="4 3"/>
-      <circle cx="${x(l.km)}" cy="${m.t - 12}" r="9" fill="${COR[l.nivel]}"/><text x="${x(l.km)}" y="${m.t - 8}" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">${i + 1}</text>`}`).join('')}
+      ${!destacaLinha(c.tipo, l) ? '' : `<line x1="${x(l.km)}" x2="${x(l.km)}" y1="${m.t}" y2="${Ag - m.b}" stroke="${corDaLinha(c.tipo, l)}" stroke-dasharray="4 3"/>
+      <circle cx="${x(l.km)}" cy="${m.t - 12}" r="9" fill="${corDaLinha(c.tipo, l)}"/><text x="${x(l.km)}" y="${m.t - 8}" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">${i + 1}</text>`}`).join('')}
   </svg>`;
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     @page { size: A4; margin: 12mm; } body { font-family: sans-serif; font-size: 10.5pt; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -195,7 +195,7 @@ export async function compartilharComparativo(c: Comparacao, s1: Sor, s2: Sor,
   ${c.linhas.map((l, i) => `<tr><td>${i + 1}</td><td style="white-space:nowrap"><b>${km(l.km)}</b>${l.reflexivo ? '<span class="l">reflexivo</span>' : ''}</td>
     <td>${l.perda1 == null ? '—' : `${fmt(l.perda1, 3)} dB`}</td><td>${l.perda2 == null ? '—' : `${fmt(l.perda2, 3)} dB`}</td>
     <td><b>${l.resultado == null ? '—' : `${c.tipo === 'antesDepois' && l.resultado > 0 ? '+' : ''}${fmt(l.resultado, 3)} dB`}</b></td>
-    <td><span class="selo" style="background:${COR[l.nivel]}1F;color:${COR[l.nivel]}">${esc(l.situacao)}</span></td><td>${esc(l.texto)}</td></tr>`).join('')}
+    <td><span class="selo" style="background:${corDaLinha(c.tipo, l)}1F;color:${corDaLinha(c.tipo, l)}">${esc(l.situacao)}</span></td><td>${esc(l.texto)}</td></tr>`).join('')}
   </table>
   <p class="s" style="font-size:8pt">${bi ? 'A perda real de cada emenda é a média dos dois sentidos. As distâncias do B → A foram espelhadas para contar a partir de A.' : fb ? 'Perda comum = a menor perda das duas fibras no mesmo ponto. Acima de 0,15 dB nas duas é esforço no cabo (torção, esmagamento, curvatura, ferragem apertada) ou acomodação ruim na caixa; perda alta só numa fibra é fusão/acomodação daquela fibra.' : 'Diferença = perda depois − perda antes. Piorou acima de 0,10 dB; acima de 0,30 dB é crítico.'}</p>
   ${analista?.nome ? `<div style="display:flex;gap:24px;align-items:flex-end;margin-top:16px;break-inside:avoid">${[

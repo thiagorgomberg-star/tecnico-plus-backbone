@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   Comparacao, compararAntesDepois, compararBidirecional, compararFibras, fimDaFibra, mesmoSentido, Momento, ROTULO_MOMENTO, ROTULO_SENTIDO, Sentido, deslocamentoParalelo, tracoParaComparar,
+  corDaLinha, destacaLinha,
 } from "@/lib/comparaSor";
 import SimularCurvaKmz from "@/componentes/SimularCurvaKmz";
 import { pdfDoElemento } from "@/lib/pdfDoElemento";
@@ -289,7 +290,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
             ))}
             <Sobreposto s1={s1} s2={s2} espelhar={tipo === "bidirecional"} nomes={nomes} linhas={comp} selecionar={setFoco} />
             {foco != null && comp.linhas[foco] ? (
-              <div className="grid gap-1 rounded-lg border-2 p-2" style={{ borderColor: COR[comp.linhas[foco].nivel] }}>
+              <div className="grid gap-1 rounded-lg border-2 p-2" style={{ borderColor: corDaLinha(comp.tipo, comp.linhas[foco]) }}>
                 <div className="flex items-center gap-2 text-sm"><b>Zoom no evento {foco + 1} · {km(comp.linhas[foco].km)}</b> · {comp.linhas[foco].situacao}
                   <button className="ml-auto rounded border border-gray-300 px-2 py-0.5 text-xs hover:bg-gray-50" onClick={() => setFoco(null)}>Fechar zoom</button></div>
                 <Sobreposto s1={s1} s2={s2} espelhar={tipo === "bidirecional"} nomes={nomes} linhas={comp} foco={comp.linhas[foco].km} selecionar={setFoco} />
@@ -311,7 +312,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
                     <td className="whitespace-nowrap py-2">{l.perda2 == null ? "—" : `${fmt(l.perda2, 3)} dB`}</td>
                     <td className="whitespace-nowrap py-2 font-semibold">{l.resultado == null ? "—" : `${tipo === "antesDepois" && l.resultado > 0 ? "+" : ""}${fmt(l.resultado, 3)} dB`}</td>
                     <td className="py-2">
-                      <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: `${COR[l.nivel]}1F`, color: COR[l.nivel] }}>{l.situacao}</span>
+                      <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: `${corDaLinha(comp.tipo, l)}1F`, color: corDaLinha(comp.tipo, l) }}>{l.situacao}</span>
                     </td>
                     <td className="py-2 text-gray-700">{l.texto}</td>
                   </tr>
@@ -389,7 +390,7 @@ function Sobreposto({ s1, s2, espelhar, nomes, linhas, foco, selecionar }: {
           </g>
         ))}
         {visiveis.map(({ l, i }) => (
-          <line key={`v${i}`} x1={x(l.km)} x2={x(l.km)} y1={m.t} y2={A - m.b} stroke={COR[l.nivel]} strokeWidth="1" strokeDasharray="4 3" opacity={l.nivel === "ok" && !janela ? 0.35 : 1} />
+          <line key={`v${i}`} x1={x(l.km)} x2={x(l.km)} y1={m.t} y2={A - m.b} stroke={corDaLinha(linhas.tipo, l)} strokeWidth="1" strokeDasharray="4 3" opacity={!destacaLinha(linhas.tipo, l) && !janela ? 0.35 : 1} />
         ))}
         <path d={caminho(t1)} fill="none" stroke={CORES_CURVA[0]} strokeWidth="1.5" />
         <path d={caminho(t2)} fill="none" stroke={CORES_CURVA[1]} strokeWidth="1.5" />
@@ -397,8 +398,8 @@ function Sobreposto({ s1, s2, espelhar, nomes, linhas, foco, selecionar }: {
           <g key={i} className={selecionar ? "cursor-pointer" : ""} onClick={() => selecionar?.(i)}>
             {l.perda1 != null ? <circle cx={x(l.km)} cy={y(dbEm(t1, l.km))} r="4" fill="#fff" stroke={CORES_CURVA[0]} strokeWidth="2" /> : null}
             {l.perda2 != null ? <circle cx={x(l.km)} cy={y(dbEm(t2, l.km))} r="4" fill="#fff" stroke={CORES_CURVA[1]} strokeWidth="2" /> : null}
-            {l.nivel !== "ok" || janela ? (<>
-              <circle cx={x(l.km)} cy={m.t - 8} r="8" fill={COR[l.nivel]} />
+            {destacaLinha(linhas.tipo, l) || janela ? (<>
+              <circle cx={x(l.km)} cy={m.t - 8} r="8" fill={corDaLinha(linhas.tipo, l)} />
               <text x={x(l.km)} y={m.t - 4.5} fontSize="10" fontWeight="bold" fill="#fff" textAnchor="middle">{i + 1}</text>
             </>) : null}
           </g>
