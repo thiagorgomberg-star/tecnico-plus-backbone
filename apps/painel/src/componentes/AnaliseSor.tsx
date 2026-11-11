@@ -4,16 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { pdfDoElemento } from "@/lib/pdfDoElemento";
 import SimularCurvaKmz from "@/componentes/SimularCurvaKmz";
+import { Analista, Assinatura, DocumentoParecer, EditorParecer, Exportar, lerAnalista, ModalExportar, useParecer } from "@/componentes/ParecerCurva";
 import { analisarSor, curvaCompleta, km, lerSor, Nivel, Sor, rotuloOnda, ehFibraAtiva, lerDbm, textoPotencia } from "@/lib/sor";
 import { supabase } from "@/lib/supabase";
 
 const COR: Record<Nivel, string> = { ok: "#1E9E4A", atencao: "#D99A00", critico: "#D0453B" };
 const ROTULO: Record<Nivel, string> = { ok: "OK", atencao: "Atenção", critico: "Crítico" };
-type Analista = { nome: string; cargo: string; empresa: string; registro: string; observacoes: string };
 type Acao = "compartilhar" | "baixar" | "imprimir";
-const CAMPOS: [keyof Analista, string][] = [
-  ["nome", "Nome do analista"], ["cargo", "Cargo / função"], ["empresa", "Empresa"], ["registro", "Registro (CREA, matrícula...)"], ["observacoes", "Observações / parecer"],
-];
 
 // Análise de um arquivo .SOR do OTDR: resumo da fibra, traço com os eventos marcados e o que fazer em cada evento.
 // A curva vem do armazenamento (bucket + caminho) ou de um arquivo escolhido no computador (arquivo).
@@ -32,15 +29,19 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
   const [tx, setTx] = useState("");
   const [rx, setRx] = useState("");
   const [pedindo, setPedindo] = useState<Acao | null>(null);
+  const [rascunho, setRascunho] = useState<Analista>({ nome: "", cargo: "", empresa: "", registro: "" });
+  // Parecer do analista: guardado pela curva salva (bucket + caminho); arquivo avulso só vale enquanto a janela estiver aberta.
+  const parecer = useParecer(bucket && caminho ? `sor:${bucket}/${caminho}` : null, nome);
+  const [escolha, setEscolha] = useState<Exportar>("ambos");
+  const exportar: Exportar = parecer.temConteudo ? escolha : "analise";
+  const docParecer = useRef<HTMLDivElement>(null);
   function pedir(acao: Acao) {
-    let salvo: Partial<Analista> = {};
-    try { salvo = JSON.parse(localStorage.getItem("analista-curva") || "{}"); } catch { /* sem dados salvos */ }
-    setAnalista((a) => ({ nome: "", cargo: "", empresa: "Multivale Engenharia", registro: "", ...salvo, observacoes: a?.observacoes ?? "" }));
+    setRascunho(lerAnalista());
     setPedindo(acao);
   }
   function confirmar() {
-    if (!analista || !pedindo) return;
-    try { const { observacoes: _o, ...lembrar } = analista; localStorage.setItem("analista-curva", JSON.stringify(lembrar)); } catch { /* opcional */ }
+    if (!pedindo) return;
+    setAnalista(rascunho);
     const acao = pedindo;
     setPedindo(null);
     // Espera o bloco do analista aparecer na tela antes de gerar.
@@ -72,12 +73,13 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
   // PDF com o mesmo nome do .SOR: compartilha (WhatsApp, e-mail...) pelo menu do sistema ou baixa, se o navegador não compartilhar arquivo.
   const conteudo = useRef<HTMLDivElement>(null);
   const [gerando, setGerando] = useState(false);
-  const nomePdf = `${nome.replace(/\.sor$/i, "").replace(/[\\/:*?"<>|]/g, "_") || "analise-curva"}.pdf`;
+  const nomePdf = `${exportar === "parecer" ? "parecer-" : ""}${nome.replace(/\.sor$/i, "").replace(/[\\/:*?"<>|]/g, "_") || "analise-curva"}${exportar === "ambos" ? "-com-parecer" : ""}.pdf`;
   async function pdf(compartilhar: boolean) {
     if (!conteudo.current || gerando) return;
     setGerando(true);
     try {
-      const arquivoPdf = new File([await pdfDoElemento(conteudo.current)], nomePdf, { type: "application/pdf" });
+      const partes = [exportar !== "parecer" ? conteudo.current : null, exportar !== "analise" ? docParecer.current : null].filter((e): e is HTMLDivElement => !!e);
+      const arquivoPdf = new File([await pdfDoElemento(partes)], nomePdf, { type: "application/pdf" });
       if (compartilhar && navigator.canShare?.({ files: [arquivoPdf] })) {
         try { await navigator.share({ files: [arquivoPdf], title: nomePdf }); } catch (e) { if ((e as Error).name !== "AbortError") throw e; }
       } else {
@@ -144,33 +146,14 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
             </label>
           </div>
         ) : null}
-        {pedindo && analista ? (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setPedindo(null)}>
-            <form className="grid w-full max-w-md gap-3 rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}
-              onSubmit={(e) => { e.preventDefault(); confirmar(); }}>
-              <div>
-                <h3 className="font-semibold">Dados do analista</h3>
-                <p className="text-xs text-gray-500">Saem no relatório, no campo de responsável pela análise.</p>
-              </div>
-              {CAMPOS.map(([k, rotulo]) => (
-                <label key={k} className="grid gap-1 text-sm">
-                  <span className="text-xs font-medium text-gray-600">{rotulo}</span>
-                  {k === "observacoes"
-                    ? <textarea rows={3} className="rounded-lg border border-gray-300 px-3 py-2" value={analista[k]} onChange={(e) => setAnalista({ ...analista, [k]: e.target.value })} />
-                    : <input className="rounded-lg border border-gray-300 px-3 py-2" value={analista[k]} onChange={(e) => setAnalista({ ...analista, [k]: e.target.value })} />}
-                </label>
-              ))}
-              <div className="flex justify-end gap-2">
-                <button type="button" className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={() => setPedindo(null)}>Cancelar</button>
-                <button type="submit" className="rounded-lg bg-[#163A6B] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90">
-                  {pedindo === "imprimir" ? "Imprimir" : pedindo === "compartilhar" ? "Gerar e compartilhar" : "Gerar PDF"}
-                </button>
-              </div>
-            </form>
-          </div>
+        {pedindo ? (
+          <ModalExportar analista={rascunho} setAnalista={setRascunho} temParecer={parecer.temConteudo} escolha={escolha} setEscolha={setEscolha}
+            rotulo={pedindo === "imprimir" ? "Imprimir" : pedindo === "compartilhar" ? "Gerar e compartilhar" : "Gerar PDF"}
+            confirmar={confirmar} fechar={() => setPedindo(null)} />
         ) : null}
         {erro ? <p className="p-6 text-red-700">{erro}</p> : !sor || !analise ? <p className="p-6 text-gray-500">Lendo o arquivo...</p> : (
-          <div ref={conteudo} className="grid gap-4 bg-white p-4 text-sm">
+          <>
+          <div ref={conteudo} className={`grid gap-4 bg-white p-4 text-sm ${exportar === "parecer" ? "print:hidden" : ""}`}>
             <div>
               <div className="text-base font-semibold">Análise da curva OTDR · {nome}</div>
               <div className="text-xs text-gray-500">Técnico Plus · Multivale Backbone · gerado em {new Date().toLocaleString("pt-BR")}</div>
@@ -225,20 +208,12 @@ export default function AnaliseSor({ bucket, caminho, arquivo, nome, extensaoKm,
               lance acima de {sor.comprimentoOndaNm >= 1500 ? "0,30" : "0,45"} dB/km. A distância é a da fibra (inclui sobras), não a do mapa.{ehFibraAtiva(sor) ? ` Medição em ${sor.comprimentoOndaNm} nm: feita com a fibra ativa (em tráfego), com filtro no OTDR.` : ""}
               {modo === "completa" ? " Curva lida por inteiro: os eventos marcados \"lido da curva\" foram encontrados na leitura do traço." : " Somente os eventos salvos pelo OTDR."}
             </p>
-            {analista && (analista.nome || analista.observacoes) ? (
-              <div className="grid gap-2 border-t border-gray-200 pt-3" style={{ breakInside: "avoid" }}>
-                <div className="text-xs font-semibold uppercase text-[#0572CE]">Responsável pela análise</div>
-                {analista.observacoes ? <p className="whitespace-pre-wrap"><b>Parecer:</b> {analista.observacoes}</p> : null}
-                <div className="flex flex-wrap items-end gap-6">
-                  {([["Analista", analista.nome], ["Cargo / função", analista.cargo], ["Empresa", analista.empresa], ["Registro", analista.registro]] as const)
-                    .filter(([, v]) => v).map(([r, v]) => (
-                      <div key={r}><div className="text-xs text-gray-500">{r}</div><div className="font-semibold">{v}</div></div>
-                    ))}
-                  <div className="ml-auto w-56 border-t border-gray-700 pt-1 text-center text-xs">Assinatura</div>
-                </div>
-              </div>
-            ) : null}
+            {analista?.nome && exportar === "analise" ? <Assinatura analista={analista} /> : null}
           </div>
+          <EditorParecer p={parecer} eventos={analise.diagnosticos.map((d) => ({ n: d.evento.numero, km: d.evento.distanciaKm, rotulo: `${d.tipo} · ${ROTULO[d.nivel]}`, cor: COR[d.nivel], texto: d.texto }))} />
+          <DocumentoParecer p={parecer} titulo={nome} analista={analista} docRef={docParecer} oculto={exportar === "analise"}
+            resumo={`Análise da curva: fibra de ${km(analise.comprimentoKm)} · perda total ${fmt(analise.perdaTotalDb)} dB · ${rotuloOnda(sor)} · ${analise.criticos} crítico(s), ${analise.atencao} atenção${sor.fibra ? ` · fibra ${sor.fibra}` : ""}`} />
+          </>
         )}
       </div>
     </div>

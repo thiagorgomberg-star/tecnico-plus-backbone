@@ -7,6 +7,7 @@ import {
   corDaLinha, destacaLinha,
 } from "@/lib/comparaSor";
 import SimularCurvaKmz from "@/componentes/SimularCurvaKmz";
+import { Analista, Assinatura, DocumentoParecer, EditorParecer, Exportar, lerAnalista, ModalExportar, useParecer } from "@/componentes/ParecerCurva";
 import { pdfDoElemento } from "@/lib/pdfDoElemento";
 import { curvaCompleta, EventoSor, km, lerDbm, lerSor, Nivel, rotuloOnda, Sor, textoPotencia } from "@/lib/sor";
 import { supabase } from "@/lib/supabase";
@@ -136,14 +137,23 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
   const [foco, setFoco] = useState<number | null>(null);
   const conteudo = useRef<HTMLDivElement>(null);
   const [gerando, setGerando] = useState(false);
-  let analista: { nome?: string; cargo?: string; empresa?: string; registro?: string } = {};
-  try { analista = JSON.parse(localStorage.getItem("analista-curva") || "{}"); } catch { /* opcional */ }
+  const [analista, setAnalista] = useState<Analista | null>(null);
+  const [rascunho, setRascunho] = useState<Analista | null>(null);
+  // Parecer do par comparado: guardado quando as duas curvas estão salvas no sistema.
+  const idCurva = (k: string) => { const c = curva(k); return c?.salvaId ?? (c?.bucket && c?.caminho ? `${c.bucket}/${c.caminho}` : null); };
+  const chaveParecer = c1 && c2 && idCurva(c1) && idCurva(c2) ? `cmp:${tipo}:${idCurva(c1)}|${idCurva(c2)}` : null;
+  const tituloParecer = `Comparativo ${tipo === "bidirecional" ? "A → B × B → A" : tipo === "fibras" ? `${nomes[0]} × ${nomes[1]}` : "antes × depois"} · ${curva(c1)?.nome ?? ""} × ${curva(c2)?.nome ?? ""}`;
+  const parecer = useParecer(chaveParecer, tituloParecer);
+  const [escolha, setEscolha] = useState<Exportar>("ambos");
+  const exportar: Exportar = parecer.temConteudo ? escolha : "analise";
+  const docParecer = useRef<HTMLDivElement>(null);
   async function baixarPdf() {
     if (!conteudo.current) return;
     setGerando(true);
     try {
-      const blob = await pdfDoElemento(conteudo.current);
-      const rot = tipo === "fibras" ? `fibras-${nomes.map((n) => n.replace(/\D+/g, "")).join("x")}-` : tipo === "bidirecional" ? "AxB-BxA-" : "antes-depois-";
+      const partes = [exportar !== "parecer" ? conteudo.current : null, exportar !== "analise" ? docParecer.current : null].filter((e): e is HTMLDivElement => !!e);
+      const blob = await pdfDoElemento(partes);
+      const rot = (exportar === "parecer" ? "parecer-" : "") + (tipo === "fibras" ? `fibras-${nomes.map((n) => n.replace(/\D+/g, "")).join("x")}-` : tipo === "bidirecional" ? "AxB-BxA-" : "antes-depois-");
       const nome = `comparativo-${rot}${fibra || (tipo !== "fibras" && curva(c1)?.fibra) ? `fibra-${fibra || curva(c1)?.fibra}-` : ""}${new Date().toISOString().slice(0, 10)}.pdf`;
       const url = URL.createObjectURL(blob);
       Object.assign(document.createElement("a"), { href: url, download: nome }).click();
@@ -160,12 +170,17 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
             <h2 className="font-semibold">Comparar curvas OTDR</h2>
             <p className="text-xs text-gray-500">Marque a fibra, o sentido e o momento de cada curva. O comparativo usa duas curvas da mesma fibra.</p>
           </div>
-          <button className="rounded-lg bg-[#163A6B] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50" disabled={!comp || gerando} onClick={baixarPdf}>
+          <button className="rounded-lg bg-[#163A6B] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50" disabled={!comp || gerando} onClick={() => setRascunho(lerAnalista())}>
             {gerando ? "Gerando PDF..." : "Baixar PDF"}
           </button>
           <button className="rounded-lg border border-blue-700 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50" disabled={!paraMapa} onClick={() => setNoMapa(true)}>Localizar no mapa (KMZ)</button>
           <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={fechar}>Fechar</button>
         </div>
+        {rascunho ? (
+          <ModalExportar analista={rascunho} setAnalista={setRascunho} temParecer={parecer.temConteudo} escolha={escolha} setEscolha={setEscolha}
+            rotulo="Gerar PDF" fechar={() => setRascunho(null)}
+            confirmar={() => { setAnalista(rascunho); setRascunho(null); setTimeout(baixarPdf, 80); }} />
+        ) : null}
         {noMapa && paraMapa ? (
           <div className="fixed inset-0 z-[55] flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={() => setNoMapa(false)}>
             <div className="w-full max-w-6xl" onClick={(e) => e.stopPropagation()}>
@@ -262,6 +277,7 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
         {!comp || !s1 || !s2 ? (
           <p className="p-6 text-sm text-gray-500">{curvas.length < 2 ? "Selecione pelo menos duas curvas para comparar." : "Escolha as duas curvas para ver o comparativo."}</p>
         ) : (
+          <>
           <div ref={conteudo} className="grid gap-4 bg-white p-4 text-sm">
             <div>
               <div className="text-base font-semibold">
@@ -326,14 +342,12 @@ export default function ComparaCurvas({ curvas, aoMudar, analisarSozinha, fechar
                 : "Diferença = perda depois − perda antes. Piorou acima de 0,10 dB; acima de 0,30 dB é crítico."}
               {tipo === "bidirecional" ? " Limites da média: fusão até 0,30 dB, acima de 0,50 dB sem reflexão é crítico, conector até 0,75 dB." : ""}
             </p>
-            {analista.nome ? (
-              <div className="flex flex-wrap items-end gap-6 border-t border-gray-200 pt-3">
-                {([["Analista", analista.nome], ["Cargo / função", analista.cargo], ["Empresa", analista.empresa], ["Registro", analista.registro]] as const)
-                  .filter(([, v]) => v).map(([r, v]) => <div key={r}><div className="text-xs text-gray-500">{r}</div><div className="font-semibold">{v}</div></div>)}
-                <div className="ml-auto w-56 border-t border-gray-700 pt-1 text-center text-xs">Assinatura</div>
-              </div>
-            ) : null}
+            {analista?.nome && exportar === "analise" ? <Assinatura analista={analista} /> : null}
           </div>
+          <EditorParecer p={parecer} eventos={comp.linhas.map((l, i) => ({ n: i + 1, km: l.km, rotulo: l.situacao, cor: corDaLinha(comp.tipo, l), texto: l.texto }))} />
+          <DocumentoParecer p={parecer} titulo={tituloParecer} analista={analista} docRef={docParecer}
+            resumo={`${nomes[0]}: ${km(comp.comprimento1Km)}, perda ${fmt(comp.perdaTotal1Db)} dB · ${nomes[1]}: ${km(comp.comprimento2Km)}, perda ${fmt(comp.perdaTotal2Db)} dB · ${comp.criticos} crítico(s), ${comp.atencao} atenção`} />
+          </>
         )}
       </div>
     </div>
