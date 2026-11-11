@@ -12,8 +12,9 @@ import { supabase } from "@/lib/supabase";
 export type Analista = { nome: string; cargo: string; empresa: string; registro: string };
 export type EventoParecer = { n: number; km: number; rotulo: string; cor: string; texto?: string };
 export type Exportar = "ambos" | "analise" | "parecer";
-type ComentarioEvento = { n: number; km: number; rotulo: string; cor: string; comentario: string };
 type FotoParecer = { caminho?: string; url: string; legenda: string };
+// Por evento, tudo opcional: tratativa (o que foi feito), comentário do analista e fotos da execução.
+type ComentarioEvento = { n: number; km: number; rotulo: string; cor: string; comentario: string; tratativa?: string; fotos?: FotoParecer[] };
 type DadosParecer = { eventos: ComentarioEvento[]; fotos: FotoParecer[]; parecer: string; recomendacao: string };
 const VAZIO: DadosParecer = { eventos: [], fotos: [], parecer: "", recomendacao: "" };
 const MESMO_PONTO_KM = 0.02; // o mesmo evento, mesmo se a numeração mudar (curva toda × só eventos do OTDR)
@@ -42,13 +43,21 @@ export function useParecer(chave: string | null, titulo: string) {
       const { data } = await supabase.from("pareceres_curva").select("*").eq("chave", chave).maybeSingle();
       if (cancelado) return;
       if (!data) { setStatus(""); return; }
-      const fotos: FotoParecer[] = [];
-      for (const f of (data.fotos ?? []) as { caminho: string; legenda: string }[]) {
-        const { data: blob } = await supabase.storage.from("pareceres").download(f.caminho);
-        if (blob) fotos.push({ caminho: f.caminho, legenda: f.legenda ?? "", url: URL.createObjectURL(blob) });
+      const baixar = async (lista: { caminho: string; legenda: string }[] | undefined) => {
+        const fotos: FotoParecer[] = [];
+        for (const f of lista ?? []) {
+          const { data: blob } = await supabase.storage.from("pareceres").download(f.caminho);
+          if (blob) fotos.push({ caminho: f.caminho, legenda: f.legenda ?? "", url: URL.createObjectURL(blob) });
+        }
+        return fotos;
+      };
+      const fotos = await baixar(data.fotos);
+      const eventos: ComentarioEvento[] = [];
+      for (const e of (data.eventos ?? []) as (Omit<ComentarioEvento, "fotos"> & { fotos?: { caminho: string; legenda: string }[] })[]) {
+        eventos.push({ ...e, fotos: await baixar(e.fotos) });
       }
       if (cancelado) return;
-      setDados({ eventos: data.eventos ?? [], fotos, parecer: data.parecer ?? "", recomendacao: data.recomendacao ?? "" });
+      setDados({ eventos, fotos, parecer: data.parecer ?? "", recomendacao: data.recomendacao ?? "" });
       setStatus("salvo");
     })();
     return () => { cancelado = true; };
@@ -60,8 +69,9 @@ export function useParecer(chave: string | null, titulo: string) {
     const t = setTimeout(async () => {
       setStatus("salvando");
       const { error } = await supabase.from("pareceres_curva").upsert({
-        chave, titulo, eventos: dados.eventos, parecer: dados.parecer, recomendacao: dados.recomendacao,
-        fotos: dados.fotos.filter((f) => f.caminho).map((f) => ({ caminho: f.caminho, legenda: f.legenda })),
+        chave, titulo, parecer: dados.parecer, recomendacao: dados.recomendacao,
+        fotos: guardar(dados.fotos),
+        eventos: dados.eventos.map((e) => ({ ...e, fotos: guardar(e.fotos ?? []) })),
         atualizado_em: new Date().toISOString(),
       });
       setStatus(error ? "erro" : "salvo");
@@ -69,9 +79,11 @@ export function useParecer(chave: string | null, titulo: string) {
     return () => clearTimeout(t);
   }, [chave, titulo, dados]);
 
+  const guardar = (fotos: FotoParecer[]) => fotos.filter((f) => f.caminho).map((f) => ({ caminho: f.caminho, legenda: f.legenda }));
   function mudar(f: (d: DadosParecer) => DadosParecer) { mudou.current = true; setDados(f); }
 
-  async function adicionarFotos(arquivos: FileList) {
+  // kmEvento: a foto vai para aquele evento; sem ele, para as fotos gerais do parecer.
+  async function adicionarFotos(arquivos: FileList, kmEvento?: number) {
     for (const arq of Array.from(arquivos)) {
       const blob = await reduzir(arq);
       const foto: FotoParecer = { url: URL.createObjectURL(blob), legenda: "" };
@@ -81,14 +93,17 @@ export function useParecer(chave: string | null, titulo: string) {
         if (error) alert(`A foto não foi salva no sistema (${error.message}). Ela sai no PDF agora, mas não fica guardada.`);
         else foto.caminho = caminho;
       }
-      mudar((d) => ({ ...d, fotos: [...d.fotos, foto] }));
+      mudar((d) => (kmEvento == null ? { ...d, fotos: [...d.fotos, foto] }
+        : { ...d, eventos: d.eventos.map((e) => (Math.abs(e.km - kmEvento) < MESMO_PONTO_KM ? { ...e, fotos: [...(e.fotos ?? []), foto] } : e)) }));
     }
   }
 
-  const temConteudo = !!(dados.parecer.trim() || dados.recomendacao.trim() || dados.fotos.length || dados.eventos.some((e) => e.comentario.trim()));
+  const temConteudo = !!(dados.parecer.trim() || dados.recomendacao.trim() || dados.fotos.length || dados.eventos.some(eventoTemConteudo));
   return { dados, mudar, adicionarFotos, status, temConteudo, chave };
 }
 export type Parecer = ReturnType<typeof useParecer>;
+
+const eventoTemConteudo = (e: ComentarioEvento) => !!(e.comentario.trim() || e.tratativa?.trim() || e.fotos?.length);
 
 // Fotos grandes do celular ficam com até 1600 px no lado maior (PDF leve e upload rápido).
 async function reduzir(arq: File): Promise<Blob> {
@@ -117,8 +132,8 @@ export function EditorParecer({ p, eventos }: { p: Parecer; eventos: EventoParec
         : d.eventos.filter((c) => Math.abs(c.km - e.km) >= MESMO_PONTO_KM),
     }));
   }
-  function comentar(e: EventoParecer, texto: string) {
-    mudar((d) => ({ ...d, eventos: d.eventos.map((c) => (Math.abs(c.km - e.km) < MESMO_PONTO_KM ? { ...c, n: e.n, rotulo: e.rotulo, cor: e.cor, comentario: texto } : c)) }));
+  function alterar(e: EventoParecer, mud: Partial<ComentarioEvento>) {
+    mudar((d) => ({ ...d, eventos: d.eventos.map((c) => (Math.abs(c.km - e.km) < MESMO_PONTO_KM ? { ...c, n: e.n, rotulo: e.rotulo, cor: e.cor, ...mud } : c)) }));
   }
   const situacao = !p.chave ? "Esta curva não está salva no sistema: o parecer vale enquanto esta janela estiver aberta."
     : p.status === "carregando" ? "Carregando o parecer salvo..." : p.status === "salvando" ? "Salvando..." : p.status === "salvo" ? "✓ Parecer salvo"
@@ -139,9 +154,9 @@ export function EditorParecer({ p, eventos }: { p: Parecer; eventos: EventoParec
           </label>
 
           <div className="grid gap-2">
-            <span className="text-xs font-semibold text-gray-600">Eventos para comentar (marque os que entram no parecer)</span>
+            <span className="text-xs font-semibold text-gray-600">Eventos (marque para registrar tratativa, comentário ou fotos; nenhum é obrigatório)</span>
             {eventos.length ? (
-              <div className="grid max-h-[360px] gap-1 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2">
+              <div className="grid max-h-[520px] gap-1 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2">
                 {eventos.map((e) => {
                   const c = comentarioDe(e);
                   return (
@@ -153,10 +168,35 @@ export function EditorParecer({ p, eventos }: { p: Parecer; eventos: EventoParec
                         {e.texto ? <span className="truncate text-xs text-gray-500">· {e.texto}</span> : null}
                       </label>
                       {c ? (
-                        <label className="grid gap-1 pl-6">
-                          <span className="text-xs text-gray-600">Comentário do evento {e.n}</span>
-                          <textarea rows={2} className={caixa} value={c.comentario} onChange={(ev) => comentar(e, ev.target.value)} />
-                        </label>
+                        <div className="grid gap-2 pb-2 pl-6 md:grid-cols-2">
+                          <label className="grid gap-1">
+                            <span className="text-xs text-gray-600">Tratativa do evento {e.n} (o que foi feito, opcional)</span>
+                            <textarea rows={2} className={caixa} placeholder="Ex.: refeita a fusão; cabo danificado, trocado 30 m" value={c.tratativa ?? ""} onChange={(ev) => alterar(e, { tratativa: ev.target.value })} />
+                          </label>
+                          <label className="grid gap-1">
+                            <span className="text-xs text-gray-600">Comentário / parecer do evento {e.n} (opcional)</span>
+                            <textarea rows={2} className={caixa} value={c.comentario} onChange={(ev) => alterar(e, { comentario: ev.target.value })} />
+                          </label>
+                          <div className="grid gap-1 md:col-span-2">
+                            <label className="flex flex-wrap items-center gap-2 text-xs text-gray-600">Fotos do evento {e.n} (opcional)
+                              <input type="file" accept="image/*" multiple className="text-xs"
+                                onChange={(ev) => { if (ev.target.files?.length) p.adicionarFotos(ev.target.files, e.km); ev.target.value = ""; }} />
+                            </label>
+                            {c.fotos?.length ? (
+                              <div className="flex flex-wrap gap-2">
+                                {c.fotos.map((f, j) => (
+                                  <div key={f.url} className="grid w-40 gap-1 rounded border border-gray-200 bg-white p-1">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={f.url} alt={f.legenda || `Foto ${j + 1} do evento ${e.n}`} className="h-24 w-full rounded object-cover" />
+                                    <input aria-label={`Legenda da foto ${j + 1} do evento ${e.n}`} className="rounded border border-gray-300 px-1.5 py-0.5 text-xs" placeholder="Legenda"
+                                      value={f.legenda} onChange={(ev) => alterar(e, { fotos: c.fotos!.map((x, k) => (k === j ? { ...x, legenda: ev.target.value } : x)) })} />
+                                    <button className="text-xs text-red-700 hover:underline" onClick={() => alterar(e, { fotos: c.fotos!.filter((_, k) => k !== j) })}>Remover</button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
                       ) : null}
                     </div>
                   );
@@ -167,7 +207,7 @@ export function EditorParecer({ p, eventos }: { p: Parecer; eventos: EventoParec
 
           <div className="grid gap-2">
             <label className="grid gap-1">
-              <span className="text-xs font-semibold text-gray-600">Fotos (ex.: potência medida na fibra, OTDR, caixa)</span>
+              <span className="text-xs font-semibold text-gray-600">Fotos gerais (ex.: potência medida na fibra, OTDR)</span>
               <input type="file" accept="image/*" multiple className="text-sm"
                 onChange={(e) => { if (e.target.files?.length) p.adicionarFotos(e.target.files); e.target.value = ""; }} />
             </label>
@@ -217,7 +257,7 @@ export function DocumentoParecer({ p, titulo, resumo, analista, docRef, oculto }
 }) {
   if (!p.temConteudo) return null;
   const { dados } = p;
-  const comentados = dados.eventos.filter((e) => e.comentario.trim());
+  const comentados = dados.eventos.filter(eventoTemConteudo);
   return (
     <div className={`border-t-4 border-[#0572CE]/20 ${oculto ? "print:hidden" : "print:break-before-page"}`}>
       <div className="px-4 pt-3 text-xs font-semibold uppercase text-gray-400 print:hidden">Prévia do parecer</div>
@@ -231,26 +271,35 @@ export function DocumentoParecer({ p, titulo, resumo, analista, docRef, oculto }
           <div><div className="text-xs font-semibold uppercase text-[#0572CE]">Parecer do analista</div><p className="whitespace-pre-wrap">{dados.parecer}</p></div>
         ) : null}
         {comentados.length ? (
-          <div>
-            <div className="text-xs font-semibold uppercase text-[#0572CE]">Eventos comentados</div>
-            <table className="w-full text-left">
-              <thead className="border-b border-gray-200 text-xs text-gray-500"><tr><th className="p-2">#</th><th>Distância</th><th>Situação</th><th>Comentário</th></tr></thead>
-              <tbody>
-                {comentados.map((e) => (
-                  <tr key={e.km} className="border-b border-gray-100 align-top">
-                    <td className="p-2"><span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ background: e.cor }}>{e.n}</span></td>
-                    <td className="whitespace-nowrap py-2 font-semibold">{km(e.km)}</td>
-                    <td className="py-2"><span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: `${e.cor}1F`, color: e.cor }}>{e.rotulo}</span></td>
-                    <td className="whitespace-pre-wrap py-2">{e.comentario}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid gap-2">
+            <div className="text-xs font-semibold uppercase text-[#0572CE]">Eventos tratados / comentados</div>
+            {comentados.map((e) => (
+              <div key={e.km} className="grid gap-2 rounded-lg border border-gray-200 p-3" style={{ breakInside: "avoid" }}>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ background: e.cor }}>{e.n}</span>
+                  <b>{km(e.km)}</b>
+                  <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: `${e.cor}1F`, color: e.cor }}>{e.rotulo}</span>
+                </div>
+                {e.tratativa?.trim() ? <p className="whitespace-pre-wrap"><b>Tratativa:</b> {e.tratativa}</p> : null}
+                {e.comentario.trim() ? <p className="whitespace-pre-wrap"><b>Comentário:</b> {e.comentario}</p> : null}
+                {e.fotos?.length ? (
+                  <div className="grid grid-cols-4 gap-2">
+                    {e.fotos.map((f, j) => (
+                      <figure key={f.url} className="grid gap-1">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={f.url} alt={f.legenda || `Foto ${j + 1}`} className="h-36 w-full rounded border border-gray-200 object-contain" />
+                        <figcaption className="text-xs text-gray-600">{f.legenda || `Foto ${j + 1}`}</figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
           </div>
         ) : null}
         {dados.fotos.length ? (
           <div>
-            <div className="text-xs font-semibold uppercase text-[#0572CE]">Fotos</div>
+            <div className="text-xs font-semibold uppercase text-[#0572CE]">Fotos gerais</div>
             <div className="mt-1 grid grid-cols-3 gap-3">
               {dados.fotos.map((f, i) => (
                 <figure key={f.url} className="grid gap-1" style={{ breakInside: "avoid" }}>
