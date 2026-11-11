@@ -2,10 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ReactNode, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, LayoutAnimation, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import Assinatura from '../componentes/Assinatura';
 import Cabecalho, { FundoDegrade } from '../componentes/Cabecalho';
 import Icone, { NomeIcone } from '../componentes/Icone';
-import { minhaAssinatura } from '../lib/assinatura';
 import { abrirPdf, Curso, meusCursos, situacaoCurso } from '../lib/cursos';
 import { cores, sombra } from '../lib/estilo';
 import { minhaFoto, trocarFoto } from '../lib/foto';
@@ -47,8 +45,6 @@ export default function MeuPerfil({ voltar }: { voltar: () => void }) {
   const [foto, setFoto] = useState<string | null>(null);
   const [enviandoFoto, setEnviandoFoto] = useState(false);
   const [verDados, setVerDados] = useState(false);
-  const [assinatura, setAssinatura] = useState<string | null>(null);
-  const [assinando, setAssinando] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(CACHE).then((c) => c && setFicha((f) => f ?? JSON.parse(c)));
@@ -57,7 +53,6 @@ export default function MeuPerfil({ voltar }: { voltar: () => void }) {
     meuVeiculo(false).then(setVeiculo).catch(() => {});
     meusCursos(setCursos).catch(() => {});
     minhaFoto(setFoto).catch(() => {});
-    minhaAssinatura().then(setAssinatura).catch(() => {});
     (async () => {
       const { data: sessao } = await supabase.auth.getSession();
       const id = sessao.session?.user.id;
@@ -211,17 +206,11 @@ export default function MeuPerfil({ voltar }: { voltar: () => void }) {
           <Linha rotulo="Calçado" valor={ficha?.tamanho_calcado} />
         </Grupo>
 
-        <Grupo titulo="MINHA ASSINATURA" icone="draw-pen" resumo={assinatura ? 'Cadastrada · usada no "Assinar O.S."' : 'Ainda não cadastrada'}>
-          <View style={{ padding: 16, gap: 10 }}>
-            {assinatura ? <Image source={{ uri: assinatura }} style={s.assinatura} resizeMode="contain" />
-              : <Text style={s.cursoSub}>Cadastre uma vez. Depois, em cada O.S., é só tocar em "Assinar O.S.".</Text>}
-            <Pressable style={s.mostrar} onPress={() => setAssinando(true)}>
-              <Icone nome="draw-pen" tamanho={18} cor={cores.primaria} />
-              <Text style={s.mostrarTexto}>{assinatura ? 'Refazer assinatura' : 'Cadastrar assinatura'}</Text>
-            </Pressable>
+        <Grupo titulo="MINHA ASSINATURA" icone="draw-pen" resumo="Automática, com o seu nome">
+          <View style={{ padding: 16 }}>
+            <Text style={s.cursoSub}>Sua assinatura é gerada com o seu nome em letra cursiva azul e já sai em todos os relatórios das suas O.S. Não precisa desenhar.</Text>
           </View>
         </Grupo>
-        <Assinatura aberta={assinando} fechar={() => setAssinando(false)} aoSalvar={() => minhaAssinatura().then(setAssinatura)} />
 
         <Text style={s.nota}>Toque em um grupo para ver os dados. Os dados pessoais não ficam gravados no celular. Se algo estiver errado ou em branco, avise o supervisor.</Text>
       </ScrollView>

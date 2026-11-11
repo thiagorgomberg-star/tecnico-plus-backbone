@@ -4,8 +4,6 @@ import RolarComTeclado, { useAlturaTeclado } from '../componentes/RolarComTeclad
 
 import Cabecalho from '../componentes/Cabecalho';
 import Icone, { iconeDoTipo, NomeIcone } from '../componentes/Icone';
-import Assinatura from '../componentes/Assinatura';
-import { assinarOS, minhaAssinatura } from '../lib/assinatura';
 import CaixasOS from '../componentes/CaixasOS';
 import PontosVistoria from '../componentes/PontosVistoria';
 import ExecucaoOS from '../componentes/ExecucaoOS';
@@ -63,8 +61,6 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
   const [pontoAberto, setPontoAberto] = useState<{ ponto: Ponto | null; categoria: 'poste' | 'ocorrencia'; daOs: Ponto[] } | null>(null);
   const [versaoPontos, setVersaoPontos] = useState(0);
   const vistoriaMg = ehVistoria(os.tipo);
-  const [assinando, setAssinando] = useState(false);
-  const [assinadoPor, setAssinadoPor] = useState<string | null>(null);
 
   // Conta as fotos (antes/depois) e os lançamentos de execução, somando o que ainda está na fila do celular.
   const contarFotos = useCallback(async () => {
@@ -88,39 +84,6 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
       setFotosPorTipo((v) => ({ antes: Math.max(v.antes, naFila.filter((t) => t === 'foto_antes').length), depois: Math.max(v.depois, naFila.filter((t) => t === 'foto_depois').length) }));
     }
     setLancamentos((lancados ?? 0) + lancNaFila);
-  }, [os.id]);
-
-  // Assina com a assinatura cadastrada do técnico; na primeira vez abre o quadro para cadastrar.
-  async function assinar(confirmar = true) {
-    if (!(await minhaAssinatura())) {
-      return Alert.alert('Cadastre sua assinatura', 'Assine uma vez no quadro. Depois ela é usada em todas as O.S.', [
-        { text: 'Agora não', style: 'cancel' },
-        { text: 'Cadastrar', onPress: () => setAssinando(true) },
-      ]);
-    }
-    const aplicar = async () => {
-      try {
-        await assinarOS(os.id, usuario.nome);
-        setAssinadoPor(usuario.nome);
-      } catch (e) {
-        Alert.alert('Não foi possível assinar', (e as Error).message);
-      }
-    };
-    if (!confirmar) return aplicar();
-    Alert.alert(`Assinar a O.S. #${os.numero}?`, 'Sua assinatura cadastrada vai para a O.S. e para o relatório.', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Assinar', onPress: aplicar },
-    ]);
-  }
-
-  useEffect(() => {
-    (async () => {
-      const pendente = (await itensPendentes()).find((i) => i.tipo === 'foto' && i.osId === os.id && i.tipoAnexo === 'assinatura');
-      if (pendente && pendente.tipo === 'foto') return setAssinadoPor(pendente.descricao ?? usuario.nome);
-      const { data } = await supabase.from('os_anexos').select('descricao').eq('os_id', os.id).eq('tipo', 'assinatura')
-        .order('criado_em', { ascending: false }).limit(1);
-      if (data?.[0]) setAssinadoPor(data[0].descricao ?? usuario.nome);
-    })();
   }, [os.id]);
 
   useEffect(() => {
@@ -152,7 +115,6 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
     { chave: 'antes', rotulo: 'Fotos do antes', feito: fotosPorTipo.antes > 0, icone: 'camera-outline', botao: 'Tirar fotos do antes', acao: () => abrirCamera(totalFotos, 'foto_antes') },
     { chave: 'execucao', rotulo: 'Lançar o que foi feito', feito: lancamentos > 0, icone: 'wrench-outline', botao: 'Lançar serviços e materiais', acao: () => setAba('execucao') },
     { chave: 'depois', rotulo: 'Fotos do depois', feito: fotosPorTipo.depois > 0, icone: 'camera-plus-outline', botao: 'Tirar fotos do depois', acao: () => abrirCamera(totalFotos, 'foto_depois') },
-    { chave: 'assinar', rotulo: 'Assinar a O.S.', feito: !!assinadoPor, icone: 'draw-pen', botao: 'Assinar O.S.', acao: () => assinar() },
   ];
   const mostrarEtapas = !souApoio && ['enviada', 'aceita', 'em_execucao', 'devolvida'].includes(os.status);
   const proxima = etapas.find((e) => !e.feito);
@@ -292,7 +254,7 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
           ? [{ icone: 'map-marker-multiple', rotulo: 'KMZ das caixas', curto: 'KMZ', aoTocar: () => enviarKmz() },
             { icone: 'file-pdf-box', rotulo: 'Relatório PDF', curto: 'PDF', aoTocar: () => enviarRelatorio() }] : undefined}
         estendido={44}
-        ajuda="Siga o PASSO A PASSO: o botão azul sempre mostra o próximo passo (iniciar, localizar o evento, fotos do antes, lançar o que foi feito, fotos do depois, assinar). Itens com ✓ já estão feitos. Se tentar concluir faltando algo, o app avisa o que falta. Tudo funciona sem internet e é enviado depois."
+        ajuda="Siga o PASSO A PASSO: o botão azul sempre mostra o próximo passo (iniciar, localizar o evento, fotos do antes, lançar o que foi feito, fotos do depois). Itens com ✓ já estão feitos. Se tentar concluir faltando algo, o app avisa o que falta. Tudo funciona sem internet e é enviado depois."
       />
       <View style={s.resumo}>
         <View style={[s.resumoIcone, { backgroundColor: fundoDe(corStatus) }]}>
@@ -404,8 +366,6 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
               ) : null}
               <Acao icone="image-multiple-outline" rotulo={`Ver fotos (${totalFotos})`} cor={cores.primaria} feito={totalFotos > 0}
                 aoTocar={() => setAba('fotos')} />
-              <Acao icone="draw-pen" rotulo={assinadoPor ? 'O.S. assinada' : 'Assinar O.S.'} cor={cores.texto2} feito={!!assinadoPor}
-                aoTocar={podeEditar && !assinadoPor && !souApoio ? () => assinar() : undefined} />
               {vistoriaMg ? <Acao icone="transmission-tower" rotulo="Postes" cor={cores.primaria} aoTocar={() => setAba('postes')} /> : null}
               <Acao icone="package-variant" rotulo="Caixas" cor={cores.texto2} aoTocar={() => setAba('caixas')} />
               <Acao icone="wrench-outline" rotulo="Execução" cor={cores.texto2} aoTocar={() => setAba('execucao')} />
@@ -446,13 +406,11 @@ export default function DetalheOS({ os: inicial, euId, usuario, voltar, abrirCam
                   ? `Registrado às ${new Date(os.evento_localizado_em).toLocaleTimeString('pt-BR')}`
                   : 'Ainda não registrado. Toque em "Localizei o evento" (funciona sem internet).'} />
             ) : null}
-            <Info icone="draw-pen" rotulo="Assinatura do técnico" valor={assinadoPor ? `Assinada por ${assinadoPor}` : 'Ainda não assinada. Toque em "Assinar O.S.".'} />
+            <Info icone="draw-pen" rotulo="Assinatura do técnico" valor={`Automática: o relatório sai assinado com o nome do técnico responsável${os.tecnico_id === euId ? ` (${usuario.nome})` : ''}.`} />
             </View>
 
             {os.origem_ponto_id || os.informado_por ? <FotosReferencia osId={os.id} /> : null}
             <MaterialApoio osId={os.id} />
-
-            <Assinatura aberta={assinando} fechar={() => setAssinando(false)} aoSalvar={() => assinar(false)} />
 
             {acao ? (
               <View style={s.bloco}>

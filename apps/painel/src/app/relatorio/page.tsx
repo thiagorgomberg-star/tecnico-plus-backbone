@@ -7,6 +7,7 @@ import type { CaixaPainel } from "@/componentes/CaixaDetalhe";
 import { calcularPlano, descreverFibra, descreverOlt, localDgo, padroesPorExtenso, ehPonta, faixasDaBandeja, rotuloInstalacao, rotuloPonto, posicoesDgo, separarBandejas, svgMapaFusao, descreverSaidas, origemNaoCadastrada, linhasDaBandeja } from "@/lib/fusao";
 import { rotuloStatus, StatusOS } from "@/lib/tipos";
 import TextoNegrito from "@/componentes/TextoNegrito";
+import AssinaturaCursiva from "@/componentes/AssinaturaCursiva";
 
 // Relatório do evento aberto pelo link compartilhado com parceiros (sem login).
 // Os dados vêm da função relatorio-os, que só responde a um token válido.
@@ -68,7 +69,6 @@ function Conteudo() {
 
   const { os, local } = dados;
   const fotosOs = dados.fotos.filter((f) => !f.tipo || f.tipo === "foto_antes" || f.tipo === "foto_depois");
-  const assinatura = [...dados.fotos].reverse().find((f) => f.tipo === "assinatura");
   const antes = dados.antes ?? [];
   const depois = dados.fotos.filter((f) => f.tipo === "foto_depois");
   const origem = (c: CaixaPainel) => c.origem_identificacao ?? (origemNaoCadastrada(c) || null);
@@ -327,12 +327,13 @@ function Conteudo() {
         )}
       </section>
 
-      {assinatura?.url && (
+      {os.tecnico?.nome && (
         <section className={secao}>
           <h2 className={titulo}>Assinatura do técnico</h2>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={assinatura.url} alt="Assinatura" className="mt-2 h-28 border-b border-gray-400" />
-          <p className="mt-1">{assinatura.descricao} · {quando(assinatura.tirada_em)}</p>
+          <div className="mt-2 w-80 text-center">
+            <div className="-mb-2"><AssinaturaCursiva nome={os.tecnico.nome} tamanho={50} /></div>
+            <p className="border-t border-gray-500 pt-1 text-sm">{os.tecnico.nome}{os.tecnico.cargo ? ` · ${os.tecnico.cargo}` : ""}{os.concluida_em ? ` · ${quando(os.concluida_em)}` : ""}</p>
+          </div>
         </section>
       )}
 

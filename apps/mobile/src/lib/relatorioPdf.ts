@@ -11,6 +11,7 @@ import { calcularPlano, descreverFibra, descreverOlt, padroesPorExtenso, ehPonta
 import { descreverVeiculo, meuVeiculo } from './veiculo';
 import { supabase } from './supabase';
 import { OrdemServico, rotuloStatus } from './tipos';
+import { estiloAssinatura, htmlAssinatura } from './assinaturaCursiva';
 
 type Item = { id: string; nome: string; unidade: string; categoria: 'servico' | 'material' };
 type Lancamento = { item_id: string; quantidade: number; observacao: string | null };
@@ -133,7 +134,6 @@ export async function compartilharRelatorio(os: OrdemServico) {
   };
 
   const fotosOs = fotos.filter((f) => f.tipo === 'foto_antes' || f.tipo === 'foto_depois');
-  const assinatura = [...fotos].reverse().find((f) => f.tipo === 'assinatura');
   const depois = fotos.filter((f) => f.tipo === 'foto_depois');
   const pares = Array.from({ length: Math.max(antes.length, depois.length) }, (_, i) => [antes[i], depois[i]?.src] as const);
   // Legenda escrita pelo técnico: balão logo abaixo da foto.
@@ -235,8 +235,10 @@ export async function compartilharRelatorio(os: OrdemServico) {
   ${secaoAntesDepois}
   <h2>Registro fotográfico (${fotosOs.length})</h2>
   <div class="fotos">${fotosOs.map((f, i) => `<figure><img src="${f.src}">${balao(f.descricao)}<figcaption>Foto ${i + 1} · ${quando(f.tiradaEm)}</figcaption></figure>`).join('')}</div>
-  ${assinatura ? `<h2>Assinatura do técnico</h2><img src="${assinatura.src}" style="max-height:110px;border-bottom:1px solid #999">
-    <div>${esc(assinatura.descricao ?? '')} · ${quando(assinatura.tiradaEm)}</div>` : ''}
+  ${tecnico ? `${estiloAssinatura}<div style="break-inside:avoid;margin-top:18px;width:320px;text-align:center">
+    <h2 style="text-align:left">Assinatura do técnico</h2>
+    <div style="margin-bottom:-10px">${htmlAssinatura(tecnico)}</div>
+    <div style="border-top:1px solid #333;padding-top:3px;font-size:9pt">${esc(tecnico)}${extra?.tecnico?.cargo ? ` · ${esc(extra.tecnico.cargo)}` : ''}${extra?.concluida_em ? ` · ${quando(extra.concluida_em)}` : ''}</div></div>` : ''}
   <p class="s" style="font-size:8pt;margin-top:16px;border-top:1px solid #ccc;padding-top:4px">Multivale Engenharia · Backbone · gerado pelo Técnico Plus</p>
   </body></html>`;
 

@@ -19,6 +19,7 @@ import { baixarBookFotos } from "@/lib/bookFotos";
 import { encerrarPeloSupervisor } from "@/lib/encerrarOS";
 import { supabase } from "@/lib/supabase";
 import { corStatus, ENCERRADAS, OrdemServico, rotuloDaOs, rotuloStatus, StatusOS } from "@/lib/tipos";
+import AssinaturaCursiva from "@/componentes/AssinaturaCursiva";
 
 const EM_ANDAMENTO: StatusOS[] = ["enviada", "aceita", "em_execucao", "pausada", "devolvida"];
 
@@ -182,7 +183,6 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
     recarregar();
   }
   const apoio = anexos.filter((a) => a.tipo === "documento");
-  const assinatura = [...anexos].reverse().find((a) => a.tipo === "assinatura");
 
   // Link público do relatório (válido por 30 dias) para enviar aos parceiros.
   async function compartilhar(abrir: boolean) {
@@ -421,12 +421,13 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
           </>
         )}
 
-        {assinatura && (
+        {os.tecnico?.nome && (
           <>
             <h3 className="mt-6 font-semibold">Assinatura do técnico</h3>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={assinatura.url} alt="Assinatura" className="mt-2 h-24 rounded border border-gray-200" />
-            <p className="text-sm text-gray-600">{assinatura.descricao} · {quando(assinatura.tirada_em ?? assinatura.criado_em)}</p>
+            <div className="mt-2 w-72 text-center">
+              <div className="-mb-2"><AssinaturaCursiva nome={os.tecnico.nome} /></div>
+              <p className="border-t border-gray-400 pt-1 text-sm text-gray-600">{os.tecnico.nome} · gerada automaticamente</p>
+            </div>
           </>
         )}
 
