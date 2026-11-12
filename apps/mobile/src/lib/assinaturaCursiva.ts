@@ -6,7 +6,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 // CSS + filtro: incluir uma vez no <head> ou antes da primeira assinatura.
 export const estiloAssinatura = `<style>@font-face{font-family:'AssinaturaTP';src:url(${FONTE}) format('woff2');font-display:block}
-.assin-cursiva{font-family:'AssinaturaTP',cursive;color:#1C3AA9;filter:url(#tinta-bic);display:inline-block;transform:rotate(-2deg);white-space:nowrap;line-height:1}</style>
+.assin-cursiva{font-family:'AssinaturaTP',cursive;color:#1C3AA9;filter:url(#tinta-bic);display:inline-block;transform:rotate(-1deg);white-space:nowrap;line-height:1}</style>
 <svg width="0" height="0" style="position:absolute"><filter id="tinta-bic" x="-5%" y="-20%" width="110%" height="140%">
 <feTurbulence type="fractalNoise" baseFrequency="1" numOctaves="2" seed="11" result="n"/>
 <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -7.5 5.9" result="m"/>

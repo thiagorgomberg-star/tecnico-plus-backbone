@@ -125,7 +125,7 @@ export async function compartilharAnaliseCurva(s: Sor, nome: string, extensaoKm:
     <div style="flex:1"><div class="info" style="grid-template-columns:repeat(4,1fr)">${[
       ['Analista', analista.nome], ['Cargo / função', analista.cargo], ['Empresa', analista.empresa], ['Registro', analista.registro],
     ].filter(([, v]) => v).map(([r, v]) => `<div><span class="l">${r}</span><b>${esc(v)}</b></div>`).join('')}</div></div>
-    <div style="width:260px;text-align:center">${analista.nome ? `${estiloAssinatura}<div style="margin-bottom:-8px">${htmlAssinatura(analista.nome, 40)}</div>` : ''}<div style="border-top:1px solid #333;padding-top:3px;font-size:8.5pt">Assinatura</div></div>
+    <div style="width:260px;text-align:center">${analista.nome ? `${estiloAssinatura}<div style="margin-bottom:-3px">${htmlAssinatura(analista.nome, 40)}</div>` : ''}<div style="border-top:1px solid #333;padding-top:3px;font-size:8.5pt">Assinatura</div></div>
   </div>` : ''}
   <p class="s" style="font-size:8pt;margin-top:12px;border-top:1px solid #ccc;padding-top:4px">Multivale Engenharia · Backbone · gerado pelo Técnico Plus</p>
   </body></html>`;
@@ -202,7 +202,7 @@ export async function compartilharComparativo(c: Comparacao, s1: Sor, s2: Sor,
   ${analista?.nome ? `<div style="display:flex;gap:24px;align-items:flex-end;margin-top:16px;break-inside:avoid">${[
     ['Analista', analista.nome], ['Cargo / função', analista.cargo], ['Empresa', analista.empresa], ['Registro', analista.registro],
   ].filter(([, v]) => v).map(([r, v]) => `<div><span class="l">${r}</span><b>${esc(v)}</b></div>`).join('')}
-    <div style="margin-left:auto;width:260px;text-align:center">${estiloAssinatura}<div style="margin-bottom:-8px">${htmlAssinatura(analista.nome, 40)}</div><div style="border-top:1px solid #333;padding-top:3px;font-size:8.5pt">Assinatura</div></div></div>` : ''}
+    <div style="margin-left:auto;width:260px;text-align:center">${estiloAssinatura}<div style="margin-bottom:-3px">${htmlAssinatura(analista.nome, 40)}</div><div style="border-top:1px solid #333;padding-top:3px;font-size:8.5pt">Assinatura</div></div></div>` : ''}
   <p class="s" style="font-size:8pt;margin-top:12px;border-top:1px solid #ccc;padding-top:4px">Multivale Engenharia · Backbone · gerado pelo Técnico Plus</p>
   </body></html>`;
   const { uri } = await Print.printToFileAsync({ html });

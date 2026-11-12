@@ -248,7 +248,7 @@ export function Assinatura({ analista }: { analista: Analista }) {
       {([["Analista", analista.nome], ["Cargo / função", analista.cargo], ["Empresa", analista.empresa], ["Registro", analista.registro]] as const)
         .filter(([, v]) => v).map(([r, v]) => <div key={r}><div className="text-xs text-gray-500">{r}</div><div className="font-semibold">{v}</div></div>)}
       <div className="ml-auto min-w-72 shrink-0 pl-4 text-center">
-        <div className="-mb-3 overflow-visible"><AssinaturaCursiva nome={analista.nome} /></div>
+        <div className="-mb-1 overflow-visible"><AssinaturaCursiva nome={analista.nome} /></div>
         <div className="border-t border-gray-700 pt-1 text-xs">Assinatura</div>
       </div>
     </div>

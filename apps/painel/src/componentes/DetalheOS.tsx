@@ -425,7 +425,7 @@ export default function DetalheOS({ os: inicial, fechar }: { os: OrdemServico; f
           <>
             <h3 className="mt-6 font-semibold">Assinatura do técnico</h3>
             <div className="mt-2 w-72 text-center">
-              <div className="-mb-2"><AssinaturaCursiva nome={os.tecnico.nome} /></div>
+              <div className="-mb-1"><AssinaturaCursiva nome={os.tecnico.nome} /></div>
               <p className="border-t border-gray-400 pt-1 text-sm text-gray-600">{os.tecnico.nome} · gerada automaticamente</p>
             </div>
           </>

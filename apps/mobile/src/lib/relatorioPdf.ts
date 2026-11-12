@@ -237,7 +237,7 @@ export async function compartilharRelatorio(os: OrdemServico) {
   <div class="fotos">${fotosOs.map((f, i) => `<figure><img src="${f.src}">${balao(f.descricao)}<figcaption>Foto ${i + 1} · ${quando(f.tiradaEm)}</figcaption></figure>`).join('')}</div>
   ${tecnico ? `${estiloAssinatura}<div style="break-inside:avoid;margin-top:18px;width:320px;text-align:center">
     <h2 style="text-align:left">Assinatura do técnico</h2>
-    <div style="margin-bottom:-10px">${htmlAssinatura(tecnico)}</div>
+    <div style="margin-bottom:-4px">${htmlAssinatura(tecnico)}</div>
     <div style="border-top:1px solid #333;padding-top:3px;font-size:9pt">${esc(tecnico)}${extra?.tecnico?.cargo ? ` · ${esc(extra.tecnico.cargo)}` : ''}${extra?.concluida_em ? ` · ${quando(extra.concluida_em)}` : ''}</div></div>` : ''}
   <p class="s" style="font-size:8pt;margin-top:16px;border-top:1px solid #ccc;padding-top:4px">Multivale Engenharia · Backbone · gerado pelo Técnico Plus</p>
   </body></html>`;

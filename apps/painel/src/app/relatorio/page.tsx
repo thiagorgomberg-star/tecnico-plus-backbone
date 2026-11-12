@@ -331,7 +331,7 @@ function Conteudo() {
         <section className={secao}>
           <h2 className={titulo}>Assinatura do técnico</h2>
           <div className="mt-2 w-80 text-center">
-            <div className="-mb-2"><AssinaturaCursiva nome={os.tecnico.nome} tamanho={50} /></div>
+            <div className="-mb-1"><AssinaturaCursiva nome={os.tecnico.nome} tamanho={50} /></div>
             <p className="border-t border-gray-500 pt-1 text-sm">{os.tecnico.nome}{os.tecnico.cargo ? ` · ${os.tecnico.cargo}` : ""}{os.concluida_em ? ` · ${quando(os.concluida_em)}` : ""}</p>
           </div>
         </section>

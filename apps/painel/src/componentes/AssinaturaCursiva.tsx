@@ -20,7 +20,7 @@ export default function AssinaturaCursiva({ nome, tamanho = 46 }: { nome: string
           <feDisplacementMap in="t" in2="w" scale="1.6" xChannelSelector="R" yChannelSelector="G" />
         </filter>
       </svg>
-      <span className={cursiva.className} style={{ fontSize: tamanho, color: "#1C3AA9", filter: `url(#${id})`, display: "inline-block", transform: "rotate(-2deg)", whiteSpace: "nowrap" }}>
+      <span className={cursiva.className} style={{ fontSize: tamanho, color: "#1C3AA9", filter: `url(#${id})`, display: "inline-block", transform: "rotate(-1deg)", whiteSpace: "nowrap" }}>
         {nome}
         {/gomberg$/i.test(nome.trim()) ? (
           <span style={{ fontFamily: "serif", fontSize: Math.round(tamanho * 0.32), marginLeft: 3, verticalAlign: Math.round(tamanho * 0.12) }}>∴</span>
